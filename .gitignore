@@ -1,5 +1,7 @@
 # Go
 backend/bin/
+backend/server
+backend/seed
 *.exe
 *.exe~
 *.dll
