@@ -170,6 +170,33 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 	return i, err
 }
 
+const updateUserAvatarURL = `-- name: UpdateUserAvatarURL :one
+UPDATE users SET avatar_url = $2, updated_at = NOW() WHERE id = $1 RETURNING id, phone, apple_id, google_id, username, avatar_url, avatar_emoji, birth_year, created_at, updated_at
+`
+
+type UpdateUserAvatarURLParams struct {
+	ID        string         `json:"id"`
+	AvatarUrl sql.NullString `json:"avatar_url"`
+}
+
+func (q *Queries) UpdateUserAvatarURL(ctx context.Context, arg UpdateUserAvatarURLParams) (User, error) {
+	row := q.db.QueryRowContext(ctx, updateUserAvatarURL, arg.ID, arg.AvatarUrl)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Phone,
+		&i.AppleID,
+		&i.GoogleID,
+		&i.Username,
+		&i.AvatarUrl,
+		&i.AvatarEmoji,
+		&i.BirthYear,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const updateUserProfile = `-- name: UpdateUserProfile :one
 UPDATE users SET username = $2, avatar_emoji = $3, avatar_url = $4,
   birth_year = $5, updated_at = NOW() WHERE id = $1 RETURNING id, phone, apple_id, google_id, username, avatar_url, avatar_emoji, birth_year, created_at, updated_at

@@ -74,6 +74,7 @@ type Querier interface {
 	UpdateGroupTelegram(ctx context.Context, arg UpdateGroupTelegramParams) error
 	UpdateQuestionStatus(ctx context.Context, arg UpdateQuestionStatusParams) error
 	UpdateSeasonStatus(ctx context.Context, arg UpdateSeasonStatusParams) error
+	UpdateUserAvatarURL(ctx context.Context, arg UpdateUserAvatarURLParams) (User, error)
 	UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) (User, error)
 	UpsertCardCache(ctx context.Context, arg UpsertCardCacheParams) (CardCache, error)
 	UpsertFCMToken(ctx context.Context, arg UpsertFCMTokenParams) (FcmToken, error)

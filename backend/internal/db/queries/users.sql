@@ -21,5 +21,8 @@ VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *;
 UPDATE users SET username = $2, avatar_emoji = $3, avatar_url = $4,
   birth_year = $5, updated_at = NOW() WHERE id = $1 RETURNING *;
 
+-- name: UpdateUserAvatarURL :one
+UPDATE users SET avatar_url = $2, updated_at = NOW() WHERE id = $1 RETURNING *;
+
 -- name: DeleteUser :exec
 DELETE FROM users WHERE id = $1;

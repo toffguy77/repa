@@ -13,9 +13,12 @@ import (
 	echomw "github.com/labstack/echo/v4/middleware"
 	"github.com/redis/go-redis/v9"
 	"github.com/repa-app/repa/internal/config"
+	db "github.com/repa-app/repa/internal/db/sqlc"
 	"github.com/repa-app/repa/internal/handler"
+	authhandler "github.com/repa-app/repa/internal/handler/auth"
 	"github.com/repa-app/repa/internal/lib"
 	appmw "github.com/repa-app/repa/internal/middleware"
+	authsvc "github.com/repa-app/repa/internal/service/auth"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -75,15 +78,42 @@ func main() {
 		ContentSecurityPolicy: "default-src 'self'",
 	}))
 
+	// Services
+	queries := db.New(sqlDB)
+
+	var s3Client *lib.S3Client
+	if cfg.S3AccessKey != "" {
+		var s3Err error
+		s3Client, s3Err = lib.NewS3Client(cfg.S3Endpoint, cfg.S3Region, cfg.S3AccessKey, cfg.S3SecretKey, cfg.S3Bucket)
+		if s3Err != nil {
+			log.Warn().Err(s3Err).Msg("S3 client not available, avatar uploads disabled")
+		}
+	}
+
+	authService := authsvc.NewService(queries, rdb, s3Client, cfg.JWTSecret, cfg.DevMode)
+	authHandler := authhandler.NewHandler(authService, cfg)
+
 	// Routes
 	api := e.Group("/api/v1")
 	api.GET("/health", healthHandler(pool, rdb))
 
-	// Protected routes (placeholder for future handlers)
-	_ = api.Group("", appmw.JWTAuth(cfg.JWTSecret))
+	// Public auth routes
+	api.POST("/auth/apple", authHandler.AppleAuth)
+	api.POST("/auth/google", authHandler.GoogleAuth)
+	api.POST("/auth/otp/send", authHandler.OTPSend)
+	api.POST("/auth/otp/verify", authHandler.OTPVerify)
+	api.GET("/auth/username-check", authHandler.UsernameCheck,
+		appmw.RateLimit(rdb, "username-check", 20, time.Minute))
+	api.GET("/app/version", authHandler.AppVersion)
 
-	// Keep references for future wiring
-	_ = sqlDB
+	// Protected routes
+	protected := api.Group("", appmw.JWTAuth(cfg.JWTSecret))
+	protected.GET("/auth/me", authHandler.GetMe)
+	protected.PATCH("/auth/profile", authHandler.UpdateProfile)
+	protected.POST("/auth/avatar", authHandler.UploadAvatar)
+	protected.PATCH("/push/preferences", authHandler.UpdatePushPreferences)
+	protected.DELETE("/auth/account", authHandler.DeleteAccount)
+
 	_ = asynqClient
 
 	// Asynq worker

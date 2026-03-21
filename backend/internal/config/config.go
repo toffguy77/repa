@@ -30,6 +30,7 @@ type Config struct {
 	FirebaseProjectID  string
 	FirebasePrivateKey string
 	FirebaseClientEmail string
+	DevMode             bool
 }
 
 func Load() *Config {
@@ -58,6 +59,7 @@ func Load() *Config {
 		FirebaseProjectID:  getEnv("FIREBASE_PROJECT_ID", ""),
 		FirebasePrivateKey: getEnv("FIREBASE_PRIVATE_KEY", ""),
 		FirebaseClientEmail: getEnv("FIREBASE_CLIENT_EMAIL", ""),
+		DevMode:             getEnv("DEV_MODE", "") == "true",
 	}
 }
 
