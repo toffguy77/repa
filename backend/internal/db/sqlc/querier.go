@@ -6,10 +6,79 @@ package db
 
 import (
 	"context"
+	"database/sql"
 )
 
 type Querier interface {
+	AddGroupMember(ctx context.Context, arg AddGroupMemberParams) (GroupMember, error)
+	AddSeasonQuestion(ctx context.Context, arg AddSeasonQuestionParams) (SeasonQuestion, error)
+	AggregateVotesByTarget(ctx context.Context, seasonID string) ([]AggregateVotesByTargetRow, error)
+	CountGroupMembers(ctx context.Context, groupID string) (int64, error)
+	CountNextSeasonVotesByQuestion(ctx context.Context, arg CountNextSeasonVotesByQuestionParams) ([]CountNextSeasonVotesByQuestionRow, error)
+	CountUniqueVoters(ctx context.Context, seasonID string) (int64, error)
+	CountUserGroups(ctx context.Context, userID string) (int64, error)
+	CreateAchievement(ctx context.Context, arg CreateAchievementParams) (Achievement, error)
+	CreateCrystalLog(ctx context.Context, arg CreateCrystalLogParams) (CrystalLog, error)
+	CreateDetector(ctx context.Context, arg CreateDetectorParams) (Detector, error)
+	CreateGroup(ctx context.Context, arg CreateGroupParams) (Group, error)
+	CreateNextSeasonVote(ctx context.Context, arg CreateNextSeasonVoteParams) (NextSeasonVote, error)
+	CreateQuestion(ctx context.Context, arg CreateQuestionParams) (Question, error)
+	CreateQuestionSeed(ctx context.Context, arg CreateQuestionSeedParams) error
+	CreateReaction(ctx context.Context, arg CreateReactionParams) (Reaction, error)
+	CreateReport(ctx context.Context, arg CreateReportParams) (Report, error)
+	CreateSeason(ctx context.Context, arg CreateSeasonParams) (Season, error)
+	CreateSeasonResult(ctx context.Context, arg CreateSeasonResultParams) (SeasonResult, error)
+	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	CreateVote(ctx context.Context, arg CreateVoteParams) (Vote, error)
+	DeleteFCMToken(ctx context.Context, token string) error
+	DeleteUser(ctx context.Context, id string) error
+	GetActiveSeasonByGroup(ctx context.Context, groupID string) (Season, error)
+	GetCardCache(ctx context.Context, arg GetCardCacheParams) (CardCache, error)
+	GetDetector(ctx context.Context, arg GetDetectorParams) (Detector, error)
+	GetGroupByID(ctx context.Context, id string) (Group, error)
+	GetGroupByInviteCode(ctx context.Context, inviteCode string) (Group, error)
+	GetGroupByTelegramChatID(ctx context.Context, telegramChatID sql.NullString) (Group, error)
+	GetGroupCustomQuestions(ctx context.Context, groupID sql.NullString) ([]Question, error)
+	GetGroupMembers(ctx context.Context, groupID string) ([]GetGroupMembersRow, error)
+	GetGroupsNeedingNewSeason(ctx context.Context) ([]Group, error)
+	GetNextSeasonVotes(ctx context.Context, arg GetNextSeasonVotesParams) ([]GetNextSeasonVotesRow, error)
+	GetQuestionByID(ctx context.Context, id string) (Question, error)
+	GetRandomSystemQuestions(ctx context.Context, limit int32) ([]Question, error)
+	GetReactionsForUser(ctx context.Context, arg GetReactionsForUserParams) ([]GetReactionsForUserRow, error)
+	GetSeasonAchievements(ctx context.Context, seasonID sql.NullString) ([]Achievement, error)
+	GetSeasonByID(ctx context.Context, id string) (Season, error)
+	GetSeasonQuestions(ctx context.Context, seasonID string) ([]Question, error)
+	GetSeasonResults(ctx context.Context, seasonID string) ([]SeasonResult, error)
+	GetSeasonResultsByUser(ctx context.Context, arg GetSeasonResultsByUserParams) ([]GetSeasonResultsByUserRow, error)
+	GetSeasonsForReveal(ctx context.Context) ([]Season, error)
+	GetSystemQuestionsByCategory(ctx context.Context, category QuestionCategory) ([]Question, error)
+	GetUserAchievements(ctx context.Context, arg GetUserAchievementsParams) ([]Achievement, error)
+	GetUserBalance(ctx context.Context, userID string) (int32, error)
+	GetUserByAppleID(ctx context.Context, appleID sql.NullString) (User, error)
+	GetUserByGoogleID(ctx context.Context, googleID sql.NullString) (User, error)
+	GetUserByID(ctx context.Context, id string) (User, error)
+	GetUserByPhone(ctx context.Context, phone sql.NullString) (User, error)
+	GetUserByUsername(ctx context.Context, username string) (User, error)
+	GetUserCrystalLogs(ctx context.Context, arg GetUserCrystalLogsParams) ([]CrystalLog, error)
+	GetUserFCMTokens(ctx context.Context, userID string) ([]FcmToken, error)
+	GetUserGroupStats(ctx context.Context, arg GetUserGroupStatsParams) (UserGroupStat, error)
+	GetUserGroups(ctx context.Context, userID string) ([]Group, error)
+	GetUserPushPreferences(ctx context.Context, userID string) ([]PushPreference, error)
+	GetVotersBySeason(ctx context.Context, seasonID string) ([]string, error)
+	GetVotesBySeasonAndVoter(ctx context.Context, arg GetVotesBySeasonAndVoterParams) ([]Vote, error)
+	HasDetector(ctx context.Context, arg HasDetectorParams) (bool, error)
+	HasUserReported(ctx context.Context, arg HasUserReportedParams) (bool, error)
 	HealthCheck(ctx context.Context) (int32, error)
+	IsPushEnabled(ctx context.Context, arg IsPushEnabledParams) (interface{}, error)
+	SetGroupConnectCode(ctx context.Context, arg SetGroupConnectCodeParams) error
+	UpdateGroupTelegram(ctx context.Context, arg UpdateGroupTelegramParams) error
+	UpdateQuestionStatus(ctx context.Context, arg UpdateQuestionStatusParams) error
+	UpdateSeasonStatus(ctx context.Context, arg UpdateSeasonStatusParams) error
+	UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) (User, error)
+	UpsertCardCache(ctx context.Context, arg UpsertCardCacheParams) (CardCache, error)
+	UpsertFCMToken(ctx context.Context, arg UpsertFCMTokenParams) (FcmToken, error)
+	UpsertPushPreference(ctx context.Context, arg UpsertPushPreferenceParams) (PushPreference, error)
+	UpsertUserGroupStats(ctx context.Context, arg UpsertUserGroupStatsParams) (UserGroupStat, error)
 }
 
 var _ Querier = (*Queries)(nil)

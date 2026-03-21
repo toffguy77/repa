@@ -3,3 +3,510 @@
 //   sqlc v1.30.0
 
 package db
+
+import (
+	"database/sql"
+	"database/sql/driver"
+	"fmt"
+	"time"
+
+	"github.com/sqlc-dev/pqtype"
+)
+
+type AchievementType string
+
+const (
+	AchievementTypeSNIPER      AchievementType = "SNIPER"
+	AchievementTypeORACLE      AchievementType = "ORACLE"
+	AchievementTypeTELEPATH    AchievementType = "TELEPATH"
+	AchievementTypeBLIND       AchievementType = "BLIND"
+	AchievementTypeRANDOM      AchievementType = "RANDOM"
+	AchievementTypeEXPERTOF    AchievementType = "EXPERT_OF"
+	AchievementTypeBESTFRIEND  AchievementType = "BEST_FRIEND"
+	AchievementTypeDETECTIVE   AchievementType = "DETECTIVE"
+	AchievementTypeSTRANGER    AchievementType = "STRANGER"
+	AchievementTypeLEGEND      AchievementType = "LEGEND"
+	AchievementTypeCHANGEABLE  AchievementType = "CHANGEABLE"
+	AchievementTypeMONOPOLIST  AchievementType = "MONOPOLIST"
+	AchievementTypeENIGMA      AchievementType = "ENIGMA"
+	AchievementTypeRISING      AchievementType = "RISING"
+	AchievementTypePIONEER     AchievementType = "PIONEER"
+	AchievementTypeSTREAKVOTER AchievementType = "STREAK_VOTER"
+	AchievementTypeFIRSTVOTER  AchievementType = "FIRST_VOTER"
+	AchievementTypeLASTVOTER   AchievementType = "LAST_VOTER"
+	AchievementTypeNIGHTOWL    AchievementType = "NIGHT_OWL"
+	AchievementTypeANALYST     AchievementType = "ANALYST"
+	AchievementTypeMEDIA       AchievementType = "MEDIA"
+	AchievementTypeCONSPIRATOR AchievementType = "CONSPIRATOR"
+	AchievementTypeRECRUITER   AchievementType = "RECRUITER"
+)
+
+func (e *AchievementType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = AchievementType(s)
+	case string:
+		*e = AchievementType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for AchievementType: %T", src)
+	}
+	return nil
+}
+
+type NullAchievementType struct {
+	AchievementType AchievementType `json:"achievement_type"`
+	Valid           bool            `json:"valid"` // Valid is true if AchievementType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullAchievementType) Scan(value interface{}) error {
+	if value == nil {
+		ns.AchievementType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.AchievementType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullAchievementType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.AchievementType), nil
+}
+
+type CrystalLogType string
+
+const (
+	CrystalLogTypePURCHASE        CrystalLogType = "PURCHASE"
+	CrystalLogTypeSPENDDETECTOR   CrystalLogType = "SPEND_DETECTOR"
+	CrystalLogTypeSPENDATTRIBUTES CrystalLogType = "SPEND_ATTRIBUTES"
+	CrystalLogTypeSPENDQUESTION   CrystalLogType = "SPEND_QUESTION"
+	CrystalLogTypeBONUS           CrystalLogType = "BONUS"
+)
+
+func (e *CrystalLogType) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = CrystalLogType(s)
+	case string:
+		*e = CrystalLogType(s)
+	default:
+		return fmt.Errorf("unsupported scan type for CrystalLogType: %T", src)
+	}
+	return nil
+}
+
+type NullCrystalLogType struct {
+	CrystalLogType CrystalLogType `json:"crystal_log_type"`
+	Valid          bool           `json:"valid"` // Valid is true if CrystalLogType is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullCrystalLogType) Scan(value interface{}) error {
+	if value == nil {
+		ns.CrystalLogType, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.CrystalLogType.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullCrystalLogType) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.CrystalLogType), nil
+}
+
+type PushCategory string
+
+const (
+	PushCategorySEASONSTART PushCategory = "SEASON_START"
+	PushCategoryREMINDER    PushCategory = "REMINDER"
+	PushCategoryREVEAL      PushCategory = "REVEAL"
+	PushCategoryREACTION    PushCategory = "REACTION"
+	PushCategoryNEXTSEASON  PushCategory = "NEXT_SEASON"
+)
+
+func (e *PushCategory) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = PushCategory(s)
+	case string:
+		*e = PushCategory(s)
+	default:
+		return fmt.Errorf("unsupported scan type for PushCategory: %T", src)
+	}
+	return nil
+}
+
+type NullPushCategory struct {
+	PushCategory PushCategory `json:"push_category"`
+	Valid        bool         `json:"valid"` // Valid is true if PushCategory is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullPushCategory) Scan(value interface{}) error {
+	if value == nil {
+		ns.PushCategory, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.PushCategory.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullPushCategory) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.PushCategory), nil
+}
+
+type QuestionCategory string
+
+const (
+	QuestionCategoryHOT     QuestionCategory = "HOT"
+	QuestionCategoryFUNNY   QuestionCategory = "FUNNY"
+	QuestionCategorySECRETS QuestionCategory = "SECRETS"
+	QuestionCategorySKILLS  QuestionCategory = "SKILLS"
+	QuestionCategoryROMANCE QuestionCategory = "ROMANCE"
+	QuestionCategorySTUDY   QuestionCategory = "STUDY"
+)
+
+func (e *QuestionCategory) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = QuestionCategory(s)
+	case string:
+		*e = QuestionCategory(s)
+	default:
+		return fmt.Errorf("unsupported scan type for QuestionCategory: %T", src)
+	}
+	return nil
+}
+
+type NullQuestionCategory struct {
+	QuestionCategory QuestionCategory `json:"question_category"`
+	Valid            bool             `json:"valid"` // Valid is true if QuestionCategory is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullQuestionCategory) Scan(value interface{}) error {
+	if value == nil {
+		ns.QuestionCategory, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.QuestionCategory.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullQuestionCategory) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.QuestionCategory), nil
+}
+
+type QuestionSource string
+
+const (
+	QuestionSourceSYSTEM QuestionSource = "SYSTEM"
+	QuestionSourceUSER   QuestionSource = "USER"
+)
+
+func (e *QuestionSource) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = QuestionSource(s)
+	case string:
+		*e = QuestionSource(s)
+	default:
+		return fmt.Errorf("unsupported scan type for QuestionSource: %T", src)
+	}
+	return nil
+}
+
+type NullQuestionSource struct {
+	QuestionSource QuestionSource `json:"question_source"`
+	Valid          bool           `json:"valid"` // Valid is true if QuestionSource is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullQuestionSource) Scan(value interface{}) error {
+	if value == nil {
+		ns.QuestionSource, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.QuestionSource.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullQuestionSource) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.QuestionSource), nil
+}
+
+type QuestionStatus string
+
+const (
+	QuestionStatusACTIVE   QuestionStatus = "ACTIVE"
+	QuestionStatusPENDING  QuestionStatus = "PENDING"
+	QuestionStatusREJECTED QuestionStatus = "REJECTED"
+)
+
+func (e *QuestionStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = QuestionStatus(s)
+	case string:
+		*e = QuestionStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for QuestionStatus: %T", src)
+	}
+	return nil
+}
+
+type NullQuestionStatus struct {
+	QuestionStatus QuestionStatus `json:"question_status"`
+	Valid          bool           `json:"valid"` // Valid is true if QuestionStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullQuestionStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.QuestionStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.QuestionStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullQuestionStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.QuestionStatus), nil
+}
+
+type SeasonStatus string
+
+const (
+	SeasonStatusVOTING   SeasonStatus = "VOTING"
+	SeasonStatusREVEALED SeasonStatus = "REVEALED"
+	SeasonStatusCLOSED   SeasonStatus = "CLOSED"
+)
+
+func (e *SeasonStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = SeasonStatus(s)
+	case string:
+		*e = SeasonStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for SeasonStatus: %T", src)
+	}
+	return nil
+}
+
+type NullSeasonStatus struct {
+	SeasonStatus SeasonStatus `json:"season_status"`
+	Valid        bool         `json:"valid"` // Valid is true if SeasonStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullSeasonStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.SeasonStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.SeasonStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullSeasonStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.SeasonStatus), nil
+}
+
+type Achievement struct {
+	ID              string                `json:"id"`
+	UserID          string                `json:"user_id"`
+	GroupID         string                `json:"group_id"`
+	SeasonID        sql.NullString        `json:"season_id"`
+	AchievementType AchievementType       `json:"achievement_type"`
+	Metadata        pqtype.NullRawMessage `json:"metadata"`
+	EarnedAt        time.Time             `json:"earned_at"`
+}
+
+type CardCache struct {
+	ID        string    `json:"id"`
+	UserID    string    `json:"user_id"`
+	SeasonID  string    `json:"season_id"`
+	ImageUrl  string    `json:"image_url"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type CrystalLog struct {
+	ID          string         `json:"id"`
+	UserID      string         `json:"user_id"`
+	Delta       int32          `json:"delta"`
+	Balance     int32          `json:"balance"`
+	Type        CrystalLogType `json:"type"`
+	Description sql.NullString `json:"description"`
+	ExternalID  sql.NullString `json:"external_id"`
+	CreatedAt   time.Time      `json:"created_at"`
+}
+
+type Detector struct {
+	ID        string    `json:"id"`
+	UserID    string    `json:"user_id"`
+	SeasonID  string    `json:"season_id"`
+	GroupID   string    `json:"group_id"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type FcmToken struct {
+	ID        string    `json:"id"`
+	UserID    string    `json:"user_id"`
+	Token     string    `json:"token"`
+	Platform  string    `json:"platform"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type Group struct {
+	ID                    string         `json:"id"`
+	Name                  string         `json:"name"`
+	InviteCode            string         `json:"invite_code"`
+	AdminID               string         `json:"admin_id"`
+	TelegramChatID        sql.NullString `json:"telegram_chat_id"`
+	TelegramChatUsername  sql.NullString `json:"telegram_chat_username"`
+	TelegramConnectCode   sql.NullString `json:"telegram_connect_code"`
+	TelegramConnectExpiry sql.NullTime   `json:"telegram_connect_expiry"`
+	CreatedAt             time.Time      `json:"created_at"`
+}
+
+type GroupMember struct {
+	ID       string    `json:"id"`
+	UserID   string    `json:"user_id"`
+	GroupID  string    `json:"group_id"`
+	JoinedAt time.Time `json:"joined_at"`
+}
+
+type NextSeasonVote struct {
+	ID           string    `json:"id"`
+	GroupID      string    `json:"group_id"`
+	UserID       string    `json:"user_id"`
+	QuestionID   string    `json:"question_id"`
+	SeasonNumber int32     `json:"season_number"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+type PushPreference struct {
+	ID       string       `json:"id"`
+	UserID   string       `json:"user_id"`
+	Category PushCategory `json:"category"`
+	Enabled  bool         `json:"enabled"`
+}
+
+type Question struct {
+	ID        string           `json:"id"`
+	Text      string           `json:"text"`
+	Category  QuestionCategory `json:"category"`
+	Source    QuestionSource   `json:"source"`
+	GroupID   sql.NullString   `json:"group_id"`
+	AuthorID  sql.NullString   `json:"author_id"`
+	Status    QuestionStatus   `json:"status"`
+	CreatedAt time.Time        `json:"created_at"`
+}
+
+type Reaction struct {
+	ID        string    `json:"id"`
+	SeasonID  string    `json:"season_id"`
+	ReactorID string    `json:"reactor_id"`
+	TargetID  string    `json:"target_id"`
+	Emoji     string    `json:"emoji"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type Report struct {
+	ID         string         `json:"id"`
+	QuestionID string         `json:"question_id"`
+	ReporterID string         `json:"reporter_id"`
+	Reason     sql.NullString `json:"reason"`
+	CreatedAt  time.Time      `json:"created_at"`
+}
+
+type Season struct {
+	ID        string       `json:"id"`
+	GroupID   string       `json:"group_id"`
+	Number    int32        `json:"number"`
+	Status    SeasonStatus `json:"status"`
+	StartsAt  time.Time    `json:"starts_at"`
+	RevealAt  time.Time    `json:"reveal_at"`
+	EndsAt    time.Time    `json:"ends_at"`
+	CreatedAt time.Time    `json:"created_at"`
+}
+
+type SeasonQuestion struct {
+	ID         string `json:"id"`
+	SeasonID   string `json:"season_id"`
+	QuestionID string `json:"question_id"`
+	Ord        int32  `json:"ord"`
+}
+
+type SeasonResult struct {
+	ID          string  `json:"id"`
+	SeasonID    string  `json:"season_id"`
+	TargetID    string  `json:"target_id"`
+	QuestionID  string  `json:"question_id"`
+	VoteCount   int32   `json:"vote_count"`
+	TotalVoters int32   `json:"total_voters"`
+	Percentage  float64 `json:"percentage"`
+}
+
+type User struct {
+	ID          string         `json:"id"`
+	Phone       sql.NullString `json:"phone"`
+	AppleID     sql.NullString `json:"apple_id"`
+	GoogleID    sql.NullString `json:"google_id"`
+	Username    string         `json:"username"`
+	AvatarUrl   sql.NullString `json:"avatar_url"`
+	AvatarEmoji sql.NullString `json:"avatar_emoji"`
+	BirthYear   sql.NullInt32  `json:"birth_year"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+}
+
+type UserGroupStat struct {
+	ID                 string    `json:"id"`
+	UserID             string    `json:"user_id"`
+	GroupID            string    `json:"group_id"`
+	SeasonsPlayed      int32     `json:"seasons_played"`
+	VotingStreak       int32     `json:"voting_streak"`
+	MaxVotingStreak    int32     `json:"max_voting_streak"`
+	GuessAccuracy      float64   `json:"guess_accuracy"`
+	TotalVotesCast     int32     `json:"total_votes_cast"`
+	TotalVotesReceived int32     `json:"total_votes_received"`
+	UpdatedAt          time.Time `json:"updated_at"`
+}
+
+type Vote struct {
+	ID         string    `json:"id"`
+	SeasonID   string    `json:"season_id"`
+	VoterID    string    `json:"voter_id"`
+	TargetID   string    `json:"target_id"`
+	QuestionID string    `json:"question_id"`
+	CreatedAt  time.Time `json:"created_at"`
+}
