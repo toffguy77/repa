@@ -15,9 +15,9 @@ func NewValidator() *CustomValidator {
 	return &CustomValidator{validator: validator.New()}
 }
 
-func (cv *CustomValidator) Validate(i interface{}) error {
+func (cv *CustomValidator) Validate(i any) error {
 	if err := cv.validator.Struct(i); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, map[string]interface{}{
+		return echo.NewHTTPError(http.StatusBadRequest, map[string]any{
 			"error": map[string]string{
 				"code":    "VALIDATION",
 				"message": err.Error(),

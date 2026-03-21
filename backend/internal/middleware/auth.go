@@ -19,7 +19,7 @@ func JWTAuth(secret string) echo.MiddlewareFunc {
 		return func(c echo.Context) error {
 			auth := c.Request().Header.Get("Authorization")
 			if auth == "" {
-				return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+				return c.JSON(http.StatusUnauthorized, map[string]any{
 					"error": map[string]string{
 						"code":    "UNAUTHORIZED",
 						"message": "Missing authorization header",
@@ -29,7 +29,7 @@ func JWTAuth(secret string) echo.MiddlewareFunc {
 
 			parts := strings.SplitN(auth, " ", 2)
 			if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
-				return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+				return c.JSON(http.StatusUnauthorized, map[string]any{
 					"error": map[string]string{
 						"code":    "UNAUTHORIZED",
 						"message": "Invalid authorization format",
@@ -37,14 +37,14 @@ func JWTAuth(secret string) echo.MiddlewareFunc {
 				})
 			}
 
-			token, err := jwt.ParseWithClaims(parts[1], &JWTClaims{}, func(t *jwt.Token) (interface{}, error) {
+			token, err := jwt.ParseWithClaims(parts[1], &JWTClaims{}, func(t *jwt.Token) (any, error) {
 				if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 					return nil, jwt.ErrSignatureInvalid
 				}
 				return []byte(secret), nil
 			})
 			if err != nil || !token.Valid {
-				return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+				return c.JSON(http.StatusUnauthorized, map[string]any{
 					"error": map[string]string{
 						"code":    "UNAUTHORIZED",
 						"message": "Invalid or expired token",
@@ -54,7 +54,7 @@ func JWTAuth(secret string) echo.MiddlewareFunc {
 
 			claims, ok := token.Claims.(*JWTClaims)
 			if !ok {
-				return c.JSON(http.StatusUnauthorized, map[string]interface{}{
+				return c.JSON(http.StatusUnauthorized, map[string]any{
 					"error": map[string]string{
 						"code":    "UNAUTHORIZED",
 						"message": "Invalid token claims",

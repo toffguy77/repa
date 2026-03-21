@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"net/http"
 	"os"
 	"os/signal"
@@ -153,5 +152,3 @@ func startWorker(cfg *config.Config) {
 	}
 }
 
-// Ensure sqlDB is used (will be passed to db.New() when handlers are wired).
-var _ *sql.DB

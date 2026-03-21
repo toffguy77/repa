@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"time"
@@ -21,7 +20,7 @@ func RateLimit(rdb *redis.Client, key string, limit int, window time.Duration) e
 			}
 
 			redisKey := fmt.Sprintf("rl:%s:%s", key, identifier)
-			ctx := context.Background()
+			ctx := c.Request().Context()
 
 			count, err := rdb.Incr(ctx, redisKey).Result()
 			if err != nil {
@@ -33,7 +32,7 @@ func RateLimit(rdb *redis.Client, key string, limit int, window time.Duration) e
 			}
 
 			if count > int64(limit) {
-				return c.JSON(http.StatusTooManyRequests, map[string]interface{}{
+				return c.JSON(http.StatusTooManyRequests, map[string]any{
 					"error": map[string]string{
 						"code":    "RATE_LIMIT",
 						"message": "Слишком много запросов",
