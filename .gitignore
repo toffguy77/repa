@@ -1,19 +1,20 @@
-# Dependencies
-node_modules/
+# Go
+backend/bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Flutter
 .dart_tool/
 .pub-cache/
 .pub/
-
-# Build
-build/
-dist/
-*.js.map
-
-# Flutter
 mobile/.flutter-plugins
 mobile/.flutter-plugins-dependencies
 mobile/.packages
 mobile/.dart_tool/
+mobile/build/
 
 # iOS
 mobile/ios/Pods/
@@ -34,10 +35,6 @@ mobile/android/**/GeneratedPluginRegistrant.java
 *.apk
 *.aab
 
-# Prisma
-backend/prisma/*.db
-backend/prisma/migrations/**/migration_lock.toml
-
 # Environment
 .env
 .env.*
@@ -53,11 +50,9 @@ backend/prisma/migrations/**/migration_lock.toml
 
 # Logs
 *.log
-npm-debug.log*
 
 # Coverage
 coverage/
-.nyc_output/
 
 # Claude Code
 .claude/settings.local.json
