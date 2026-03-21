@@ -8,7 +8,20 @@ package db
 import (
 	"context"
 	"time"
+
+	"github.com/lib/pq"
 )
+
+const countSeasonVoters = `-- name: CountSeasonVoters :one
+SELECT COUNT(DISTINCT voter_id) FROM votes WHERE season_id = $1
+`
+
+func (q *Queries) CountSeasonVoters(ctx context.Context, seasonID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countSeasonVoters, seasonID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
 
 const createSeason = `-- name: CreateSeason :one
 INSERT INTO seasons (id, group_id, number, starts_at, reveal_at, ends_at)
@@ -68,7 +81,7 @@ func (q *Queries) GetActiveSeasonByGroup(ctx context.Context, groupID string) (S
 }
 
 const getGroupsNeedingNewSeason = `-- name: GetGroupsNeedingNewSeason :many
-SELECT DISTINCT g.id, g.name, g.invite_code, g.admin_id, g.telegram_chat_id, g.telegram_chat_username, g.telegram_connect_code, g.telegram_connect_expiry, g.created_at FROM groups g
+SELECT DISTINCT g.id, g.name, g.invite_code, g.admin_id, g.telegram_chat_id, g.telegram_chat_username, g.telegram_connect_code, g.telegram_connect_expiry, g.created_at, g.categories FROM groups g
 JOIN group_members gm ON gm.group_id = g.id
 WHERE NOT EXISTS (SELECT 1 FROM seasons s WHERE s.group_id = g.id AND s.status = 'VOTING')
 GROUP BY g.id HAVING COUNT(gm.id) >= 3
@@ -93,6 +106,7 @@ func (q *Queries) GetGroupsNeedingNewSeason(ctx context.Context) ([]Group, error
 			&i.TelegramConnectCode,
 			&i.TelegramConnectExpiry,
 			&i.CreatedAt,
+			pq.Array(&i.Categories),
 		); err != nil {
 			return nil, err
 		}
@@ -105,6 +119,17 @@ func (q *Queries) GetGroupsNeedingNewSeason(ctx context.Context) ([]Group, error
 		return nil, err
 	}
 	return items, nil
+}
+
+const getLastSeasonNumber = `-- name: GetLastSeasonNumber :one
+SELECT COALESCE(MAX(number), 0)::int FROM seasons WHERE group_id = $1
+`
+
+func (q *Queries) GetLastSeasonNumber(ctx context.Context, groupID string) (int32, error) {
+	row := q.db.QueryRowContext(ctx, getLastSeasonNumber, groupID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const getSeasonByID = `-- name: GetSeasonByID :one
@@ -161,6 +186,22 @@ func (q *Queries) GetSeasonsForReveal(ctx context.Context) ([]Season, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const hasUserVotedInSeason = `-- name: HasUserVotedInSeason :one
+SELECT COUNT(*) FROM votes WHERE season_id = $1 AND voter_id = $2
+`
+
+type HasUserVotedInSeasonParams struct {
+	SeasonID string `json:"season_id"`
+	VoterID  string `json:"voter_id"`
+}
+
+func (q *Queries) HasUserVotedInSeason(ctx context.Context, arg HasUserVotedInSeasonParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, hasUserVotedInSeason, arg.SeasonID, arg.VoterID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }
 
 const updateSeasonStatus = `-- name: UpdateSeasonStatus :exec

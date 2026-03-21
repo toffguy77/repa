@@ -16,6 +16,19 @@ WHERE source = 'SYSTEM' AND status = 'ACTIVE'
 ORDER BY RANDOM()
 LIMIT $1;
 
+-- name: GetRandomSystemQuestionsByCategories :many
+SELECT * FROM questions
+WHERE source = 'SYSTEM' AND status = 'ACTIVE'
+  AND category = ANY($1::question_category[])
+  AND id NOT IN (
+    SELECT sq.question_id FROM season_questions sq
+    JOIN seasons s ON s.id = sq.season_id
+    WHERE s.group_id = $2
+      AND s.number > (SELECT COALESCE(MAX(number), 0) - 3 FROM seasons WHERE group_id = $2)
+  )
+ORDER BY RANDOM()
+LIMIT $3;
+
 -- name: GetGroupCustomQuestions :many
 SELECT * FROM questions
 WHERE group_id = $1 AND source = 'USER' AND status = 'ACTIVE'

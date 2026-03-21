@@ -15,6 +15,7 @@ type Querier interface {
 	AggregateVotesByTarget(ctx context.Context, seasonID string) ([]AggregateVotesByTargetRow, error)
 	CountGroupMembers(ctx context.Context, groupID string) (int64, error)
 	CountNextSeasonVotesByQuestion(ctx context.Context, arg CountNextSeasonVotesByQuestionParams) ([]CountNextSeasonVotesByQuestionRow, error)
+	CountSeasonVoters(ctx context.Context, seasonID string) (int64, error)
 	CountUniqueVoters(ctx context.Context, seasonID string) (int64, error)
 	CountUserGroups(ctx context.Context, userID string) (int64, error)
 	CreateAchievement(ctx context.Context, arg CreateAchievementParams) (Achievement, error)
@@ -31,8 +32,10 @@ type Querier interface {
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	CreateVote(ctx context.Context, arg CreateVoteParams) (Vote, error)
 	DeleteFCMToken(ctx context.Context, token string) error
+	DeleteGroup(ctx context.Context, id string) error
 	DeleteUser(ctx context.Context, id string) error
 	GetActiveSeasonByGroup(ctx context.Context, groupID string) (Season, error)
+	GetAdminUsername(ctx context.Context, id string) (string, error)
 	GetCardCache(ctx context.Context, arg GetCardCacheParams) (CardCache, error)
 	GetDetector(ctx context.Context, arg GetDetectorParams) (Detector, error)
 	GetGroupByID(ctx context.Context, id string) (Group, error)
@@ -41,9 +44,12 @@ type Querier interface {
 	GetGroupCustomQuestions(ctx context.Context, groupID sql.NullString) ([]Question, error)
 	GetGroupMembers(ctx context.Context, groupID string) ([]GetGroupMembersRow, error)
 	GetGroupsNeedingNewSeason(ctx context.Context) ([]Group, error)
+	GetLastSeasonNumber(ctx context.Context, groupID string) (int32, error)
+	GetNextAdmin(ctx context.Context, arg GetNextAdminParams) (string, error)
 	GetNextSeasonVotes(ctx context.Context, arg GetNextSeasonVotesParams) ([]GetNextSeasonVotesRow, error)
 	GetQuestionByID(ctx context.Context, id string) (Question, error)
 	GetRandomSystemQuestions(ctx context.Context, limit int32) ([]Question, error)
+	GetRandomSystemQuestionsByCategories(ctx context.Context, arg GetRandomSystemQuestionsByCategoriesParams) ([]Question, error)
 	GetReactionsForUser(ctx context.Context, arg GetReactionsForUserParams) ([]GetReactionsForUserRow, error)
 	GetSeasonAchievements(ctx context.Context, seasonID sql.NullString) ([]Achievement, error)
 	GetSeasonByID(ctx context.Context, id string) (Season, error)
@@ -68,10 +74,17 @@ type Querier interface {
 	GetVotesBySeasonAndVoter(ctx context.Context, arg GetVotesBySeasonAndVoterParams) ([]Vote, error)
 	HasDetector(ctx context.Context, arg HasDetectorParams) (bool, error)
 	HasUserReported(ctx context.Context, arg HasUserReportedParams) (bool, error)
+	HasUserVotedInSeason(ctx context.Context, arg HasUserVotedInSeasonParams) (int64, error)
 	HealthCheck(ctx context.Context) (int32, error)
+	IsGroupMember(ctx context.Context, arg IsGroupMemberParams) (int64, error)
 	IsPushEnabled(ctx context.Context, arg IsPushEnabledParams) (interface{}, error)
+	RemoveGroupMember(ctx context.Context, arg RemoveGroupMemberParams) error
 	SetGroupConnectCode(ctx context.Context, arg SetGroupConnectCodeParams) error
+	UpdateGroupAdmin(ctx context.Context, arg UpdateGroupAdminParams) error
+	UpdateGroupInviteCode(ctx context.Context, arg UpdateGroupInviteCodeParams) error
+	UpdateGroupName(ctx context.Context, arg UpdateGroupNameParams) error
 	UpdateGroupTelegram(ctx context.Context, arg UpdateGroupTelegramParams) error
+	UpdateGroupTelegramUsername(ctx context.Context, arg UpdateGroupTelegramUsernameParams) error
 	UpdateQuestionStatus(ctx context.Context, arg UpdateQuestionStatusParams) error
 	UpdateSeasonStatus(ctx context.Context, arg UpdateSeasonStatusParams) error
 	UpdateUserAvatarURL(ctx context.Context, arg UpdateUserAvatarURLParams) (User, error)

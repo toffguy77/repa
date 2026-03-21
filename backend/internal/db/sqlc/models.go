@@ -395,6 +395,7 @@ type Group struct {
 	TelegramConnectCode   sql.NullString `json:"telegram_connect_code"`
 	TelegramConnectExpiry sql.NullTime   `json:"telegram_connect_expiry"`
 	CreatedAt             time.Time      `json:"created_at"`
+	Categories            []string       `json:"categories"`
 }
 
 type GroupMember struct {

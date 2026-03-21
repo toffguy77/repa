@@ -8,6 +8,8 @@ package db
 import (
 	"context"
 	"database/sql"
+
+	"github.com/lib/pq"
 )
 
 const addGroupMember = `-- name: AddGroupMember :one
@@ -56,8 +58,8 @@ func (q *Queries) CountUserGroups(ctx context.Context, userID string) (int64, er
 }
 
 const createGroup = `-- name: CreateGroup :one
-INSERT INTO groups (id, name, invite_code, admin_id, telegram_chat_username)
-VALUES ($1, $2, $3, $4, $5) RETURNING id, name, invite_code, admin_id, telegram_chat_id, telegram_chat_username, telegram_connect_code, telegram_connect_expiry, created_at
+INSERT INTO groups (id, name, invite_code, admin_id, telegram_chat_username, categories)
+VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, invite_code, admin_id, telegram_chat_id, telegram_chat_username, telegram_connect_code, telegram_connect_expiry, created_at, categories
 `
 
 type CreateGroupParams struct {
@@ -66,6 +68,7 @@ type CreateGroupParams struct {
 	InviteCode           string         `json:"invite_code"`
 	AdminID              string         `json:"admin_id"`
 	TelegramChatUsername sql.NullString `json:"telegram_chat_username"`
+	Categories           []string       `json:"categories"`
 }
 
 func (q *Queries) CreateGroup(ctx context.Context, arg CreateGroupParams) (Group, error) {
@@ -75,6 +78,7 @@ func (q *Queries) CreateGroup(ctx context.Context, arg CreateGroupParams) (Group
 		arg.InviteCode,
 		arg.AdminID,
 		arg.TelegramChatUsername,
+		pq.Array(arg.Categories),
 	)
 	var i Group
 	err := row.Scan(
@@ -87,12 +91,33 @@ func (q *Queries) CreateGroup(ctx context.Context, arg CreateGroupParams) (Group
 		&i.TelegramConnectCode,
 		&i.TelegramConnectExpiry,
 		&i.CreatedAt,
+		pq.Array(&i.Categories),
 	)
 	return i, err
 }
 
+const deleteGroup = `-- name: DeleteGroup :exec
+DELETE FROM groups WHERE id = $1
+`
+
+func (q *Queries) DeleteGroup(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, deleteGroup, id)
+	return err
+}
+
+const getAdminUsername = `-- name: GetAdminUsername :one
+SELECT username FROM users WHERE id = $1
+`
+
+func (q *Queries) GetAdminUsername(ctx context.Context, id string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getAdminUsername, id)
+	var username string
+	err := row.Scan(&username)
+	return username, err
+}
+
 const getGroupByID = `-- name: GetGroupByID :one
-SELECT id, name, invite_code, admin_id, telegram_chat_id, telegram_chat_username, telegram_connect_code, telegram_connect_expiry, created_at FROM groups WHERE id = $1
+SELECT id, name, invite_code, admin_id, telegram_chat_id, telegram_chat_username, telegram_connect_code, telegram_connect_expiry, created_at, categories FROM groups WHERE id = $1
 `
 
 func (q *Queries) GetGroupByID(ctx context.Context, id string) (Group, error) {
@@ -108,12 +133,13 @@ func (q *Queries) GetGroupByID(ctx context.Context, id string) (Group, error) {
 		&i.TelegramConnectCode,
 		&i.TelegramConnectExpiry,
 		&i.CreatedAt,
+		pq.Array(&i.Categories),
 	)
 	return i, err
 }
 
 const getGroupByInviteCode = `-- name: GetGroupByInviteCode :one
-SELECT id, name, invite_code, admin_id, telegram_chat_id, telegram_chat_username, telegram_connect_code, telegram_connect_expiry, created_at FROM groups WHERE invite_code = $1
+SELECT id, name, invite_code, admin_id, telegram_chat_id, telegram_chat_username, telegram_connect_code, telegram_connect_expiry, created_at, categories FROM groups WHERE invite_code = $1
 `
 
 func (q *Queries) GetGroupByInviteCode(ctx context.Context, inviteCode string) (Group, error) {
@@ -129,12 +155,13 @@ func (q *Queries) GetGroupByInviteCode(ctx context.Context, inviteCode string) (
 		&i.TelegramConnectCode,
 		&i.TelegramConnectExpiry,
 		&i.CreatedAt,
+		pq.Array(&i.Categories),
 	)
 	return i, err
 }
 
 const getGroupByTelegramChatID = `-- name: GetGroupByTelegramChatID :one
-SELECT id, name, invite_code, admin_id, telegram_chat_id, telegram_chat_username, telegram_connect_code, telegram_connect_expiry, created_at FROM groups WHERE telegram_chat_id = $1
+SELECT id, name, invite_code, admin_id, telegram_chat_id, telegram_chat_username, telegram_connect_code, telegram_connect_expiry, created_at, categories FROM groups WHERE telegram_chat_id = $1
 `
 
 func (q *Queries) GetGroupByTelegramChatID(ctx context.Context, telegramChatID sql.NullString) (Group, error) {
@@ -150,6 +177,7 @@ func (q *Queries) GetGroupByTelegramChatID(ctx context.Context, telegramChatID s
 		&i.TelegramConnectCode,
 		&i.TelegramConnectExpiry,
 		&i.CreatedAt,
+		pq.Array(&i.Categories),
 	)
 	return i, err
 }
@@ -197,8 +225,28 @@ func (q *Queries) GetGroupMembers(ctx context.Context, groupID string) ([]GetGro
 	return items, nil
 }
 
+const getNextAdmin = `-- name: GetNextAdmin :one
+SELECT u.id FROM users u
+JOIN group_members gm ON gm.user_id = u.id
+WHERE gm.group_id = $1 AND u.id != $2
+ORDER BY gm.joined_at ASC
+LIMIT 1
+`
+
+type GetNextAdminParams struct {
+	GroupID string `json:"group_id"`
+	ID      string `json:"id"`
+}
+
+func (q *Queries) GetNextAdmin(ctx context.Context, arg GetNextAdminParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, getNextAdmin, arg.GroupID, arg.ID)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getUserGroups = `-- name: GetUserGroups :many
-SELECT g.id, g.name, g.invite_code, g.admin_id, g.telegram_chat_id, g.telegram_chat_username, g.telegram_connect_code, g.telegram_connect_expiry, g.created_at FROM groups g
+SELECT g.id, g.name, g.invite_code, g.admin_id, g.telegram_chat_id, g.telegram_chat_username, g.telegram_connect_code, g.telegram_connect_expiry, g.created_at, g.categories FROM groups g
 JOIN group_members gm ON gm.group_id = g.id
 WHERE gm.user_id = $1
 ORDER BY gm.joined_at DESC
@@ -223,6 +271,7 @@ func (q *Queries) GetUserGroups(ctx context.Context, userID string) ([]Group, er
 			&i.TelegramConnectCode,
 			&i.TelegramConnectExpiry,
 			&i.CreatedAt,
+			pq.Array(&i.Categories),
 		); err != nil {
 			return nil, err
 		}
@@ -235,6 +284,36 @@ func (q *Queries) GetUserGroups(ctx context.Context, userID string) ([]Group, er
 		return nil, err
 	}
 	return items, nil
+}
+
+const isGroupMember = `-- name: IsGroupMember :one
+SELECT COUNT(*) FROM group_members WHERE user_id = $1 AND group_id = $2
+`
+
+type IsGroupMemberParams struct {
+	UserID  string `json:"user_id"`
+	GroupID string `json:"group_id"`
+}
+
+func (q *Queries) IsGroupMember(ctx context.Context, arg IsGroupMemberParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, isGroupMember, arg.UserID, arg.GroupID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const removeGroupMember = `-- name: RemoveGroupMember :exec
+DELETE FROM group_members WHERE user_id = $1 AND group_id = $2
+`
+
+type RemoveGroupMemberParams struct {
+	UserID  string `json:"user_id"`
+	GroupID string `json:"group_id"`
+}
+
+func (q *Queries) RemoveGroupMember(ctx context.Context, arg RemoveGroupMemberParams) error {
+	_, err := q.db.ExecContext(ctx, removeGroupMember, arg.UserID, arg.GroupID)
+	return err
 }
 
 const setGroupConnectCode = `-- name: SetGroupConnectCode :exec
@@ -252,6 +331,48 @@ func (q *Queries) SetGroupConnectCode(ctx context.Context, arg SetGroupConnectCo
 	return err
 }
 
+const updateGroupAdmin = `-- name: UpdateGroupAdmin :exec
+UPDATE groups SET admin_id = $2 WHERE id = $1
+`
+
+type UpdateGroupAdminParams struct {
+	ID      string `json:"id"`
+	AdminID string `json:"admin_id"`
+}
+
+func (q *Queries) UpdateGroupAdmin(ctx context.Context, arg UpdateGroupAdminParams) error {
+	_, err := q.db.ExecContext(ctx, updateGroupAdmin, arg.ID, arg.AdminID)
+	return err
+}
+
+const updateGroupInviteCode = `-- name: UpdateGroupInviteCode :exec
+UPDATE groups SET invite_code = $2 WHERE id = $1
+`
+
+type UpdateGroupInviteCodeParams struct {
+	ID         string `json:"id"`
+	InviteCode string `json:"invite_code"`
+}
+
+func (q *Queries) UpdateGroupInviteCode(ctx context.Context, arg UpdateGroupInviteCodeParams) error {
+	_, err := q.db.ExecContext(ctx, updateGroupInviteCode, arg.ID, arg.InviteCode)
+	return err
+}
+
+const updateGroupName = `-- name: UpdateGroupName :exec
+UPDATE groups SET name = $2 WHERE id = $1
+`
+
+type UpdateGroupNameParams struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+func (q *Queries) UpdateGroupName(ctx context.Context, arg UpdateGroupNameParams) error {
+	_, err := q.db.ExecContext(ctx, updateGroupName, arg.ID, arg.Name)
+	return err
+}
+
 const updateGroupTelegram = `-- name: UpdateGroupTelegram :exec
 UPDATE groups SET telegram_chat_id = $2, telegram_chat_username = $3,
   telegram_connect_code = NULL, telegram_connect_expiry = NULL WHERE id = $1
@@ -265,5 +386,19 @@ type UpdateGroupTelegramParams struct {
 
 func (q *Queries) UpdateGroupTelegram(ctx context.Context, arg UpdateGroupTelegramParams) error {
 	_, err := q.db.ExecContext(ctx, updateGroupTelegram, arg.ID, arg.TelegramChatID, arg.TelegramChatUsername)
+	return err
+}
+
+const updateGroupTelegramUsername = `-- name: UpdateGroupTelegramUsername :exec
+UPDATE groups SET telegram_chat_username = $2 WHERE id = $1
+`
+
+type UpdateGroupTelegramUsernameParams struct {
+	ID                   string         `json:"id"`
+	TelegramChatUsername sql.NullString `json:"telegram_chat_username"`
+}
+
+func (q *Queries) UpdateGroupTelegramUsername(ctx context.Context, arg UpdateGroupTelegramUsernameParams) error {
+	_, err := q.db.ExecContext(ctx, updateGroupTelegramUsername, arg.ID, arg.TelegramChatUsername)
 	return err
 }

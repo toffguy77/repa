@@ -8,6 +8,8 @@ package db
 import (
 	"context"
 	"database/sql"
+
+	"github.com/lib/pq"
 )
 
 const createQuestion = `-- name: CreateQuestion :one
@@ -133,6 +135,58 @@ LIMIT $1
 
 func (q *Queries) GetRandomSystemQuestions(ctx context.Context, limit int32) ([]Question, error) {
 	rows, err := q.db.QueryContext(ctx, getRandomSystemQuestions, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Question{}
+	for rows.Next() {
+		var i Question
+		if err := rows.Scan(
+			&i.ID,
+			&i.Text,
+			&i.Category,
+			&i.Source,
+			&i.GroupID,
+			&i.AuthorID,
+			&i.Status,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getRandomSystemQuestionsByCategories = `-- name: GetRandomSystemQuestionsByCategories :many
+SELECT id, text, category, source, group_id, author_id, status, created_at FROM questions
+WHERE source = 'SYSTEM' AND status = 'ACTIVE'
+  AND category = ANY($1::question_category[])
+  AND id NOT IN (
+    SELECT sq.question_id FROM season_questions sq
+    JOIN seasons s ON s.id = sq.season_id
+    WHERE s.group_id = $2
+      AND s.number > (SELECT COALESCE(MAX(number), 0) - 3 FROM seasons WHERE group_id = $2)
+  )
+ORDER BY RANDOM()
+LIMIT $3
+`
+
+type GetRandomSystemQuestionsByCategoriesParams struct {
+	Column1 []QuestionCategory `json:"column_1"`
+	GroupID string             `json:"group_id"`
+	Limit   int32              `json:"limit"`
+}
+
+func (q *Queries) GetRandomSystemQuestionsByCategories(ctx context.Context, arg GetRandomSystemQuestionsByCategoriesParams) ([]Question, error) {
+	rows, err := q.db.QueryContext(ctx, getRandomSystemQuestionsByCategories, pq.Array(arg.Column1), arg.GroupID, arg.Limit)
 	if err != nil {
 		return nil, err
 	}

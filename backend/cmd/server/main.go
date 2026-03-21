@@ -16,9 +16,11 @@ import (
 	db "github.com/repa-app/repa/internal/db/sqlc"
 	"github.com/repa-app/repa/internal/handler"
 	authhandler "github.com/repa-app/repa/internal/handler/auth"
+	groupshandler "github.com/repa-app/repa/internal/handler/groups"
 	"github.com/repa-app/repa/internal/lib"
 	appmw "github.com/repa-app/repa/internal/middleware"
 	authsvc "github.com/repa-app/repa/internal/service/auth"
+	groupssvc "github.com/repa-app/repa/internal/service/groups"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -93,6 +95,9 @@ func main() {
 	authService := authsvc.NewService(queries, rdb, s3Client, cfg.JWTSecret, cfg.DevMode)
 	authHandler := authhandler.NewHandler(authService, cfg)
 
+	groupsService := groupssvc.NewService(queries, sqlDB)
+	groupsHandler := groupshandler.NewHandler(groupsService)
+
 	// Routes
 	api := e.Group("/api/v1")
 	api.GET("/health", healthHandler(pool, rdb))
@@ -113,6 +118,16 @@ func main() {
 	protected.POST("/auth/avatar", authHandler.UploadAvatar)
 	protected.PATCH("/push/preferences", authHandler.UpdatePushPreferences)
 	protected.DELETE("/auth/account", authHandler.DeleteAccount)
+
+	// Group routes (specific paths before :id wildcard)
+	protected.POST("/groups", groupsHandler.CreateGroup)
+	protected.GET("/groups", groupsHandler.ListGroups)
+	protected.GET("/groups/join/:inviteCode/preview", groupsHandler.JoinPreview)
+	protected.POST("/groups/join/:inviteCode", groupsHandler.JoinGroup)
+	protected.GET("/groups/:id", groupsHandler.GetGroup)
+	protected.DELETE("/groups/:id/leave", groupsHandler.LeaveGroup)
+	protected.PATCH("/groups/:id", groupsHandler.UpdateGroup)
+	protected.POST("/groups/:id/invite-link", groupsHandler.RegenerateInviteLink)
 
 	_ = asynqClient
 

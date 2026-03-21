@@ -19,3 +19,12 @@ SELECT DISTINCT g.* FROM groups g
 JOIN group_members gm ON gm.group_id = g.id
 WHERE NOT EXISTS (SELECT 1 FROM seasons s WHERE s.group_id = g.id AND s.status = 'VOTING')
 GROUP BY g.id HAVING COUNT(gm.id) >= 3;
+
+-- name: GetLastSeasonNumber :one
+SELECT COALESCE(MAX(number), 0)::int FROM seasons WHERE group_id = $1;
+
+-- name: CountSeasonVoters :one
+SELECT COUNT(DISTINCT voter_id) FROM votes WHERE season_id = $1;
+
+-- name: HasUserVotedInSeason :one
+SELECT COUNT(*) FROM votes WHERE season_id = $1 AND voter_id = $2;
