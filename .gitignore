@@ -40,6 +40,9 @@ mobile/android/**/GeneratedPluginRegistrant.java
 .env.*
 !.env.example
 
+# Secrets
+secrets/
+
 # IDE
 .idea/
 .vscode/

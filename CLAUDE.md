@@ -82,6 +82,24 @@ Feature-first clean architecture:
 - Users under 18: ROMANCE category unavailable.
 - Detector costs 10 crystals, hidden attributes cost 5 crystals.
 
+## Database (Dev)
+
+- Dev database is a remote Yandex Cloud Managed PostgreSQL cluster. **Never touch the cluster itself or other databases — only the `repa-db-dev` database.**
+- Credentials and connection details are in `secrets/pg_credentials.env`. The `backend/.env` has `DATABASE_URL` configured.
+- CA cert: `~/.postgresql/root.crt` (Yandex Cloud CA).
+- When implementing features that require schema changes:
+  1. Create new migration files in `internal/db/migrations/`.
+  2. Apply migrations to the dev DB automatically using `psql -f` (the `make migrate` DSN format may not work with multi-host + special chars — use the psql connection string from `secrets/pg_credentials.env`).
+  3. Run `make sqlc` to regenerate Go code after migration changes.
+  4. If a migration fails — fix it. **Never leave the dev database in a broken state.**
+- When running seed or any DB command, use the credentials from `backend/.env` or `secrets/pg_credentials.env`.
+
+## Secrets
+
+- All secrets (API keys, credentials, tokens) go into the `secrets/` directory at the repo root.
+- `secrets/` **must** be in `.gitignore` — verify before committing. Never commit secrets to git.
+- As new secrets appear during development (e.g., Firebase keys, YuKassa creds, Telegram token), save them to a descriptive file in `secrets/`.
+
 ## Task Specs
 
 Implementation is organized in phases (T01–T26) documented in `docs/specs/`. The `docs/specs/master_context.md` file contains the complete context including DB schema, API conventions, and business rules.
