@@ -7,3 +7,6 @@ SELECT q.* FROM questions q
 JOIN season_questions sq ON sq.question_id = q.id
 WHERE sq.season_id = $1
 ORDER BY sq.ord ASC;
+
+-- name: CountSeasonQuestions :one
+SELECT COUNT(*) FROM season_questions WHERE season_id = $1;

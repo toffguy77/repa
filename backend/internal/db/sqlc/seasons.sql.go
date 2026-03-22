@@ -132,6 +132,33 @@ func (q *Queries) GetLastSeasonNumber(ctx context.Context, groupID string) (int3
 	return column_1, err
 }
 
+const getPreviousRevealedSeason = `-- name: GetPreviousRevealedSeason :one
+SELECT id, group_id, number, status, starts_at, reveal_at, ends_at, created_at FROM seasons
+WHERE group_id = $1 AND status = 'REVEALED' AND id != $2
+ORDER BY number DESC LIMIT 1
+`
+
+type GetPreviousRevealedSeasonParams struct {
+	GroupID string `json:"group_id"`
+	ID      string `json:"id"`
+}
+
+func (q *Queries) GetPreviousRevealedSeason(ctx context.Context, arg GetPreviousRevealedSeasonParams) (Season, error) {
+	row := q.db.QueryRowContext(ctx, getPreviousRevealedSeason, arg.GroupID, arg.ID)
+	var i Season
+	err := row.Scan(
+		&i.ID,
+		&i.GroupID,
+		&i.Number,
+		&i.Status,
+		&i.StartsAt,
+		&i.RevealAt,
+		&i.EndsAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getSeasonByID = `-- name: GetSeasonByID :one
 SELECT id, group_id, number, status, starts_at, reveal_at, ends_at, created_at FROM seasons WHERE id = $1
 `

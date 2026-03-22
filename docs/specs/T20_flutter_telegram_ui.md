@@ -15,7 +15,7 @@
 **ConnectInstructionSheet (BottomSheet)**
 ```
 Как подключить:
-1. Добавьте @repa_bot в ваш Telegram-чат
+1. Добавьте @repaapp_bot в ваш Telegram-чат
 2. Сделайте бота администратором
 3. Напишите в чат:
    [REPA-X7K2]  [Скопировать]

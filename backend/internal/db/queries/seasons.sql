@@ -28,3 +28,8 @@ SELECT COUNT(DISTINCT voter_id) FROM votes WHERE season_id = $1;
 
 -- name: HasUserVotedInSeason :one
 SELECT COUNT(*) FROM votes WHERE season_id = $1 AND voter_id = $2;
+
+-- name: GetPreviousRevealedSeason :one
+SELECT * FROM seasons
+WHERE group_id = $1 AND status = 'REVEALED' AND id != $2
+ORDER BY number DESC LIMIT 1;

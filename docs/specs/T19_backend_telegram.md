@@ -82,7 +82,7 @@ if (update.my_chat_member?.new_chat_member?.status === 'kicked') {
 {
   data: {
     connectCode: string,           // REPA-X7K2
-    instruction: string,           // «Добавьте @repa_bot в чат и напишите /connect REPA-X7K2»
+    instruction: string,           // «Добавьте @repaapp_bot в чат и напишите /connect REPA-X7K2»
     expiresAt: string
   }
 }

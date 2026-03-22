@@ -17,10 +17,15 @@ import (
 	"github.com/repa-app/repa/internal/handler"
 	authhandler "github.com/repa-app/repa/internal/handler/auth"
 	groupshandler "github.com/repa-app/repa/internal/handler/groups"
+	revealhandler "github.com/repa-app/repa/internal/handler/reveal"
+	votinghandler "github.com/repa-app/repa/internal/handler/voting"
 	"github.com/repa-app/repa/internal/lib"
 	appmw "github.com/repa-app/repa/internal/middleware"
 	authsvc "github.com/repa-app/repa/internal/service/auth"
 	groupssvc "github.com/repa-app/repa/internal/service/groups"
+	revealsvc "github.com/repa-app/repa/internal/service/reveal"
+	votingsvc "github.com/repa-app/repa/internal/service/voting"
+	"github.com/repa-app/repa/internal/worker/tasks"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -98,6 +103,12 @@ func main() {
 	groupsService := groupssvc.NewService(queries, sqlDB)
 	groupsHandler := groupshandler.NewHandler(groupsService)
 
+	votingService := votingsvc.NewService(queries)
+	votingHandler := votinghandler.NewHandler(votingService)
+
+	revealService := revealsvc.NewService(queries, sqlDB)
+	revealHandler := revealhandler.NewHandler(revealService)
+
 	// Routes
 	api := e.Group("/api/v1")
 	api.GET("/health", healthHandler(pool, rdb))
@@ -129,10 +140,18 @@ func main() {
 	protected.PATCH("/groups/:id", groupsHandler.UpdateGroup)
 	protected.POST("/groups/:id/invite-link", groupsHandler.RegenerateInviteLink)
 
-	_ = asynqClient
+	// Voting routes
+	protected.GET("/seasons/:seasonId/voting-session", votingHandler.GetVotingSession)
+	protected.POST("/seasons/:seasonId/votes", votingHandler.CastVote)
+	protected.GET("/seasons/:seasonId/progress", votingHandler.GetProgress)
+
+	// Reveal routes
+	protected.GET("/seasons/:seasonId/reveal", revealHandler.GetReveal)
+	protected.GET("/seasons/:seasonId/members-cards", revealHandler.GetMembersCards)
+	protected.POST("/seasons/:seasonId/reveal/open-hidden", revealHandler.OpenHidden)
 
 	// Asynq worker
-	go startWorker(cfg)
+	go startWorker(cfg, revealService, asynqClient)
 
 	// Graceful shutdown
 	go func() {
@@ -182,18 +201,48 @@ func healthHandler(pool *pgxpool.Pool, rdb *redis.Client) echo.HandlerFunc {
 	}
 }
 
-func startWorker(cfg *config.Config) {
+func startWorker(cfg *config.Config, revealSvc *revealsvc.Service, asynqClient *asynq.Client) {
 	srv, err := lib.NewAsynqServer(cfg.RedisURL)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to create asynq server")
 		return
 	}
 
+	revealChecker := tasks.NewRevealChecker(revealSvc, asynqClient)
+	revealProcessor := tasks.NewRevealProcessor(revealSvc, asynqClient)
+
 	mux := asynq.NewServeMux()
-	// Task handlers will be registered here in future tasks
+	mux.HandleFunc(lib.TypeRevealChecker, revealChecker.HandleRevealChecker)
+	mux.HandleFunc(lib.TypeRevealProcess, revealProcessor.HandleRevealProcess)
+
+	// Start asynq scheduler for periodic tasks
+	go startScheduler(cfg)
 
 	if err := srv.Run(mux); err != nil {
 		log.Error().Err(err).Msg("asynq worker error")
+	}
+}
+
+func startScheduler(cfg *config.Config) {
+	opts, err := asynq.ParseRedisURI(cfg.RedisURL)
+	if err != nil {
+		log.Error().Err(err).Msg("failed to parse redis URI for scheduler")
+		return
+	}
+
+	scheduler := asynq.NewScheduler(opts, nil)
+
+	// reveal-checker: every minute, check for seasons ready for reveal
+	task := asynq.NewTask(lib.TypeRevealChecker, nil)
+	_, err = scheduler.Register("* * * * *", task, asynq.Queue("critical"))
+	if err != nil {
+		log.Error().Err(err).Msg("failed to register reveal-checker schedule")
+		return
+	}
+	log.Info().Msg("registered reveal-checker cron (every minute)")
+
+	if err := scheduler.Run(); err != nil {
+		log.Error().Err(err).Msg("asynq scheduler error")
 	}
 }
 

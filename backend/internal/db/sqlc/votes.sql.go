@@ -44,6 +44,27 @@ func (q *Queries) AggregateVotesByTarget(ctx context.Context, seasonID string) (
 	return items, nil
 }
 
+const countCompletedVoters = `-- name: CountCompletedVoters :one
+SELECT COUNT(*) FROM (
+  SELECT voter_id FROM votes
+  WHERE season_id = $1
+  GROUP BY voter_id
+  HAVING COUNT(*) >= $2::bigint
+) sub
+`
+
+type CountCompletedVotersParams struct {
+	SeasonID string `json:"season_id"`
+	Column2  int64  `json:"column_2"`
+}
+
+func (q *Queries) CountCompletedVoters(ctx context.Context, arg CountCompletedVotersParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countCompletedVoters, arg.SeasonID, arg.Column2)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countUniqueVoters = `-- name: CountUniqueVoters :one
 SELECT COUNT(DISTINCT voter_id) FROM votes WHERE season_id = $1
 `
@@ -152,4 +173,21 @@ func (q *Queries) GetVotesBySeasonAndVoter(ctx context.Context, arg GetVotesBySe
 		return nil, err
 	}
 	return items, nil
+}
+
+const hasVoteForQuestion = `-- name: HasVoteForQuestion :one
+SELECT COUNT(*) FROM votes WHERE season_id = $1 AND voter_id = $2 AND question_id = $3
+`
+
+type HasVoteForQuestionParams struct {
+	SeasonID   string `json:"season_id"`
+	VoterID    string `json:"voter_id"`
+	QuestionID string `json:"question_id"`
+}
+
+func (q *Queries) HasVoteForQuestion(ctx context.Context, arg HasVoteForQuestionParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, hasVoteForQuestion, arg.SeasonID, arg.VoterID, arg.QuestionID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }

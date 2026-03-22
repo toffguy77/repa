@@ -11,6 +11,17 @@ SELECT COUNT(DISTINCT voter_id) FROM votes WHERE season_id = $1;
 -- name: GetVotersBySeason :many
 SELECT DISTINCT voter_id FROM votes WHERE season_id = $1;
 
+-- name: HasVoteForQuestion :one
+SELECT COUNT(*) FROM votes WHERE season_id = $1 AND voter_id = $2 AND question_id = $3;
+
+-- name: CountCompletedVoters :one
+SELECT COUNT(*) FROM (
+  SELECT voter_id FROM votes
+  WHERE season_id = $1
+  GROUP BY voter_id
+  HAVING COUNT(*) >= $2::bigint
+) sub;
+
 -- name: AggregateVotesByTarget :many
 SELECT target_id, question_id, COUNT(*) as vote_count
 FROM votes WHERE season_id = $1

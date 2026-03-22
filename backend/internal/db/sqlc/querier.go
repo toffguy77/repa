@@ -13,8 +13,10 @@ type Querier interface {
 	AddGroupMember(ctx context.Context, arg AddGroupMemberParams) (GroupMember, error)
 	AddSeasonQuestion(ctx context.Context, arg AddSeasonQuestionParams) (SeasonQuestion, error)
 	AggregateVotesByTarget(ctx context.Context, seasonID string) ([]AggregateVotesByTargetRow, error)
+	CountCompletedVoters(ctx context.Context, arg CountCompletedVotersParams) (int64, error)
 	CountGroupMembers(ctx context.Context, groupID string) (int64, error)
 	CountNextSeasonVotesByQuestion(ctx context.Context, arg CountNextSeasonVotesByQuestionParams) ([]CountNextSeasonVotesByQuestionRow, error)
+	CountSeasonQuestions(ctx context.Context, seasonID string) (int64, error)
 	CountSeasonVoters(ctx context.Context, seasonID string) (int64, error)
 	CountUniqueVoters(ctx context.Context, seasonID string) (int64, error)
 	CountUserGroups(ctx context.Context, userID string) (int64, error)
@@ -33,6 +35,7 @@ type Querier interface {
 	CreateVote(ctx context.Context, arg CreateVoteParams) (Vote, error)
 	DeleteFCMToken(ctx context.Context, token string) error
 	DeleteGroup(ctx context.Context, id string) error
+	DeleteSeasonResultsBySeason(ctx context.Context, seasonID string) error
 	DeleteUser(ctx context.Context, id string) error
 	GetActiveSeasonByGroup(ctx context.Context, groupID string) (Season, error)
 	GetAdminUsername(ctx context.Context, id string) (string, error)
@@ -47,6 +50,7 @@ type Querier interface {
 	GetLastSeasonNumber(ctx context.Context, groupID string) (int32, error)
 	GetNextAdmin(ctx context.Context, arg GetNextAdminParams) (string, error)
 	GetNextSeasonVotes(ctx context.Context, arg GetNextSeasonVotesParams) ([]GetNextSeasonVotesRow, error)
+	GetPreviousRevealedSeason(ctx context.Context, arg GetPreviousRevealedSeasonParams) (Season, error)
 	GetQuestionByID(ctx context.Context, id string) (Question, error)
 	GetRandomSystemQuestions(ctx context.Context, limit int32) ([]Question, error)
 	GetRandomSystemQuestionsByCategories(ctx context.Context, arg GetRandomSystemQuestionsByCategoriesParams) ([]Question, error)
@@ -58,6 +62,7 @@ type Querier interface {
 	GetSeasonResultsByUser(ctx context.Context, arg GetSeasonResultsByUserParams) ([]GetSeasonResultsByUserRow, error)
 	GetSeasonsForReveal(ctx context.Context) ([]Season, error)
 	GetSystemQuestionsByCategory(ctx context.Context, category QuestionCategory) ([]Question, error)
+	GetTopResultPerQuestion(ctx context.Context, seasonID string) ([]GetTopResultPerQuestionRow, error)
 	GetUserAchievements(ctx context.Context, arg GetUserAchievementsParams) ([]Achievement, error)
 	GetUserBalance(ctx context.Context, userID string) (int32, error)
 	GetUserByAppleID(ctx context.Context, appleID sql.NullString) (User, error)
@@ -75,6 +80,7 @@ type Querier interface {
 	HasDetector(ctx context.Context, arg HasDetectorParams) (bool, error)
 	HasUserReported(ctx context.Context, arg HasUserReportedParams) (bool, error)
 	HasUserVotedInSeason(ctx context.Context, arg HasUserVotedInSeasonParams) (int64, error)
+	HasVoteForQuestion(ctx context.Context, arg HasVoteForQuestionParams) (int64, error)
 	HealthCheck(ctx context.Context) (int32, error)
 	IsGroupMember(ctx context.Context, arg IsGroupMemberParams) (int64, error)
 	IsPushEnabled(ctx context.Context, arg IsPushEnabledParams) (interface{}, error)

@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 )
 
 const createSeasonResult = `-- name: CreateSeasonResult :one
@@ -45,6 +46,15 @@ func (q *Queries) CreateSeasonResult(ctx context.Context, arg CreateSeasonResult
 		&i.Percentage,
 	)
 	return i, err
+}
+
+const deleteSeasonResultsBySeason = `-- name: DeleteSeasonResultsBySeason :exec
+DELETE FROM season_results WHERE season_id = $1
+`
+
+func (q *Queries) DeleteSeasonResultsBySeason(ctx context.Context, seasonID string) error {
+	_, err := q.db.ExecContext(ctx, deleteSeasonResultsBySeason, seasonID)
+	return err
 }
 
 const getSeasonResults = `-- name: GetSeasonResults :many
@@ -127,6 +137,57 @@ func (q *Queries) GetSeasonResultsByUser(ctx context.Context, arg GetSeasonResul
 			&i.Percentage,
 			&i.QuestionText,
 			&i.QuestionCategory,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getTopResultPerQuestion = `-- name: GetTopResultPerQuestion :many
+SELECT DISTINCT ON (sr.question_id) sr.question_id, sr.target_id, sr.vote_count, sr.percentage,
+  q.text as question_text, u.username, u.avatar_emoji
+FROM season_results sr
+JOIN questions q ON q.id = sr.question_id
+JOIN users u ON u.id = sr.target_id
+WHERE sr.season_id = $1
+ORDER BY sr.question_id, sr.percentage DESC, sr.vote_count DESC
+`
+
+type GetTopResultPerQuestionRow struct {
+	QuestionID   string         `json:"question_id"`
+	TargetID     string         `json:"target_id"`
+	VoteCount    int32          `json:"vote_count"`
+	Percentage   float64        `json:"percentage"`
+	QuestionText string         `json:"question_text"`
+	Username     string         `json:"username"`
+	AvatarEmoji  sql.NullString `json:"avatar_emoji"`
+}
+
+func (q *Queries) GetTopResultPerQuestion(ctx context.Context, seasonID string) ([]GetTopResultPerQuestionRow, error) {
+	rows, err := q.db.QueryContext(ctx, getTopResultPerQuestion, seasonID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetTopResultPerQuestionRow{}
+	for rows.Next() {
+		var i GetTopResultPerQuestionRow
+		if err := rows.Scan(
+			&i.QuestionID,
+			&i.TargetID,
+			&i.VoteCount,
+			&i.Percentage,
+			&i.QuestionText,
+			&i.Username,
+			&i.AvatarEmoji,
 		); err != nil {
 			return nil, err
 		}

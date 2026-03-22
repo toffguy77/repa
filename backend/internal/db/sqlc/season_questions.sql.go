@@ -38,6 +38,17 @@ func (q *Queries) AddSeasonQuestion(ctx context.Context, arg AddSeasonQuestionPa
 	return i, err
 }
 
+const countSeasonQuestions = `-- name: CountSeasonQuestions :one
+SELECT COUNT(*) FROM season_questions WHERE season_id = $1
+`
+
+func (q *Queries) CountSeasonQuestions(ctx context.Context, seasonID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countSeasonQuestions, seasonID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const getSeasonQuestions = `-- name: GetSeasonQuestions :many
 SELECT q.id, q.text, q.category, q.source, q.group_id, q.author_id, q.status, q.created_at FROM questions q
 JOIN season_questions sq ON sq.question_id = q.id
