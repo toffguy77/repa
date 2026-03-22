@@ -58,4 +58,47 @@ class ApiService {
     final response = await _dio.get('/auth/version');
     return response.data as Map<String, dynamic>;
   }
+
+  // --- Groups ---
+
+  Future<Map<String, dynamic>> createGroup(Map<String, dynamic> body) async {
+    final response = await _dio.post('/groups', data: body);
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> listGroups() async {
+    final response = await _dio.get('/groups');
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> getGroup(String id) async {
+    final response = await _dio.get('/groups/$id');
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> joinPreview(String inviteCode) async {
+    final response = await _dio.get('/groups/join/$inviteCode/preview');
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> joinGroup(String inviteCode) async {
+    final response = await _dio.post('/groups/join/$inviteCode');
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> leaveGroup(String id) async {
+    final response = await _dio.delete('/groups/$id/leave');
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> updateGroup(
+      String id, Map<String, dynamic> body) async {
+    final response = await _dio.patch('/groups/$id', data: body);
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> regenerateInviteLink(String id) async {
+    final response = await _dio.post('/groups/$id/invite-link');
+    return response.data as Map<String, dynamic>;
+  }
 }
