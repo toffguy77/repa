@@ -135,9 +135,47 @@ backend/
 │       └── queries/crystal_logs.sql       # GetUserBalance, CreateCrystalLog
 ```
 
+### `GET /api/v1/seasons/:seasonId/detector`
+Get detector status (purchased or not) and voter list.
+- **Success 200:** `{ "data": { "purchased": bool, "voters": [VoterProfile], "crystal_balance": int } }`
+- **Voters only returned if purchased.** Otherwise empty array.
+
+### `POST /api/v1/seasons/:seasonId/detector`
+Buy a detector for 10 crystals.
+- **Success 200:** `{ "data": { "purchased": true, "voters": [VoterProfile], "crystal_balance": int } }`
+- **Error 402:** `INSUFFICIENT_FUNDS`
+- **Idempotent:** if already purchased, returns existing detector result.
+
+## Mobile (Flutter)
+
+### Screens
+
+- **RevealScreen** (`/groups/:id/reveal/:seasonId`) — 4 phases: loading, waiting (timer), ready (pulsing emoji + button), opening (3s animation), revealed (card + actions)
+- **MembersRevealScreen** (`/groups/:id/reveal/:seasonId/members`) — list of member cards with top-3 attributes
+- **DetectorBottomSheet** — blurred voter list until purchased (10 crystals), then reveals voter profiles
+- **AchievementPopup** — full-screen overlay with bounce animation for new achievements, tap to cycle/dismiss
+
+### Architecture
+
+```
+mobile/lib/features/reveal/
+├── data/reveal_repository.dart              # API calls
+├── domain/reveal.dart                       # Freezed models (RevealData, MyCard, MemberCard, DetectorResult, etc.)
+└── presentation/
+    ├── reveal_notifier.dart                 # StateNotifier with RevealPhase enum
+    ├── reveal_screen.dart                   # Main screen with phase-based rendering
+    ├── members_reveal_screen.dart           # Member cards list
+    └── widgets/
+        ├── reputation_card.dart             # Card with attributes + hidden section
+        ├── attribute_bar.dart               # Animated progress bar
+        ├── detector_sheet.dart              # Bottom sheet for detector
+        └── achievement_popup.dart           # Full-screen achievement overlay
+```
+
 ### Key Dependencies
 
 - Reveal handler -> Reveal service -> sqlc Queries
 - Reveal worker -> Reveal service (ProcessReveal, GetSeasonsForReveal)
 - OpenHidden -> crystal_logs table (transactional deduct + log)
+- Detector -> detectors table + crystal_logs (transactional deduct + create)
 - Downstream: achievements (T11, implemented), push notifications (T17)

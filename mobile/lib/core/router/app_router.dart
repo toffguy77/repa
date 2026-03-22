@@ -13,6 +13,8 @@ import '../../features/groups/presentation/join_group_screen.dart';
 import '../../features/groups/presentation/group_screen.dart';
 import '../../features/voting/presentation/voting_screen.dart';
 import '../../features/voting/presentation/voting_complete_screen.dart';
+import '../../features/reveal/presentation/reveal_screen.dart';
+import '../../features/reveal/presentation/members_reveal_screen.dart';
 
 const _pendingInviteCodeKey = 'pending_invite_code';
 
@@ -125,6 +127,36 @@ final routerProvider = Provider<GoRouter>((ref) {
           return GroupScreen(groupId: id);
         },
         routes: [
+          GoRoute(
+            path: 'reveal/:seasonId',
+            builder: (context, state) {
+              final groupId = state.pathParameters['id']!;
+              final seasonId = state.pathParameters['seasonId']!;
+              final status =
+                  state.uri.queryParameters['status'] ?? 'REVEALED';
+              return RevealScreen(
+                groupId: groupId,
+                seasonId: seasonId,
+                seasonStatus: status,
+              );
+            },
+            routes: [
+              GoRoute(
+                path: 'members',
+                builder: (context, state) {
+                  final groupId = state.pathParameters['id']!;
+                  final seasonId = state.pathParameters['seasonId']!;
+                  final status =
+                      state.uri.queryParameters['status'] ?? 'REVEALED';
+                  return MembersRevealScreen(
+                    groupId: groupId,
+                    seasonId: seasonId,
+                    seasonStatus: status,
+                  );
+                },
+              ),
+            ],
+          ),
           GoRoute(
             path: 'vote/:seasonId',
             builder: (context, state) {
