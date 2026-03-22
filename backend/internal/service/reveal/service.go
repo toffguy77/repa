@@ -488,18 +488,6 @@ func (s *Service) BuyDetector(ctx context.Context, seasonID, userID string) (*De
 		return nil, err
 	}
 
-	// Check if already purchased
-	hasDet, err := s.queries.HasDetector(ctx, db.HasDetectorParams{
-		UserID:   userID,
-		SeasonID: seasonID,
-	})
-	if err != nil {
-		return nil, err
-	}
-	if hasDet {
-		return s.GetDetector(ctx, seasonID, userID)
-	}
-
 	const cost = 10
 
 	q := s.queries
@@ -512,6 +500,21 @@ func (s *Service) BuyDetector(ctx context.Context, seasonID, userID string) (*De
 		}
 		defer tx.Rollback()
 		q = db.New(tx)
+	}
+
+	// Check if already purchased (inside transaction to prevent race condition)
+	hasDet, err := q.HasDetector(ctx, db.HasDetectorParams{
+		UserID:   userID,
+		SeasonID: seasonID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if hasDet {
+		if tx != nil {
+			tx.Rollback()
+		}
+		return s.GetDetector(ctx, seasonID, userID)
 	}
 
 	balance, err := q.GetUserBalance(ctx, userID)
