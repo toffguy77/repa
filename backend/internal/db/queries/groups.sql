@@ -71,3 +71,12 @@ SELECT * FROM groups WHERE telegram_chat_id = $1;
 
 -- name: GetAdminUsername :one
 SELECT username FROM users WHERE id = $1;
+
+-- name: CountMembersJoinedAfterUser :one
+SELECT COUNT(*) FROM group_members gm
+WHERE gm.group_id = $1 AND gm.joined_at > (
+  SELECT gm2.joined_at FROM group_members gm2 WHERE gm2.user_id = $2 AND gm2.group_id = $1
+);
+
+-- name: GetGroupMemberIDs :many
+SELECT user_id FROM group_members WHERE group_id = $1;

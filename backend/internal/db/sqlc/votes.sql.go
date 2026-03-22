@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"time"
 )
 
 const aggregateVotesByTarget = `-- name: AggregateVotesByTarget :many
@@ -76,6 +77,38 @@ func (q *Queries) CountUniqueVoters(ctx context.Context, seasonID string) (int64
 	return count, err
 }
 
+const countVotesCastByUser = `-- name: CountVotesCastByUser :one
+SELECT COUNT(*) FROM votes WHERE season_id = $1 AND voter_id = $2
+`
+
+type CountVotesCastByUserParams struct {
+	SeasonID string `json:"season_id"`
+	VoterID  string `json:"voter_id"`
+}
+
+func (q *Queries) CountVotesCastByUser(ctx context.Context, arg CountVotesCastByUserParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countVotesCastByUser, arg.SeasonID, arg.VoterID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countVotesReceivedByUser = `-- name: CountVotesReceivedByUser :one
+SELECT COUNT(*) FROM votes WHERE season_id = $1 AND target_id = $2
+`
+
+type CountVotesReceivedByUserParams struct {
+	SeasonID string `json:"season_id"`
+	TargetID string `json:"target_id"`
+}
+
+func (q *Queries) CountVotesReceivedByUser(ctx context.Context, arg CountVotesReceivedByUserParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countVotesReceivedByUser, arg.SeasonID, arg.TargetID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createVote = `-- name: CreateVote :one
 INSERT INTO votes (id, season_id, voter_id, target_id, question_id)
 VALUES ($1, $2, $3, $4, $5) RETURNING id, season_id, voter_id, target_id, question_id, created_at
@@ -107,6 +140,46 @@ func (q *Queries) CreateVote(ctx context.Context, arg CreateVoteParams) (Vote, e
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const getFirstCompletedVoter = `-- name: GetFirstCompletedVoter :one
+SELECT voter_id FROM (
+  SELECT voter_id, MAX(created_at) as last_vote_at
+  FROM votes WHERE season_id = $1
+  GROUP BY voter_id
+  HAVING COUNT(*) >= $2::bigint
+) sub
+ORDER BY last_vote_at ASC
+LIMIT 1
+`
+
+type GetFirstCompletedVoterParams struct {
+	SeasonID string `json:"season_id"`
+	Column2  int64  `json:"column_2"`
+}
+
+func (q *Queries) GetFirstCompletedVoter(ctx context.Context, arg GetFirstCompletedVoterParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, getFirstCompletedVoter, arg.SeasonID, arg.Column2)
+	var voter_id string
+	err := row.Scan(&voter_id)
+	return voter_id, err
+}
+
+const getFirstVoteTimeByUser = `-- name: GetFirstVoteTimeByUser :one
+SELECT COALESCE(MIN(created_at), NOW())::timestamptz as first_vote_at FROM votes
+WHERE season_id = $1 AND voter_id = $2
+`
+
+type GetFirstVoteTimeByUserParams struct {
+	SeasonID string `json:"season_id"`
+	VoterID  string `json:"voter_id"`
+}
+
+func (q *Queries) GetFirstVoteTimeByUser(ctx context.Context, arg GetFirstVoteTimeByUserParams) (time.Time, error) {
+	row := q.db.QueryRowContext(ctx, getFirstVoteTimeByUser, arg.SeasonID, arg.VoterID)
+	var first_vote_at time.Time
+	err := row.Scan(&first_vote_at)
+	return first_vote_at, err
 }
 
 const getVotersBySeason = `-- name: GetVotersBySeason :many
@@ -162,6 +235,80 @@ func (q *Queries) GetVotesBySeasonAndVoter(ctx context.Context, arg GetVotesBySe
 			&i.QuestionID,
 			&i.CreatedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getVotesByVoterInSeason = `-- name: GetVotesByVoterInSeason :many
+SELECT v.question_id, v.target_id FROM votes v
+WHERE v.season_id = $1 AND v.voter_id = $2
+`
+
+type GetVotesByVoterInSeasonParams struct {
+	SeasonID string `json:"season_id"`
+	VoterID  string `json:"voter_id"`
+}
+
+type GetVotesByVoterInSeasonRow struct {
+	QuestionID string `json:"question_id"`
+	TargetID   string `json:"target_id"`
+}
+
+func (q *Queries) GetVotesByVoterInSeason(ctx context.Context, arg GetVotesByVoterInSeasonParams) ([]GetVotesByVoterInSeasonRow, error) {
+	rows, err := q.db.QueryContext(ctx, getVotesByVoterInSeason, arg.SeasonID, arg.VoterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetVotesByVoterInSeasonRow{}
+	for rows.Next() {
+		var i GetVotesByVoterInSeasonRow
+		if err := rows.Scan(&i.QuestionID, &i.TargetID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getWinnerPerQuestion = `-- name: GetWinnerPerQuestion :many
+SELECT DISTINCT ON (question_id) question_id, target_id, COUNT(*) as vote_count
+FROM votes WHERE season_id = $1
+GROUP BY question_id, target_id
+ORDER BY question_id, vote_count DESC
+`
+
+type GetWinnerPerQuestionRow struct {
+	QuestionID string `json:"question_id"`
+	TargetID   string `json:"target_id"`
+	VoteCount  int64  `json:"vote_count"`
+}
+
+func (q *Queries) GetWinnerPerQuestion(ctx context.Context, seasonID string) ([]GetWinnerPerQuestionRow, error) {
+	rows, err := q.db.QueryContext(ctx, getWinnerPerQuestion, seasonID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetWinnerPerQuestionRow{}
+	for rows.Next() {
+		var i GetWinnerPerQuestionRow
+		if err := rows.Scan(&i.QuestionID, &i.TargetID, &i.VoteCount); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

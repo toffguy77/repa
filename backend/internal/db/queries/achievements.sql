@@ -11,3 +11,12 @@ ORDER BY earned_at DESC;
 SELECT * FROM achievements
 WHERE season_id = $1
 ORDER BY earned_at DESC;
+
+-- name: HasAchievementInGroup :one
+SELECT COUNT(*) FROM achievements
+WHERE user_id = $1 AND group_id = $2 AND achievement_type = $3;
+
+-- name: GetUserAchievementsByType :many
+SELECT * FROM achievements
+WHERE user_id = $1 AND group_id = $2 AND achievement_type = $3
+ORDER BY earned_at DESC;

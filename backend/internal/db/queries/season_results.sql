@@ -24,3 +24,15 @@ JOIN questions q ON q.id = sr.question_id
 JOIN users u ON u.id = sr.target_id
 WHERE sr.season_id = $1
 ORDER BY sr.question_id, sr.percentage DESC, sr.vote_count DESC;
+
+-- name: GetTopAttributeForUser :one
+SELECT sr.question_id, sr.percentage
+FROM season_results sr
+WHERE sr.season_id = $1 AND sr.target_id = $2
+ORDER BY sr.percentage DESC
+LIMIT 1;
+
+-- name: GetMaxPercentageForUser :one
+SELECT COALESCE(MAX(sr.percentage), 0)::float as max_pct
+FROM season_results sr
+WHERE sr.season_id = $1 AND sr.target_id = $2;

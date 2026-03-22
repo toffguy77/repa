@@ -46,6 +46,25 @@ func (q *Queries) CountGroupMembers(ctx context.Context, groupID string) (int64,
 	return count, err
 }
 
+const countMembersJoinedAfterUser = `-- name: CountMembersJoinedAfterUser :one
+SELECT COUNT(*) FROM group_members gm
+WHERE gm.group_id = $1 AND gm.joined_at > (
+  SELECT gm2.joined_at FROM group_members gm2 WHERE gm2.user_id = $2 AND gm2.group_id = $1
+)
+`
+
+type CountMembersJoinedAfterUserParams struct {
+	GroupID string `json:"group_id"`
+	UserID  string `json:"user_id"`
+}
+
+func (q *Queries) CountMembersJoinedAfterUser(ctx context.Context, arg CountMembersJoinedAfterUserParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countMembersJoinedAfterUser, arg.GroupID, arg.UserID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countUserGroups = `-- name: CountUserGroups :one
 SELECT COUNT(*) FROM group_members WHERE user_id = $1
 `
@@ -180,6 +199,33 @@ func (q *Queries) GetGroupByTelegramChatID(ctx context.Context, telegramChatID s
 		pq.Array(&i.Categories),
 	)
 	return i, err
+}
+
+const getGroupMemberIDs = `-- name: GetGroupMemberIDs :many
+SELECT user_id FROM group_members WHERE group_id = $1
+`
+
+func (q *Queries) GetGroupMemberIDs(ctx context.Context, groupID string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, getGroupMemberIDs, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var user_id string
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getGroupMembers = `-- name: GetGroupMembers :many

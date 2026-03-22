@@ -121,6 +121,50 @@ func (q *Queries) GetGroupsNeedingNewSeason(ctx context.Context) ([]Group, error
 	return items, nil
 }
 
+const getLastNRevealedSeasons = `-- name: GetLastNRevealedSeasons :many
+SELECT id, group_id, number, status, starts_at, reveal_at, ends_at, created_at FROM seasons
+WHERE group_id = $1 AND status = 'REVEALED'
+ORDER BY number DESC
+LIMIT $2
+`
+
+type GetLastNRevealedSeasonsParams struct {
+	GroupID string `json:"group_id"`
+	Limit   int32  `json:"limit"`
+}
+
+func (q *Queries) GetLastNRevealedSeasons(ctx context.Context, arg GetLastNRevealedSeasonsParams) ([]Season, error) {
+	rows, err := q.db.QueryContext(ctx, getLastNRevealedSeasons, arg.GroupID, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Season{}
+	for rows.Next() {
+		var i Season
+		if err := rows.Scan(
+			&i.ID,
+			&i.GroupID,
+			&i.Number,
+			&i.Status,
+			&i.StartsAt,
+			&i.RevealAt,
+			&i.EndsAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getLastSeasonNumber = `-- name: GetLastSeasonNumber :one
 SELECT COALESCE(MAX(number), 0)::int FROM seasons WHERE group_id = $1
 `
@@ -157,6 +201,44 @@ func (q *Queries) GetPreviousRevealedSeason(ctx context.Context, arg GetPrevious
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const getRevealedSeasonsForGroup = `-- name: GetRevealedSeasonsForGroup :many
+SELECT id, group_id, number, status, starts_at, reveal_at, ends_at, created_at FROM seasons
+WHERE group_id = $1 AND status = 'REVEALED'
+ORDER BY number DESC
+`
+
+func (q *Queries) GetRevealedSeasonsForGroup(ctx context.Context, groupID string) ([]Season, error) {
+	rows, err := q.db.QueryContext(ctx, getRevealedSeasonsForGroup, groupID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Season{}
+	for rows.Next() {
+		var i Season
+		if err := rows.Scan(
+			&i.ID,
+			&i.GroupID,
+			&i.Number,
+			&i.Status,
+			&i.StartsAt,
+			&i.RevealAt,
+			&i.EndsAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getSeasonByID = `-- name: GetSeasonByID :one
