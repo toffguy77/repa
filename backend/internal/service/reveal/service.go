@@ -420,6 +420,168 @@ func (s *Service) OpenHidden(ctx context.Context, seasonID, userID string) (*Ope
 	}, nil
 }
 
+// --- Detector ---
+
+type VoterProfile struct {
+	ID          string  `json:"id"`
+	Username    string  `json:"username"`
+	AvatarEmoji *string `json:"avatar_emoji"`
+	AvatarURL   *string `json:"avatar_url"`
+}
+
+type DetectorResult struct {
+	Purchased      bool            `json:"purchased"`
+	Voters         []VoterProfile  `json:"voters"`
+	CrystalBalance int32           `json:"crystal_balance"`
+}
+
+func (s *Service) GetDetector(ctx context.Context, seasonID, userID string) (*DetectorResult, error) {
+	if _, err := s.ValidateRevealAccess(ctx, seasonID, userID); err != nil {
+		return nil, err
+	}
+
+	hasDet, err := s.queries.HasDetector(ctx, db.HasDetectorParams{
+		UserID:   userID,
+		SeasonID: seasonID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	balance, err := s.queries.GetUserBalance(ctx, userID)
+	if err != nil {
+		balance = 0
+	}
+
+	result := &DetectorResult{
+		Purchased:      hasDet,
+		Voters:         []VoterProfile{},
+		CrystalBalance: balance,
+	}
+
+	if hasDet {
+		voters, err := s.queries.GetVoterProfilesBySeason(ctx, seasonID)
+		if err != nil {
+			return nil, err
+		}
+		for _, v := range voters {
+			vp := VoterProfile{
+				ID:       v.ID,
+				Username: v.Username,
+			}
+			if v.AvatarEmoji.Valid {
+				vp.AvatarEmoji = &v.AvatarEmoji.String
+			}
+			if v.AvatarUrl.Valid {
+				vp.AvatarURL = &v.AvatarUrl.String
+			}
+			result.Voters = append(result.Voters, vp)
+		}
+	}
+
+	return result, nil
+}
+
+func (s *Service) BuyDetector(ctx context.Context, seasonID, userID string) (*DetectorResult, error) {
+	season, err := s.ValidateRevealAccess(ctx, seasonID, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	const cost = 10
+
+	q := s.queries
+	var tx *sql.Tx
+	if s.sqlDB != nil {
+		var txErr error
+		tx, txErr = s.sqlDB.BeginTx(ctx, nil)
+		if txErr != nil {
+			return nil, txErr
+		}
+		defer tx.Rollback()
+		q = db.New(tx)
+	}
+
+	// Check if already purchased (inside transaction to prevent race condition)
+	hasDet, err := q.HasDetector(ctx, db.HasDetectorParams{
+		UserID:   userID,
+		SeasonID: seasonID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if hasDet {
+		if tx != nil {
+			tx.Rollback()
+		}
+		return s.GetDetector(ctx, seasonID, userID)
+	}
+
+	balance, err := q.GetUserBalance(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if balance < cost {
+		return nil, ErrInsufficientFunds
+	}
+
+	newBalance := balance - cost
+	_, err = q.CreateCrystalLog(ctx, db.CreateCrystalLogParams{
+		ID:          uuid.New().String(),
+		UserID:      userID,
+		Delta:       -cost,
+		Balance:     newBalance,
+		Type:        db.CrystalLogTypeSPENDDETECTOR,
+		Description: sql.NullString{String: "Detector for season", Valid: true},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = q.CreateDetector(ctx, db.CreateDetectorParams{
+		ID:       uuid.New().String(),
+		UserID:   userID,
+		SeasonID: seasonID,
+		GroupID:  season.GroupID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	if tx != nil {
+		if err := tx.Commit(); err != nil {
+			return nil, err
+		}
+	}
+
+	// Fetch voters now that detector is purchased
+	voters, err := s.queries.GetVoterProfilesBySeason(ctx, seasonID)
+	if err != nil {
+		return nil, err
+	}
+
+	voterProfiles := make([]VoterProfile, 0, len(voters))
+	for _, v := range voters {
+		vp := VoterProfile{
+			ID:       v.ID,
+			Username: v.Username,
+		}
+		if v.AvatarEmoji.Valid {
+			vp.AvatarEmoji = &v.AvatarEmoji.String
+		}
+		if v.AvatarUrl.Valid {
+			vp.AvatarURL = &v.AvatarUrl.String
+		}
+		voterProfiles = append(voterProfiles, vp)
+	}
+
+	return &DetectorResult{
+		Purchased:      true,
+		Voters:         voterProfiles,
+		CrystalBalance: newBalance,
+	}, nil
+}
+
 // --- Helpers ---
 
 func splitAttributes(results []db.GetSeasonResultsByUserRow) (top []AttributeDto, hidden []AttributeDto) {

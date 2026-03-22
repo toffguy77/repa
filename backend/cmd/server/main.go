@@ -154,6 +154,8 @@ func main() {
 	protected.GET("/seasons/:seasonId/members-cards", revealHandler.GetMembersCards)
 	protected.POST("/seasons/:seasonId/reveal/open-hidden", revealHandler.OpenHidden)
 	protected.GET("/seasons/:seasonId/my-card-url", revealHandler.GetMyCardURL)
+	protected.GET("/seasons/:seasonId/detector", revealHandler.GetDetector)
+	protected.POST("/seasons/:seasonId/detector", revealHandler.BuyDetector)
 
 	// Asynq worker
 	go startWorker(cfg, revealService, achieveService, cardsService, asynqClient)
