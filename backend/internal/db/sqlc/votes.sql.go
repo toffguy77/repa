@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"time"
 )
 
@@ -180,6 +181,48 @@ func (q *Queries) GetFirstVoteTimeByUser(ctx context.Context, arg GetFirstVoteTi
 	var first_vote_at time.Time
 	err := row.Scan(&first_vote_at)
 	return first_vote_at, err
+}
+
+const getVoterProfilesBySeason = `-- name: GetVoterProfilesBySeason :many
+SELECT DISTINCT ON (v.voter_id) u.id, u.username, u.avatar_emoji, u.avatar_url
+FROM votes v
+JOIN users u ON u.id = v.voter_id
+WHERE v.season_id = $1
+`
+
+type GetVoterProfilesBySeasonRow struct {
+	ID          string         `json:"id"`
+	Username    string         `json:"username"`
+	AvatarEmoji sql.NullString `json:"avatar_emoji"`
+	AvatarUrl   sql.NullString `json:"avatar_url"`
+}
+
+func (q *Queries) GetVoterProfilesBySeason(ctx context.Context, seasonID string) ([]GetVoterProfilesBySeasonRow, error) {
+	rows, err := q.db.QueryContext(ctx, getVoterProfilesBySeason, seasonID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetVoterProfilesBySeasonRow{}
+	for rows.Next() {
+		var i GetVoterProfilesBySeasonRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.AvatarEmoji,
+			&i.AvatarUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getVotersBySeason = `-- name: GetVotersBySeason :many

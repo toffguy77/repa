@@ -87,6 +87,7 @@ type Querier interface {
 	GetUserGroupStats(ctx context.Context, arg GetUserGroupStatsParams) (UserGroupStat, error)
 	GetUserGroups(ctx context.Context, userID string) ([]Group, error)
 	GetUserPushPreferences(ctx context.Context, userID string) ([]PushPreference, error)
+	GetVoterProfilesBySeason(ctx context.Context, seasonID string) ([]GetVoterProfilesBySeasonRow, error)
 	GetVotersBySeason(ctx context.Context, seasonID string) ([]string, error)
 	GetVotesBySeasonAndVoter(ctx context.Context, arg GetVotesBySeasonAndVoterParams) ([]Vote, error)
 	GetVotesByVoterInSeason(ctx context.Context, arg GetVotesByVoterInSeasonParams) ([]GetVotesByVoterInSeasonRow, error)

@@ -66,6 +66,30 @@ func (h *Handler) OpenHidden(c echo.Context) error {
 	})
 }
 
+func (h *Handler) GetDetector(c echo.Context) error {
+	seasonID := c.Param("seasonId")
+	claims := appmw.GetCurrentUser(c)
+
+	result, err := h.svc.GetDetector(c.Request().Context(), seasonID, claims.UserID)
+	if err != nil {
+		return mapServiceError(c, err)
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{"data": result})
+}
+
+func (h *Handler) BuyDetector(c echo.Context) error {
+	seasonID := c.Param("seasonId")
+	claims := appmw.GetCurrentUser(c)
+
+	result, err := h.svc.BuyDetector(c.Request().Context(), seasonID, claims.UserID)
+	if err != nil {
+		return mapServiceError(c, err)
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{"data": result})
+}
+
 func (h *Handler) GetMyCardURL(c echo.Context) error {
 	seasonID := c.Param("seasonId")
 	claims := appmw.GetCurrentUser(c)

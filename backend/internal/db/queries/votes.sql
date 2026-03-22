@@ -56,3 +56,9 @@ SELECT COUNT(*) FROM votes WHERE season_id = $1 AND voter_id = $2;
 
 -- name: CountVotesReceivedByUser :one
 SELECT COUNT(*) FROM votes WHERE season_id = $1 AND target_id = $2;
+
+-- name: GetVoterProfilesBySeason :many
+SELECT DISTINCT ON (v.voter_id) u.id, u.username, u.avatar_emoji, u.avatar_url
+FROM votes v
+JOIN users u ON u.id = v.voter_id
+WHERE v.season_id = $1;

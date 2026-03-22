@@ -160,7 +160,7 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
                         ),
                       ),
                     ],
-                    if (season.status == 'REVEALED')
+                    if (season.status == 'REVEALED') ...[
                       Text(
                         'Результаты готовы!',
                         style: AppTextStyles.body.copyWith(
@@ -168,6 +168,21 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
                           fontWeight: FontWeight.w600,
                         ),
                       ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            HapticFeedback.mediumImpact();
+                            context.push(
+                              '/groups/${widget.groupId}/reveal/${season.id}?status=REVEALED',
+                            );
+                          },
+                          child: const Text('Открыть репу'),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),

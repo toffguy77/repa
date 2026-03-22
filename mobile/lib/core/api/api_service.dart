@@ -119,4 +119,37 @@ class ApiService {
     final response = await _dio.get('/seasons/$seasonId/progress');
     return response.data as Map<String, dynamic>;
   }
+
+  // --- Reveal ---
+
+  Future<Map<String, dynamic>> getReveal(String seasonId) async {
+    final response = await _dio.get('/seasons/$seasonId/reveal');
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> getMembersCards(String seasonId) async {
+    final response = await _dio.get('/seasons/$seasonId/members-cards');
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> openHidden(String seasonId) async {
+    final response =
+        await _dio.post('/seasons/$seasonId/reveal/open-hidden');
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> getMyCardUrl(String seasonId) async {
+    final response = await _dio.get('/seasons/$seasonId/my-card-url');
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> getDetector(String seasonId) async {
+    final response = await _dio.get('/seasons/$seasonId/detector');
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> buyDetector(String seasonId) async {
+    final response = await _dio.post('/seasons/$seasonId/detector');
+    return response.data as Map<String, dynamic>;
+  }
 }
