@@ -75,7 +75,10 @@ Plan must include: code changes, new files, tests, spec updates, feature doc upd
 1. **Write code** — follow monorepo structure: `backend/` for Go, `mobile/` for Flutter.
 2. **Write tests** — MANDATORY. See Test Requirements below.
 3. **Update specs** — modify affected `docs/specs/` files. If behavior in ANY existing spec changes, that spec MUST be updated.
-4. **Write/update feature docs** — see Feature Documentation below. MANDATORY.
+4. **Write/update feature docs** — MANDATORY, NON-NEGOTIABLE. See Feature Documentation below.
+   - After writing code, IMMEDIATELY create or update the relevant `docs/features/*.md` file.
+   - Run `ls docs/features/` to verify the doc exists before moving to verification.
+   - If the doc is missing or outdated, this is a **blocker** — do NOT proceed to verification.
 5. **Verify locally:**
    - Backend: `cd backend && make test` + coverage check (>=80%)
    - Mobile: `cd mobile && flutter analyze && flutter test --coverage` + coverage check
@@ -105,7 +108,9 @@ Plan must include: code changes, new files, tests, spec updates, feature doc upd
 - Build output
 - `git diff`
 - Any minor review findings not auto-fixed
-- Feature doc created/updated
+- **Feature doc diff** — show exactly what was created or changed in `docs/features/`
+
+**DOC GATE:** If no `docs/features/*.md` file was created or updated in this session, STOP. Go back and write the doc before presenting results. Undocumented code is a hard blocker.
 
 Wait for explicit "ok" from user.
 
