@@ -11,6 +11,8 @@ import '../../features/home/home_screen.dart';
 import '../../features/groups/presentation/create_group_screen.dart';
 import '../../features/groups/presentation/join_group_screen.dart';
 import '../../features/groups/presentation/group_screen.dart';
+import '../../features/voting/presentation/voting_screen.dart';
+import '../../features/voting/presentation/voting_complete_screen.dart';
 
 const _pendingInviteCodeKey = 'pending_invite_code';
 
@@ -122,6 +124,27 @@ final routerProvider = Provider<GoRouter>((ref) {
           final id = state.pathParameters['id']!;
           return GroupScreen(groupId: id);
         },
+        routes: [
+          GoRoute(
+            path: 'vote/:seasonId',
+            builder: (context, state) {
+              final groupId = state.pathParameters['id']!;
+              final seasonId = state.pathParameters['seasonId']!;
+              return VotingScreen(groupId: groupId, seasonId: seasonId);
+            },
+            routes: [
+              GoRoute(
+                path: 'complete',
+                builder: (context, state) {
+                  final groupId = state.pathParameters['id']!;
+                  final seasonId = state.pathParameters['seasonId']!;
+                  return VotingCompleteScreen(
+                      groupId: groupId, seasonId: seasonId);
+                },
+              ),
+            ],
+          ),
+        ],
       ),
       // Deeplink: /join/:code — redirect handles auth-gating via _RouterNotifier
       GoRoute(

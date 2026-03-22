@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/theme/app_colors.dart';
@@ -148,7 +149,8 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
                               ? null
                               : () {
                                   HapticFeedback.mediumImpact();
-                                  // TODO: navigate to voting screen (T09)
+                                  context.go(
+                                      '/groups/${widget.groupId}/vote/${season.id}');
                                 },
                           child: Text(
                             season.userVoted

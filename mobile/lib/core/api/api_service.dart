@@ -101,4 +101,22 @@ class ApiService {
     final response = await _dio.post('/groups/$id/invite-link');
     return response.data as Map<String, dynamic>;
   }
+
+  // --- Voting ---
+
+  Future<Map<String, dynamic>> getVotingSession(String seasonId) async {
+    final response = await _dio.get('/seasons/$seasonId/voting-session');
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> castVote(
+      String seasonId, Map<String, String> body) async {
+    final response = await _dio.post('/seasons/$seasonId/votes', data: body);
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> getVotingProgress(String seasonId) async {
+    final response = await _dio.get('/seasons/$seasonId/progress');
+    return response.data as Map<String, dynamic>;
+  }
 }
