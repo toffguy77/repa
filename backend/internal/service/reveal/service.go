@@ -3,6 +3,7 @@ package reveal
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"math"
 
@@ -186,7 +187,8 @@ type RevealData struct {
 	GroupSummary GroupSummary `json:"group_summary"`
 }
 
-func (s *Service) GetReveal(ctx context.Context, seasonID, userID string) (*RevealData, error) {
+// ValidateRevealAccess checks that the season exists, is revealed, and the user is a member.
+func (s *Service) ValidateRevealAccess(ctx context.Context, seasonID, userID string) (*db.Season, error) {
 	season, err := s.queries.GetSeasonByID(ctx, seasonID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -210,6 +212,15 @@ func (s *Service) GetReveal(ctx context.Context, seasonID, userID string) (*Reve
 		return nil, ErrNotMember
 	}
 
+	return &season, nil
+}
+
+func (s *Service) GetReveal(ctx context.Context, seasonID, userID string) (*RevealData, error) {
+	season, err := s.ValidateRevealAccess(ctx, seasonID, userID)
+	if err != nil {
+		return nil, err
+	}
+
 	// Get user's results
 	results, err := s.queries.GetSeasonResultsByUser(ctx, db.GetSeasonResultsByUserParams{
 		SeasonID: seasonID,
@@ -222,7 +233,7 @@ func (s *Service) GetReveal(ctx context.Context, seasonID, userID string) (*Reve
 	topAttrs, hiddenAttrs := splitAttributes(results)
 
 	// Compute trend from previous season
-	trend := s.computeTrend(ctx, season, userID, results)
+	trend := s.computeTrend(ctx, *season, userID, results)
 
 	// Get group summary (top per question)
 	topPerQ, err := s.queries.GetTopResultPerQuestion(ctx, seasonID)
@@ -251,14 +262,24 @@ func (s *Service) GetReveal(ctx context.Context, seasonID, userID string) (*Reve
 
 	title := generateTitle(topAttrs)
 
+	// Look up card image URL from card_cache
+	cardImageURL := ""
+	cardCache, err := s.queries.GetCardCache(ctx, db.GetCardCacheParams{
+		UserID:   userID,
+		SeasonID: seasonID,
+	})
+	if err == nil {
+		cardImageURL = cardCache.ImageUrl
+	}
+
 	return &RevealData{
 		MyCard: MyCard{
 			TopAttributes:    topAttrs,
 			HiddenAttributes: hiddenAttrs,
 			ReputationTitle:  title,
 			Trend:            trend,
-			NewAchievements:  []AchievementDto{}, // populated by T11
-			CardImageURL:     "",                  // populated by T12
+			NewAchievements:  s.getNewAchievements(ctx, seasonID, userID),
+			CardImageURL:     cardImageURL,
 		},
 		GroupSummary: GroupSummary{
 			TopPerQuestion: topPerQuestion,
@@ -279,27 +300,9 @@ type MemberCardDto struct {
 }
 
 func (s *Service) GetMembersCards(ctx context.Context, seasonID, userID string) ([]MemberCardDto, error) {
-	season, err := s.queries.GetSeasonByID(ctx, seasonID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrSeasonNotFound
-		}
-		return nil, err
-	}
-
-	if season.Status != db.SeasonStatusREVEALED {
-		return nil, ErrSeasonNotRevealed
-	}
-
-	isMember, err := s.queries.IsGroupMember(ctx, db.IsGroupMemberParams{
-		UserID:  userID,
-		GroupID: season.GroupID,
-	})
+	season, err := s.ValidateRevealAccess(ctx, seasonID, userID)
 	if err != nil {
 		return nil, err
-	}
-	if isMember == 0 {
-		return nil, ErrNotMember
 	}
 
 	members, err := s.queries.GetGroupMembers(ctx, season.GroupID)
@@ -345,27 +348,8 @@ type OpenHiddenResult struct {
 }
 
 func (s *Service) OpenHidden(ctx context.Context, seasonID, userID string) (*OpenHiddenResult, error) {
-	season, err := s.queries.GetSeasonByID(ctx, seasonID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrSeasonNotFound
-		}
+	if _, err := s.ValidateRevealAccess(ctx, seasonID, userID); err != nil {
 		return nil, err
-	}
-
-	if season.Status != db.SeasonStatusREVEALED {
-		return nil, ErrSeasonNotRevealed
-	}
-
-	isMember, err := s.queries.IsGroupMember(ctx, db.IsGroupMemberParams{
-		UserID:  userID,
-		GroupID: season.GroupID,
-	})
-	if err != nil {
-		return nil, err
-	}
-	if isMember == 0 {
-		return nil, ErrNotMember
 	}
 
 	// Check balance and deduct atomically in a transaction
@@ -506,6 +490,31 @@ func (s *Service) computeTrend(ctx context.Context, season db.Season, userID str
 	}
 
 	return nil
+}
+
+func (s *Service) getNewAchievements(ctx context.Context, seasonID, userID string) []AchievementDto {
+	achievements, err := s.queries.GetSeasonAchievements(ctx, sql.NullString{String: seasonID, Valid: true})
+	if err != nil {
+		return []AchievementDto{}
+	}
+
+	result := []AchievementDto{}
+	for _, a := range achievements {
+		if a.UserID != userID {
+			continue
+		}
+		dto := AchievementDto{
+			Type: string(a.AchievementType),
+		}
+		if a.Metadata.Valid {
+			var meta map[string]any
+			if json.Unmarshal(a.Metadata.RawMessage, &meta) == nil {
+				dto.Metadata = meta
+			}
+		}
+		result = append(result, dto)
+	}
+	return result
 }
 
 func generateTitle(topAttrs []AttributeDto) string {

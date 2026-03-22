@@ -57,6 +57,24 @@ func (q *Queries) DeleteSeasonResultsBySeason(ctx context.Context, seasonID stri
 	return err
 }
 
+const getMaxPercentageForUser = `-- name: GetMaxPercentageForUser :one
+SELECT COALESCE(MAX(sr.percentage), 0)::float as max_pct
+FROM season_results sr
+WHERE sr.season_id = $1 AND sr.target_id = $2
+`
+
+type GetMaxPercentageForUserParams struct {
+	SeasonID string `json:"season_id"`
+	TargetID string `json:"target_id"`
+}
+
+func (q *Queries) GetMaxPercentageForUser(ctx context.Context, arg GetMaxPercentageForUserParams) (float64, error) {
+	row := q.db.QueryRowContext(ctx, getMaxPercentageForUser, arg.SeasonID, arg.TargetID)
+	var max_pct float64
+	err := row.Scan(&max_pct)
+	return max_pct, err
+}
+
 const getSeasonResults = `-- name: GetSeasonResults :many
 SELECT id, season_id, target_id, question_id, vote_count, total_voters, percentage FROM season_results WHERE season_id = $1
 ORDER BY percentage DESC
@@ -149,6 +167,31 @@ func (q *Queries) GetSeasonResultsByUser(ctx context.Context, arg GetSeasonResul
 		return nil, err
 	}
 	return items, nil
+}
+
+const getTopAttributeForUser = `-- name: GetTopAttributeForUser :one
+SELECT sr.question_id, sr.percentage
+FROM season_results sr
+WHERE sr.season_id = $1 AND sr.target_id = $2
+ORDER BY sr.percentage DESC
+LIMIT 1
+`
+
+type GetTopAttributeForUserParams struct {
+	SeasonID string `json:"season_id"`
+	TargetID string `json:"target_id"`
+}
+
+type GetTopAttributeForUserRow struct {
+	QuestionID string  `json:"question_id"`
+	Percentage float64 `json:"percentage"`
+}
+
+func (q *Queries) GetTopAttributeForUser(ctx context.Context, arg GetTopAttributeForUserParams) (GetTopAttributeForUserRow, error) {
+	row := q.db.QueryRowContext(ctx, getTopAttributeForUser, arg.SeasonID, arg.TargetID)
+	var i GetTopAttributeForUserRow
+	err := row.Scan(&i.QuestionID, &i.Percentage)
+	return i, err
 }
 
 const getTopResultPerQuestion = `-- name: GetTopResultPerQuestion :many

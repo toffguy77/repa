@@ -126,3 +126,64 @@ func (q *Queries) GetUserAchievements(ctx context.Context, arg GetUserAchievemen
 	}
 	return items, nil
 }
+
+const getUserAchievementsByType = `-- name: GetUserAchievementsByType :many
+SELECT id, user_id, group_id, season_id, achievement_type, metadata, earned_at FROM achievements
+WHERE user_id = $1 AND group_id = $2 AND achievement_type = $3
+ORDER BY earned_at DESC
+`
+
+type GetUserAchievementsByTypeParams struct {
+	UserID          string          `json:"user_id"`
+	GroupID         string          `json:"group_id"`
+	AchievementType AchievementType `json:"achievement_type"`
+}
+
+func (q *Queries) GetUserAchievementsByType(ctx context.Context, arg GetUserAchievementsByTypeParams) ([]Achievement, error) {
+	rows, err := q.db.QueryContext(ctx, getUserAchievementsByType, arg.UserID, arg.GroupID, arg.AchievementType)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Achievement{}
+	for rows.Next() {
+		var i Achievement
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.GroupID,
+			&i.SeasonID,
+			&i.AchievementType,
+			&i.Metadata,
+			&i.EarnedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const hasAchievementInGroup = `-- name: HasAchievementInGroup :one
+SELECT COUNT(*) FROM achievements
+WHERE user_id = $1 AND group_id = $2 AND achievement_type = $3
+`
+
+type HasAchievementInGroupParams struct {
+	UserID          string          `json:"user_id"`
+	GroupID         string          `json:"group_id"`
+	AchievementType AchievementType `json:"achievement_type"`
+}
+
+func (q *Queries) HasAchievementInGroup(ctx context.Context, arg HasAchievementInGroupParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, hasAchievementInGroup, arg.UserID, arg.GroupID, arg.AchievementType)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}

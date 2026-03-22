@@ -20,6 +20,7 @@ const (
 	TypeTelegramReveal   = "telegram:reveal-post"
 	TypeTelegramShare    = "telegram:share-card"
 	TypeReactionPush     = "push:reaction"
+	TypeCardsGenerate    = "cards:generate"
 )
 
 func NewAsynqClient(redisURL string) (*asynq.Client, error) {

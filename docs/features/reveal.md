@@ -40,7 +40,7 @@ Unlock hidden attributes for 5 crystals.
   "hidden_attributes": [AttributeDto],
   "reputation_title": "string",
   "trend": TrendDto,
-  "new_achievements": [],
+  "new_achievements": [AchievementDto],
   "card_image_url": ""
 }
 
@@ -100,7 +100,8 @@ Unlock hidden attributes for 5 crystals.
   - Fallback -> "Загадка века"
 - **Trend:** compares top attribute percentage with the same attribute in the previous REVEALED season. Returns "up"/"down"/"same" with delta.
 - **Anonymity:** voter_id is NEVER exposed in reveal responses. Results are aggregated vote counts only.
-- **Downstream jobs:** after successful reveal, enqueues `achievements:calculate` and `push:reveal-notification` tasks.
+- **Downstream jobs:** after successful reveal, enqueues `achievements:calculate`, `cards:generate`, and `push:reveal-notification` tasks.
+- **Card image:** `card_image_url` in MyCardDto is populated from `card_cache` table (see [cards.md](cards.md)).
 
 ## Worker Jobs
 
@@ -139,4 +140,4 @@ backend/
 - Reveal handler -> Reveal service -> sqlc Queries
 - Reveal worker -> Reveal service (ProcessReveal, GetSeasonsForReveal)
 - OpenHidden -> crystal_logs table (transactional deduct + log)
-- Downstream: achievements (T11, stub), push notifications (T17)
+- Downstream: achievements (T11, implemented), push notifications (T17)

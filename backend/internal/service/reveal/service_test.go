@@ -113,6 +113,14 @@ func (m *mockQuerier) CreateCrystalLog(_ context.Context, arg db.CreateCrystalLo
 	return db.CrystalLog{}, nil
 }
 
+func (m *mockQuerier) GetSeasonAchievements(_ context.Context, _ sql.NullString) ([]db.Achievement, error) {
+	return []db.Achievement{}, nil
+}
+
+func (m *mockQuerier) GetCardCache(_ context.Context, arg db.GetCardCacheParams) (db.CardCache, error) {
+	return db.CardCache{}, sql.ErrNoRows
+}
+
 // --- Fixtures ---
 
 func newMock() *mockQuerier {

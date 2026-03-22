@@ -33,3 +33,14 @@ SELECT COUNT(*) FROM votes WHERE season_id = $1 AND voter_id = $2;
 SELECT * FROM seasons
 WHERE group_id = $1 AND status = 'REVEALED' AND id != $2
 ORDER BY number DESC LIMIT 1;
+
+-- name: GetRevealedSeasonsForGroup :many
+SELECT * FROM seasons
+WHERE group_id = $1 AND status = 'REVEALED'
+ORDER BY number DESC;
+
+-- name: GetLastNRevealedSeasons :many
+SELECT * FROM seasons
+WHERE group_id = $1 AND status = 'REVEALED'
+ORDER BY number DESC
+LIMIT $2;

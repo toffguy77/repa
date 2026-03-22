@@ -21,6 +21,8 @@ import (
 	votinghandler "github.com/repa-app/repa/internal/handler/voting"
 	"github.com/repa-app/repa/internal/lib"
 	appmw "github.com/repa-app/repa/internal/middleware"
+	achievesvc "github.com/repa-app/repa/internal/service/achievements"
+	cardssvc "github.com/repa-app/repa/internal/service/cards"
 	authsvc "github.com/repa-app/repa/internal/service/auth"
 	groupssvc "github.com/repa-app/repa/internal/service/groups"
 	revealsvc "github.com/repa-app/repa/internal/service/reveal"
@@ -107,7 +109,9 @@ func main() {
 	votingHandler := votinghandler.NewHandler(votingService)
 
 	revealService := revealsvc.NewService(queries, sqlDB)
-	revealHandler := revealhandler.NewHandler(revealService)
+	achieveService := achievesvc.NewService(queries)
+	cardsService := cardssvc.NewService(queries, s3Client)
+	revealHandler := revealhandler.NewHandler(revealService, cardsService)
 
 	// Routes
 	api := e.Group("/api/v1")
@@ -149,9 +153,10 @@ func main() {
 	protected.GET("/seasons/:seasonId/reveal", revealHandler.GetReveal)
 	protected.GET("/seasons/:seasonId/members-cards", revealHandler.GetMembersCards)
 	protected.POST("/seasons/:seasonId/reveal/open-hidden", revealHandler.OpenHidden)
+	protected.GET("/seasons/:seasonId/my-card-url", revealHandler.GetMyCardURL)
 
 	// Asynq worker
-	go startWorker(cfg, revealService, asynqClient)
+	go startWorker(cfg, revealService, achieveService, cardsService, asynqClient)
 
 	// Graceful shutdown
 	go func() {
@@ -201,7 +206,7 @@ func healthHandler(pool *pgxpool.Pool, rdb *redis.Client) echo.HandlerFunc {
 	}
 }
 
-func startWorker(cfg *config.Config, revealSvc *revealsvc.Service, asynqClient *asynq.Client) {
+func startWorker(cfg *config.Config, revealSvc *revealsvc.Service, achieveSvc *achievesvc.Service, cardsSvc *cardssvc.Service, asynqClient *asynq.Client) {
 	srv, err := lib.NewAsynqServer(cfg.RedisURL)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to create asynq server")
@@ -210,10 +215,14 @@ func startWorker(cfg *config.Config, revealSvc *revealsvc.Service, asynqClient *
 
 	revealChecker := tasks.NewRevealChecker(revealSvc, asynqClient)
 	revealProcessor := tasks.NewRevealProcessor(revealSvc, asynqClient)
+	achieveProcessor := tasks.NewAchievementsProcessor(achieveSvc)
+	cardsProcessor := tasks.NewCardsProcessor(cardsSvc)
 
 	mux := asynq.NewServeMux()
 	mux.HandleFunc(lib.TypeRevealChecker, revealChecker.HandleRevealChecker)
 	mux.HandleFunc(lib.TypeRevealProcess, revealProcessor.HandleRevealProcess)
+	mux.HandleFunc(lib.TypeAchievements, achieveProcessor.HandleAchievements)
+	mux.HandleFunc(lib.TypeCardsGenerate, cardsProcessor.HandleCardsGenerate)
 
 	// Start asynq scheduler for periodic tasks
 	go startScheduler(cfg)
