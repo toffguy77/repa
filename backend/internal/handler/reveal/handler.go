@@ -1,6 +1,7 @@
 package reveal
 
 import (
+	"database/sql"
 	"errors"
 	"net/http"
 
@@ -8,15 +9,17 @@ import (
 
 	"github.com/repa-app/repa/internal/handler"
 	appmw "github.com/repa-app/repa/internal/middleware"
+	cardssvc "github.com/repa-app/repa/internal/service/cards"
 	revealsvc "github.com/repa-app/repa/internal/service/reveal"
 )
 
 type Handler struct {
-	svc *revealsvc.Service
+	svc      *revealsvc.Service
+	cardsSvc *cardssvc.Service
 }
 
-func NewHandler(svc *revealsvc.Service) *Handler {
-	return &Handler{svc: svc}
+func NewHandler(svc *revealsvc.Service, cardsSvc *cardssvc.Service) *Handler {
+	return &Handler{svc: svc, cardsSvc: cardsSvc}
 }
 
 func (h *Handler) GetReveal(c echo.Context) error {
@@ -60,6 +63,36 @@ func (h *Handler) OpenHidden(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, map[string]any{
 		"data": result,
+	})
+}
+
+func (h *Handler) GetMyCardURL(c echo.Context) error {
+	seasonID := c.Param("seasonId")
+	claims := appmw.GetCurrentUser(c)
+
+	// Validate season exists, is revealed, and user is a member
+	if _, err := h.svc.ValidateRevealAccess(c.Request().Context(), seasonID, claims.UserID); err != nil {
+		return mapServiceError(c, err)
+	}
+
+	url, err := h.cardsSvc.GetCardURL(c.Request().Context(), seasonID, claims.UserID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return c.JSON(http.StatusOK, map[string]any{
+				"data": map[string]any{
+					"image_url": nil,
+					"status":    "generating",
+				},
+			})
+		}
+		return handler.ErrorResponse(c, http.StatusInternalServerError, "INTERNAL", "Something went wrong")
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{
+		"data": map[string]any{
+			"image_url": url,
+			"status":    "ready",
+		},
 	})
 }
 
