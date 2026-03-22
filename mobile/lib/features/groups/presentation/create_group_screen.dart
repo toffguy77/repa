@@ -3,11 +3,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../../core/providers/auth_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import 'groups_notifier.dart';
 
-const _categories = [
+const _allCategories = [
   ('HOT', '\u{1F525} Горячее'),
   ('FUNNY', '\u{1F602} Смешное'),
   ('SECRETS', '\u{1F92B} Секреты'),
@@ -92,7 +93,7 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
                     icon: const Icon(Icons.copy, size: 20),
                     onPressed: () {
                       Clipboard.setData(ClipboardData(text: inviteUrl));
-                      ScaffoldMessenger.of(context).showSnackBar(
+                      ScaffoldMessenger.of(ctx).showSnackBar(
                         const SnackBar(content: Text('Ссылка скопирована')),
                       );
                     },
@@ -126,9 +127,21 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
     );
   }
 
+  List<(String, String)> _availableCategories(WidgetRef ref) {
+    final user = ref.read(authProvider).user;
+    final birthYear = user?.birthYear;
+    final isUnder18 = birthYear != null &&
+        (DateTime.now().year - birthYear) < 18;
+    if (isUnder18) {
+      return _allCategories.where((c) => c.$1 != 'ROMANCE').toList();
+    }
+    return _allCategories;
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(createGroupProvider);
+    final categories = _availableCategories(ref);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Новая группа')),
@@ -152,7 +165,7 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: _categories.map((cat) {
+            children: categories.map((cat) {
               final selected = _selectedCategories.contains(cat.$1);
               return FilterChip(
                 label: Text(cat.$2),
