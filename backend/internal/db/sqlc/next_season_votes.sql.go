@@ -139,3 +139,21 @@ func (q *Queries) GetNextSeasonVotes(ctx context.Context, arg GetNextSeasonVotes
 	}
 	return items, nil
 }
+
+const hasNextSeasonVote = `-- name: HasNextSeasonVote :one
+SELECT COUNT(*) FROM next_season_votes
+WHERE group_id = $1 AND user_id = $2 AND season_number = $3
+`
+
+type HasNextSeasonVoteParams struct {
+	GroupID      string `json:"group_id"`
+	UserID       string `json:"user_id"`
+	SeasonNumber int32  `json:"season_number"`
+}
+
+func (q *Queries) HasNextSeasonVote(ctx context.Context, arg HasNextSeasonVoteParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, hasNextSeasonVote, arg.GroupID, arg.UserID, arg.SeasonNumber)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}

@@ -19,16 +19,18 @@ import (
 	crystalshandler "github.com/repa-app/repa/internal/handler/crystals"
 	groupshandler "github.com/repa-app/repa/internal/handler/groups"
 	profilehandler "github.com/repa-app/repa/internal/handler/profile"
+	pushhandler "github.com/repa-app/repa/internal/handler/push"
 	revealhandler "github.com/repa-app/repa/internal/handler/reveal"
 	votinghandler "github.com/repa-app/repa/internal/handler/voting"
 	"github.com/repa-app/repa/internal/lib"
 	appmw "github.com/repa-app/repa/internal/middleware"
 	achievesvc "github.com/repa-app/repa/internal/service/achievements"
+	authsvc "github.com/repa-app/repa/internal/service/auth"
 	cardssvc "github.com/repa-app/repa/internal/service/cards"
 	crystalssvc "github.com/repa-app/repa/internal/service/crystals"
-	profilesvc "github.com/repa-app/repa/internal/service/profile"
-	authsvc "github.com/repa-app/repa/internal/service/auth"
 	groupssvc "github.com/repa-app/repa/internal/service/groups"
+	profilesvc "github.com/repa-app/repa/internal/service/profile"
+	pushsvc "github.com/repa-app/repa/internal/service/push"
 	revealsvc "github.com/repa-app/repa/internal/service/reveal"
 	votingsvc "github.com/repa-app/repa/internal/service/voting"
 	"github.com/repa-app/repa/internal/worker/tasks"
@@ -126,6 +128,20 @@ func main() {
 	crystalsService := crystalssvc.NewService(queries, sqlDB, rdb, yukassaClient)
 	crystalsHandler := crystalshandler.NewHandler(crystalsService)
 
+	// FCM + Push
+	var fcmClient *lib.FCMClient
+	if cfg.FirebaseProjectID != "" {
+		var fcmErr error
+		fcmClient, fcmErr = lib.NewFCMClient(ctx, cfg.FirebaseProjectID, cfg.FirebasePrivateKey, cfg.FirebaseClientEmail, queries)
+		if fcmErr != nil {
+			log.Warn().Err(fcmErr).Msg("FCM client not available, push notifications disabled")
+		} else {
+			log.Info().Msg("FCM client initialized")
+		}
+	}
+	pushService := pushsvc.NewService(queries, rdb, fcmClient)
+	pushHandler := pushhandler.NewHandler(queries)
+
 	// Routes
 	api := e.Group("/api/v1")
 	api.GET("/health", healthHandler(pool, rdb))
@@ -181,8 +197,15 @@ func main() {
 	// Profile routes
 	protected.GET("/groups/:id/members/:userId/profile", profileHandler.GetProfile)
 
+	// Push routes
+	protected.POST("/push/register", pushHandler.RegisterToken)
+
+	// Next-season question voting
+	protected.GET("/groups/:id/next-season/question-candidates", pushHandler.GetQuestionCandidates)
+	protected.POST("/groups/:id/next-season/vote-question", pushHandler.VoteQuestion)
+
 	// Asynq worker
-	go startWorker(cfg, revealService, achieveService, cardsService, asynqClient)
+	go startWorker(cfg, revealService, achieveService, cardsService, pushService, asynqClient)
 
 	// Graceful shutdown
 	go func() {
@@ -232,7 +255,7 @@ func healthHandler(pool *pgxpool.Pool, rdb *redis.Client) echo.HandlerFunc {
 	}
 }
 
-func startWorker(cfg *config.Config, revealSvc *revealsvc.Service, achieveSvc *achievesvc.Service, cardsSvc *cardssvc.Service, asynqClient *asynq.Client) {
+func startWorker(cfg *config.Config, revealSvc *revealsvc.Service, achieveSvc *achievesvc.Service, cardsSvc *cardssvc.Service, pushSvc *pushsvc.Service, asynqClient *asynq.Client) {
 	srv, err := lib.NewAsynqServer(cfg.RedisURL)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to create asynq server")
@@ -243,12 +266,22 @@ func startWorker(cfg *config.Config, revealSvc *revealsvc.Service, achieveSvc *a
 	revealProcessor := tasks.NewRevealProcessor(revealSvc, asynqClient)
 	achieveProcessor := tasks.NewAchievementsProcessor(achieveSvc)
 	cardsProcessor := tasks.NewCardsProcessor(cardsSvc)
+	pushProcessor := tasks.NewPushProcessor(pushSvc)
 
 	mux := asynq.NewServeMux()
 	mux.HandleFunc(lib.TypeRevealChecker, revealChecker.HandleRevealChecker)
 	mux.HandleFunc(lib.TypeRevealProcess, revealProcessor.HandleRevealProcess)
 	mux.HandleFunc(lib.TypeAchievements, achieveProcessor.HandleAchievements)
 	mux.HandleFunc(lib.TypeCardsGenerate, cardsProcessor.HandleCardsGenerate)
+	mux.HandleFunc(lib.TypePushWeekly, pushProcessor.HandleWeeklyScheduler)
+	mux.HandleFunc(lib.TypePushTuesday, pushProcessor.HandleTuesdaySignal)
+	mux.HandleFunc(lib.TypePushWednesday, pushProcessor.HandleWednesdayQuorum)
+	mux.HandleFunc(lib.TypePushThursday, pushProcessor.HandleThursdayTeaser)
+	mux.HandleFunc(lib.TypePushFriPreReveal, pushProcessor.HandleFridayPreReveal)
+	mux.HandleFunc(lib.TypePushReveal, pushProcessor.HandleRevealNotification)
+	mux.HandleFunc(lib.TypePushSundayPrev, pushProcessor.HandleSundayPreview)
+	mux.HandleFunc(lib.TypePushSundayStreak, pushProcessor.HandleSundayStreak)
+	mux.HandleFunc(lib.TypeReactionPush, pushProcessor.HandleReactionPush)
 
 	// Start asynq scheduler for periodic tasks
 	go startScheduler(cfg)
@@ -268,16 +301,29 @@ func startScheduler(cfg *config.Config) {
 	scheduler := asynq.NewScheduler(opts, nil)
 
 	// reveal-checker: every minute, check for seasons ready for reveal
-	task := asynq.NewTask(lib.TypeRevealChecker, nil)
-	_, err = scheduler.Register("* * * * *", task, asynq.Queue("critical"))
-	if err != nil {
-		log.Error().Err(err).Msg("failed to register reveal-checker schedule")
-		return
-	}
-	log.Info().Msg("registered reveal-checker cron (every minute)")
+	registerCron(scheduler, "* * * * *", lib.TypeRevealChecker, "critical", "reveal-checker (every minute)")
+
+	// Push schedule (all times in UTC, MSK = UTC+3)
+	registerCron(scheduler, "0 14 * * 1", lib.TypePushWeekly, "default", "weekly-scheduler (Mon 17:00 MSK)")
+	registerCron(scheduler, "0 16 * * 2", lib.TypePushTuesday, "default", "tuesday-signal (Tue 19:00 MSK)")
+	registerCron(scheduler, "0 15 * * 3", lib.TypePushWednesday, "default", "wednesday-quorum (Wed 18:00 MSK)")
+	registerCron(scheduler, "0 17 * * 4", lib.TypePushThursday, "default", "thursday-teaser (Thu 20:00 MSK)")
+	registerCron(scheduler, "0 16 * * 5", lib.TypePushFriPreReveal, "default", "friday-pre-reveal (Fri 19:00 MSK)")
+	registerCron(scheduler, "0 9 * * 0", lib.TypePushSundayPrev, "default", "sunday-preview (Sun 12:00 MSK)")
+	registerCron(scheduler, "0 15 * * 0", lib.TypePushSundayStreak, "default", "sunday-streak (Sun 18:00 MSK)")
 
 	if err := scheduler.Run(); err != nil {
 		log.Error().Err(err).Msg("asynq scheduler error")
+	}
+}
+
+func registerCron(scheduler *asynq.Scheduler, cronExpr, taskType, queue, label string) {
+	task := asynq.NewTask(taskType, nil)
+	_, err := scheduler.Register(cronExpr, task, asynq.Queue(queue))
+	if err != nil {
+		log.Error().Err(err).Str("task", taskType).Msg("failed to register cron schedule")
+	} else {
+		log.Info().Msgf("registered cron: %s", label)
 	}
 }
 

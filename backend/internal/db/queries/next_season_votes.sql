@@ -15,3 +15,7 @@ FROM next_season_votes
 WHERE group_id = $1 AND season_number = $2
 GROUP BY question_id
 ORDER BY vote_count DESC;
+
+-- name: HasNextSeasonVote :one
+SELECT COUNT(*) FROM next_season_votes
+WHERE group_id = $1 AND user_id = $2 AND season_number = $3;
