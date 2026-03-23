@@ -111,6 +111,8 @@ func (s *Service) GetProfile(ctx context.Context, groupID, userID, requesterID s
 			QuestionText: topRow.QuestionText,
 			Percentage:   math.Round(topRow.Percentage*10) / 10,
 		}
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
 	}
 
 	// Fetch achievements
