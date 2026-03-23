@@ -16,6 +16,7 @@ import (
 	db "github.com/repa-app/repa/internal/db/sqlc"
 	"github.com/repa-app/repa/internal/handler"
 	authhandler "github.com/repa-app/repa/internal/handler/auth"
+	crystalshandler "github.com/repa-app/repa/internal/handler/crystals"
 	groupshandler "github.com/repa-app/repa/internal/handler/groups"
 	profilehandler "github.com/repa-app/repa/internal/handler/profile"
 	revealhandler "github.com/repa-app/repa/internal/handler/reveal"
@@ -24,6 +25,7 @@ import (
 	appmw "github.com/repa-app/repa/internal/middleware"
 	achievesvc "github.com/repa-app/repa/internal/service/achievements"
 	cardssvc "github.com/repa-app/repa/internal/service/cards"
+	crystalssvc "github.com/repa-app/repa/internal/service/crystals"
 	profilesvc "github.com/repa-app/repa/internal/service/profile"
 	authsvc "github.com/repa-app/repa/internal/service/auth"
 	groupssvc "github.com/repa-app/repa/internal/service/groups"
@@ -117,6 +119,13 @@ func main() {
 	profileService := profilesvc.NewService(queries)
 	profileHandler := profilehandler.NewHandler(profileService)
 
+	var yukassaClient *lib.YukassaClient
+	if cfg.YukassaShopID != "" {
+		yukassaClient = lib.NewYukassaClient(cfg.YukassaShopID, cfg.YukassaSecret, cfg.YukassaReturn)
+	}
+	crystalsService := crystalssvc.NewService(queries, sqlDB, rdb, yukassaClient)
+	crystalsHandler := crystalshandler.NewHandler(crystalsService)
+
 	// Routes
 	api := e.Group("/api/v1")
 	api.GET("/health", healthHandler(pool, rdb))
@@ -160,6 +169,14 @@ func main() {
 	protected.GET("/seasons/:seasonId/my-card-url", revealHandler.GetMyCardURL)
 	protected.GET("/seasons/:seasonId/detector", revealHandler.GetDetector)
 	protected.POST("/seasons/:seasonId/detector", revealHandler.BuyDetector)
+
+	// Crystal routes
+	protected.GET("/crystals/balance", crystalsHandler.GetBalance)
+	protected.GET("/crystals/packages", crystalsHandler.GetPackages)
+	protected.POST("/crystals/purchase/init", crystalsHandler.InitPurchase)
+	protected.GET("/crystals/purchase/verify/:paymentId", crystalsHandler.VerifyPurchase)
+	// Webhook — no JWT (called by YuKassa)
+	api.POST("/crystals/purchase/webhook", crystalsHandler.Webhook)
 
 	// Profile routes
 	protected.GET("/groups/:id/members/:userId/profile", profileHandler.GetProfile)
