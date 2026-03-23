@@ -124,6 +124,16 @@ func (q *Queries) DeleteGroup(ctx context.Context, id string) error {
 	return err
 }
 
+const disconnectTelegramByChat = `-- name: DisconnectTelegramByChat :exec
+UPDATE groups SET telegram_chat_id = NULL, telegram_chat_username = NULL
+WHERE telegram_chat_id = $1
+`
+
+func (q *Queries) DisconnectTelegramByChat(ctx context.Context, telegramChatID sql.NullString) error {
+	_, err := q.db.ExecContext(ctx, disconnectTelegramByChat, telegramChatID)
+	return err
+}
+
 const getAdminUsername = `-- name: GetAdminUsername :one
 SELECT username FROM users WHERE id = $1
 `
@@ -133,6 +143,28 @@ func (q *Queries) GetAdminUsername(ctx context.Context, id string) (string, erro
 	var username string
 	err := row.Scan(&username)
 	return username, err
+}
+
+const getGroupByConnectCode = `-- name: GetGroupByConnectCode :one
+SELECT id, name, invite_code, admin_id, telegram_chat_id, telegram_chat_username, telegram_connect_code, telegram_connect_expiry, created_at, categories FROM groups WHERE telegram_connect_code = $1 AND telegram_connect_expiry > NOW()
+`
+
+func (q *Queries) GetGroupByConnectCode(ctx context.Context, telegramConnectCode sql.NullString) (Group, error) {
+	row := q.db.QueryRowContext(ctx, getGroupByConnectCode, telegramConnectCode)
+	var i Group
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.InviteCode,
+		&i.AdminID,
+		&i.TelegramChatID,
+		&i.TelegramChatUsername,
+		&i.TelegramConnectCode,
+		&i.TelegramConnectExpiry,
+		&i.CreatedAt,
+		pq.Array(&i.Categories),
+	)
+	return i, err
 }
 
 const getGroupByID = `-- name: GetGroupByID :one

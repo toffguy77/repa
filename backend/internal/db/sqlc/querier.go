@@ -41,6 +41,7 @@ type Querier interface {
 	DeleteGroup(ctx context.Context, id string) error
 	DeleteSeasonResultsBySeason(ctx context.Context, seasonID string) error
 	DeleteUser(ctx context.Context, id string) error
+	DisconnectTelegramByChat(ctx context.Context, telegramChatID sql.NullString) error
 	GetActiveSeasonByGroup(ctx context.Context, groupID string) (Season, error)
 	GetAdminUsername(ctx context.Context, id string) (string, error)
 	GetAllGroups(ctx context.Context) ([]Group, error)
@@ -50,6 +51,7 @@ type Querier interface {
 	GetDetector(ctx context.Context, arg GetDetectorParams) (Detector, error)
 	GetFirstCompletedVoter(ctx context.Context, arg GetFirstCompletedVoterParams) (string, error)
 	GetFirstVoteTimeByUser(ctx context.Context, arg GetFirstVoteTimeByUserParams) (time.Time, error)
+	GetGroupByConnectCode(ctx context.Context, telegramConnectCode sql.NullString) (Group, error)
 	GetGroupByID(ctx context.Context, id string) (Group, error)
 	GetGroupByInviteCode(ctx context.Context, inviteCode string) (Group, error)
 	GetGroupByTelegramChatID(ctx context.Context, telegramChatID sql.NullString) (Group, error)

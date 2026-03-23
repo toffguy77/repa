@@ -80,3 +80,10 @@ WHERE gm.group_id = $1 AND gm.joined_at > (
 
 -- name: GetGroupMemberIDs :many
 SELECT user_id FROM group_members WHERE group_id = $1;
+
+-- name: GetGroupByConnectCode :one
+SELECT * FROM groups WHERE telegram_connect_code = $1 AND telegram_connect_expiry > NOW();
+
+-- name: DisconnectTelegramByChat :exec
+UPDATE groups SET telegram_chat_id = NULL, telegram_chat_username = NULL
+WHERE telegram_chat_id = $1;

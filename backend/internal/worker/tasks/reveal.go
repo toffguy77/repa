@@ -113,7 +113,12 @@ func (h *RevealProcessor) HandleRevealProcess(ctx context.Context, t *asynq.Task
 			log.Error().Err(err).Str("season_id", p.SeasonID).Msg("failed to enqueue card generation")
 		}
 
-		// Telegram post will be enqueued here when T19 is implemented
+		// Telegram reveal post
+		tgPayload, _ := json.Marshal(TelegramPayload{SeasonID: p.SeasonID})
+		tgTask := asynq.NewTask(lib.TypeTelegramReveal, tgPayload)
+		if _, err := h.client.Enqueue(tgTask, asynq.Queue("default")); err != nil {
+			log.Error().Err(err).Str("season_id", p.SeasonID).Msg("failed to enqueue telegram reveal post")
+		}
 	}
 
 	return nil

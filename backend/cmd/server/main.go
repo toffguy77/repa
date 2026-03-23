@@ -22,6 +22,7 @@ import (
 	pushhandler "github.com/repa-app/repa/internal/handler/push"
 	reactionshandler "github.com/repa-app/repa/internal/handler/reactions"
 	revealhandler "github.com/repa-app/repa/internal/handler/reveal"
+	telegramhandler "github.com/repa-app/repa/internal/handler/telegram"
 	votinghandler "github.com/repa-app/repa/internal/handler/voting"
 	"github.com/repa-app/repa/internal/lib"
 	appmw "github.com/repa-app/repa/internal/middleware"
@@ -34,6 +35,7 @@ import (
 	pushsvc "github.com/repa-app/repa/internal/service/push"
 	reactionssvc "github.com/repa-app/repa/internal/service/reactions"
 	revealsvc "github.com/repa-app/repa/internal/service/reveal"
+	telegramsvc "github.com/repa-app/repa/internal/service/telegram"
 	votingsvc "github.com/repa-app/repa/internal/service/voting"
 	"github.com/repa-app/repa/internal/worker/tasks"
 	"github.com/rs/zerolog"
@@ -147,6 +149,20 @@ func main() {
 	reactionsService := reactionssvc.NewService(queries, asynqClient)
 	reactionsHandler := reactionshandler.NewHandler(reactionsService)
 
+	// Telegram
+	var telegramService *telegramsvc.Service
+	var telegramHandler *telegramhandler.Handler
+	if cfg.TelegramToken != "" {
+		tgClient, tgErr := lib.NewTelegramClient(cfg.TelegramToken)
+		if tgErr != nil {
+			log.Warn().Err(tgErr).Msg("Telegram client not available")
+		} else {
+			log.Info().Msg("Telegram client initialized")
+			telegramService = telegramsvc.NewService(queries, tgClient, cfg.AppBaseURL)
+			telegramHandler = telegramhandler.NewHandler(telegramService, cfg.TelegramSecret)
+		}
+	}
+
 	// Routes
 	api := e.Group("/api/v1")
 	api.GET("/health", healthHandler(pool, rdb))
@@ -213,8 +229,16 @@ func main() {
 	protected.GET("/groups/:id/next-season/question-candidates", pushHandler.GetQuestionCandidates)
 	protected.POST("/groups/:id/next-season/vote-question", pushHandler.VoteQuestion)
 
+	// Telegram routes
+	if telegramHandler != nil {
+		api.POST("/telegram/webhook", telegramHandler.Webhook)
+		protected.POST("/groups/:id/telegram/generate-code", telegramHandler.GenerateCode)
+		protected.DELETE("/groups/:id/telegram", telegramHandler.Disconnect)
+		protected.POST("/seasons/:seasonId/share-to-telegram", telegramHandler.ShareToTelegram)
+	}
+
 	// Asynq worker
-	go startWorker(cfg, revealService, achieveService, cardsService, pushService, asynqClient)
+	go startWorker(cfg, revealService, achieveService, cardsService, pushService, telegramService, asynqClient)
 
 	// Graceful shutdown
 	go func() {
@@ -264,7 +288,7 @@ func healthHandler(pool *pgxpool.Pool, rdb *redis.Client) echo.HandlerFunc {
 	}
 }
 
-func startWorker(cfg *config.Config, revealSvc *revealsvc.Service, achieveSvc *achievesvc.Service, cardsSvc *cardssvc.Service, pushSvc *pushsvc.Service, asynqClient *asynq.Client) {
+func startWorker(cfg *config.Config, revealSvc *revealsvc.Service, achieveSvc *achievesvc.Service, cardsSvc *cardssvc.Service, pushSvc *pushsvc.Service, telegramSvc *telegramsvc.Service, asynqClient *asynq.Client) {
 	srv, err := lib.NewAsynqServer(cfg.RedisURL)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to create asynq server")
@@ -291,6 +315,13 @@ func startWorker(cfg *config.Config, revealSvc *revealsvc.Service, achieveSvc *a
 	mux.HandleFunc(lib.TypePushSundayPrev, pushProcessor.HandleSundayPreview)
 	mux.HandleFunc(lib.TypePushSundayStreak, pushProcessor.HandleSundayStreak)
 	mux.HandleFunc(lib.TypeReactionPush, pushProcessor.HandleReactionPush)
+
+	if telegramSvc != nil {
+		telegramProcessor := tasks.NewTelegramProcessor(telegramSvc)
+		mux.HandleFunc(lib.TypeTelegramStart, telegramProcessor.HandleSeasonStart)
+		mux.HandleFunc(lib.TypeTelegramReveal, telegramProcessor.HandleRevealPost)
+		mux.HandleFunc(lib.TypeTelegramShare, telegramProcessor.HandleShareCard)
+	}
 
 	// Start asynq scheduler for periodic tasks
 	go startScheduler(cfg)
@@ -320,6 +351,9 @@ func startScheduler(cfg *config.Config) {
 	registerCron(scheduler, "0 16 * * 5", lib.TypePushFriPreReveal, "default", "friday-pre-reveal (Fri 19:00 MSK)")
 	registerCron(scheduler, "0 9 * * 0", lib.TypePushSundayPrev, "default", "sunday-preview (Sun 12:00 MSK)")
 	registerCron(scheduler, "0 15 * * 0", lib.TypePushSundayStreak, "default", "sunday-streak (Sun 18:00 MSK)")
+
+	// Telegram season-start: same time as weekly push (Mon 17:00 MSK)
+	registerCron(scheduler, "0 14 * * 1", lib.TypeTelegramStart, "default", "telegram-season-start (Mon 17:00 MSK)")
 
 	if err := scheduler.Run(); err != nil {
 		log.Error().Err(err).Msg("asynq scheduler error")
