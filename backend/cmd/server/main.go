@@ -17,12 +17,14 @@ import (
 	"github.com/repa-app/repa/internal/handler"
 	authhandler "github.com/repa-app/repa/internal/handler/auth"
 	groupshandler "github.com/repa-app/repa/internal/handler/groups"
+	profilehandler "github.com/repa-app/repa/internal/handler/profile"
 	revealhandler "github.com/repa-app/repa/internal/handler/reveal"
 	votinghandler "github.com/repa-app/repa/internal/handler/voting"
 	"github.com/repa-app/repa/internal/lib"
 	appmw "github.com/repa-app/repa/internal/middleware"
 	achievesvc "github.com/repa-app/repa/internal/service/achievements"
 	cardssvc "github.com/repa-app/repa/internal/service/cards"
+	profilesvc "github.com/repa-app/repa/internal/service/profile"
 	authsvc "github.com/repa-app/repa/internal/service/auth"
 	groupssvc "github.com/repa-app/repa/internal/service/groups"
 	revealsvc "github.com/repa-app/repa/internal/service/reveal"
@@ -112,6 +114,8 @@ func main() {
 	achieveService := achievesvc.NewService(queries)
 	cardsService := cardssvc.NewService(queries, s3Client)
 	revealHandler := revealhandler.NewHandler(revealService, cardsService)
+	profileService := profilesvc.NewService(queries)
+	profileHandler := profilehandler.NewHandler(profileService)
 
 	// Routes
 	api := e.Group("/api/v1")
@@ -156,6 +160,9 @@ func main() {
 	protected.GET("/seasons/:seasonId/my-card-url", revealHandler.GetMyCardURL)
 	protected.GET("/seasons/:seasonId/detector", revealHandler.GetDetector)
 	protected.POST("/seasons/:seasonId/detector", revealHandler.BuyDetector)
+
+	// Profile routes
+	protected.GET("/groups/:id/members/:userId/profile", profileHandler.GetProfile)
 
 	// Asynq worker
 	go startWorker(cfg, revealService, achieveService, cardsService, asynqClient)

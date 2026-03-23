@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../groups/presentation/widgets/member_avatar.dart';
@@ -62,6 +64,7 @@ class _MembersRevealScreenState extends ConsumerState<MembersRevealScreen> {
                     return _MemberCardTile(
                       card: cards[index],
                       index: index,
+                      groupId: widget.groupId,
                     );
                   },
                 ),
@@ -72,12 +75,22 @@ class _MembersRevealScreenState extends ConsumerState<MembersRevealScreen> {
 class _MemberCardTile extends StatelessWidget {
   final MemberCard card;
   final int index;
+  final String groupId;
 
-  const _MemberCardTile({required this.card, required this.index});
+  const _MemberCardTile({
+    required this.card,
+    required this.index,
+    required this.groupId,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.lightImpact();
+        context.push('/groups/$groupId/members/${card.userId}');
+      },
+      child: Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -137,6 +150,7 @@ class _MemberCardTile extends StatelessWidget {
       ),
     ).animate()
         .fadeIn(duration: 300.ms, delay: Duration(milliseconds: index * 100))
-        .slideY(begin: 0.1, duration: 300.ms);
+        .slideY(begin: 0.1, duration: 300.ms),
+    );
   }
 }

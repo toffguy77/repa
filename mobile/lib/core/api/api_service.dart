@@ -152,4 +152,13 @@ class ApiService {
     final response = await _dio.post('/seasons/$seasonId/detector');
     return response.data as Map<String, dynamic>;
   }
+
+  // --- Profile ---
+
+  Future<Map<String, dynamic>> getMemberProfile(
+      String groupId, String userId) async {
+    final response =
+        await _dio.get('/groups/$groupId/members/$userId/profile');
+    return response.data as Map<String, dynamic>;
+  }
 }

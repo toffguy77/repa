@@ -195,35 +195,43 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
             ...members.map(
               (m) => Padding(
                 padding: const EdgeInsets.only(bottom: 8),
-                child: Row(
-                  children: [
-                    MemberAvatar(
-                      avatarEmoji: m.avatarEmoji,
-                      avatarUrl: m.avatarUrl,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(m.username, style: AppTextStyles.body),
-                    ),
-                    if (m.isAdmin)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryLight,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          'Админ',
-                          style: AppTextStyles.caption.copyWith(
-                            color: AppColors.primary,
-                            fontSize: 12,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(8),
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    context.push('/groups/${widget.groupId}/members/${m.id}');
+                  },
+                  child: Row(
+                    children: [
+                      MemberAvatar(
+                        avatarEmoji: m.avatarEmoji,
+                        avatarUrl: m.avatarUrl,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(m.username, style: AppTextStyles.body),
+                      ),
+                      if (m.isAdmin)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryLight,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            'Админ',
+                            style: AppTextStyles.caption.copyWith(
+                              color: AppColors.primary,
+                              fontSize: 12,
+                            ),
                           ),
                         ),
-                      ),
-                  ],
+                      const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+                    ],
+                  ),
                 ),
               ),
             ),
