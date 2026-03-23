@@ -1,12 +1,17 @@
+import 'dart:io';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../crystals/presentation/crystals_notifier.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../groups/presentation/groups_notifier.dart';
+import '../../telegram/presentation/telegram_notifier.dart';
 import '../domain/reveal.dart';
 import 'reveal_notifier.dart';
 import 'widgets/achievement_popup.dart';
@@ -84,13 +89,45 @@ class _RevealScreenState extends ConsumerState<RevealScreen> {
     );
   }
 
-  void _shareCard() {
+  Future<void> _shareCard() async {
     final state = ref.read(revealProvider(_args));
-    final url = state.cardImageUrl;
-    if (url != null) {
-      Share.share('$url\n\nМоя репа этой недели!');
-    } else {
-      Share.share('Смотри мою репу! repa.app');
+    final imageUrl = state.data?.myCard.cardImageUrl ?? state.cardImageUrl;
+
+    if (imageUrl != null) {
+      try {
+        // Download PNG to temp file for native share
+        final dir = await getTemporaryDirectory();
+        final file = File('${dir.path}/repa_card_${widget.seasonId}.png');
+        await Dio().download(imageUrl, file.path);
+        await Share.shareXFiles(
+          [XFile(file.path)],
+          text: 'Моя репа repa.app',
+        );
+        return;
+      } catch (_) {
+        // Fallback to text share
+      }
+    }
+    Share.share('Смотри мою репу! repa.app');
+  }
+
+  Future<void> _shareToTelegram() async {
+    HapticFeedback.mediumImpact();
+    try {
+      await ref
+          .read(shareToTelegramProvider)
+          .shareToTelegram(widget.seasonId);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Карточка опубликована в чате')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString())),
+        );
+      }
     }
   }
 
@@ -331,39 +368,66 @@ class _RevealScreenState extends ConsumerState<RevealScreen> {
   }
 
   Widget _buildActionButtons() {
-    return Row(
+    final groupState = ref.watch(groupDetailProvider(widget.groupId));
+    final hasTelegram =
+        groupState.detail?.group.telegramUsername != null;
+
+    return Column(
       children: [
-        Expanded(
-          child: ElevatedButton.icon(
-            onPressed: _shareCard,
-            icon: const Icon(Icons.share, size: 20),
-            label: const Text('Поделиться'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+        Row(
+          children: [
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: _shareCard,
+                icon: const Icon(Icons.share, size: 20),
+                label: const Text('Поделиться'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
               ),
-              padding: const EdgeInsets.symmetric(vertical: 14),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _showDetector,
+                icon: const Text('\u{1F50D}'),
+                label: const Text('Детектор'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  side: const BorderSide(color: AppColors.primary),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (hasTelegram) ...[
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _shareToTelegram,
+              icon: const Icon(Icons.telegram, size: 20),
+              label: const Text('Отправить в Telegram-чат'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xFF2AABEE),
+                side: const BorderSide(color: Color(0xFF2AABEE)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
             ),
           ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: OutlinedButton.icon(
-            onPressed: _showDetector,
-            icon: const Text('\u{1F50D}'),
-            label: const Text('Детектор'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.primary,
-              side: const BorderSide(color: AppColors.primary),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              padding: const EdgeInsets.symmetric(vertical: 14),
-            ),
-          ),
-        ),
+        ],
       ],
     );
   }

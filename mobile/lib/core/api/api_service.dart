@@ -214,4 +214,23 @@ class ApiService {
         await _dio.get('/seasons/$seasonId/members/$targetId/reactions');
     return response.data as Map<String, dynamic>;
   }
+
+  // --- Telegram ---
+
+  Future<Map<String, dynamic>> generateTelegramCode(String groupId) async {
+    final response =
+        await _dio.post('/groups/$groupId/telegram/generate-code');
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> disconnectTelegram(String groupId) async {
+    final response = await _dio.delete('/groups/$groupId/telegram');
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> shareToTelegram(String seasonId) async {
+    final response =
+        await _dio.post('/seasons/$seasonId/share-to-telegram');
+    return response.data as Map<String, dynamic>;
+  }
 }

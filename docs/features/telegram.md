@@ -79,3 +79,28 @@ backend/internal/worker/tasks/telegram.go        # Asynq task handlers
 - `DisconnectTelegramByChat` — clear chat_id on bot removal
 - `GetTopResultPerQuestion` — reveal post content
 - `GetCardCache` — card URL for sharing
+
+## Flutter UI (T20)
+
+### Screens & Widgets
+- `TelegramSetupScreen` — admin-only screen at `/groups/:id/telegram`. Shows "not connected" state with connect button, or "connected" state with disconnect.
+- `ConnectInstructionSheet` — bottom sheet shown after code generation. Shows 3 steps, copyable `/connect CODE` command, Open Telegram button, Verify button with countdown timer (24h expiry).
+- `GroupScreen` — settings gear icon (admin-only) navigates to TelegramSetupScreen.
+- `RevealScreen` — "Отправить в Telegram-чат" button (only if group has linked Telegram). Native share upgraded to download PNG card to temp file and use `Share.shareXFiles`.
+
+### Architecture
+```
+mobile/lib/features/telegram/
+├── data/telegram_repository.dart         # API calls: generate code, disconnect, share
+├── domain/telegram_connect.dart          # Freezed model for connect code response
+└── presentation/
+    ├── telegram_notifier.dart            # State management + providers
+    ├── telegram_setup_screen.dart        # Main setup screen
+    └── connect_instruction_sheet.dart    # Bottom sheet with instructions
+```
+
+### API Endpoints Used
+- `POST /groups/:id/telegram/generate-code` — generates connect code
+- `DELETE /groups/:id/telegram` — disconnects Telegram chat
+- `POST /seasons/:id/share-to-telegram` — shares card to linked chat
+- `GET /groups/:id` — used for polling to verify connection

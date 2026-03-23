@@ -17,6 +17,7 @@ import '../../features/reveal/presentation/reveal_screen.dart';
 import '../../features/reveal/presentation/members_reveal_screen.dart';
 import '../../features/profile/presentation/member_profile_screen.dart';
 import '../../features/crystals/presentation/crystals_shop_screen.dart';
+import '../../features/telegram/presentation/telegram_setup_screen.dart';
 
 const _pendingInviteCodeKey = 'pending_invite_code';
 
@@ -138,6 +139,13 @@ final routerProvider = Provider<GoRouter>((ref) {
                 groupId: groupId,
                 userId: userId,
               );
+            },
+          ),
+          GoRoute(
+            path: 'telegram',
+            builder: (context, state) {
+              final groupId = state.pathParameters['id']!;
+              return TelegramSetupScreen(groupId: groupId);
             },
           ),
           GoRoute(

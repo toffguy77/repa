@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../../core/providers/auth_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import 'groups_notifier.dart';
@@ -76,6 +77,8 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
     final group = detail.group;
     final season = detail.activeSeason;
     final members = detail.members;
+    final currentUserId = ref.watch(authProvider).user?.id;
+    final isAdmin = currentUserId == group.adminId;
 
     return Scaffold(
       appBar: AppBar(
@@ -91,6 +94,12 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
               icon: const Icon(Icons.telegram),
               onPressed: () => _openTelegram(group.telegramUsername!),
               tooltip: 'Telegram',
+            ),
+          if (isAdmin)
+            IconButton(
+              icon: const Icon(Icons.settings_outlined),
+              onPressed: () => context.push('/groups/${widget.groupId}/telegram'),
+              tooltip: 'Настройки Telegram',
             ),
         ],
       ),
