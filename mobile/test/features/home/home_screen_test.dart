@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:repa/core/api/api_service.dart';
+import 'package:repa/core/providers/connectivity_provider.dart';
 import 'package:repa/features/groups/data/groups_repository.dart';
 import 'package:repa/features/groups/presentation/groups_notifier.dart';
 import 'package:repa/features/home/home_screen.dart';
@@ -23,11 +24,17 @@ class _EmptyGroupsListNotifier extends GroupsListNotifier {
   }
 }
 
+class _FakeConnectivityNotifier extends StateNotifier<bool>
+    implements ConnectivityNotifier {
+  _FakeConnectivityNotifier() : super(true);
+}
+
 void main() {
   Widget buildApp() {
     return ProviderScope(
       overrides: [
         groupsListProvider.overrideWith((ref) => _EmptyGroupsListNotifier()),
+        connectivityProvider.overrideWith((ref) => _FakeConnectivityNotifier()),
       ],
       child: const MaterialApp(home: HomeScreen()),
     );
@@ -35,7 +42,7 @@ void main() {
 
   testWidgets('renders groups tab with title and bottom nav', (tester) async {
     await tester.pumpWidget(buildApp());
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(find.text('Мои группы'), findsWidgets);
     expect(find.byIcon(Icons.group), findsOneWidget);
@@ -44,7 +51,7 @@ void main() {
 
   testWidgets('shows empty state when no groups', (tester) async {
     await tester.pumpWidget(buildApp());
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(find.text('Пока нет групп'), findsOneWidget);
     expect(find.text('Создать группу'), findsOneWidget);
@@ -52,10 +59,10 @@ void main() {
 
   testWidgets('profile tab shows placeholder and logout', (tester) async {
     await tester.pumpWidget(buildApp());
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     await tester.tap(find.text('Профиль'));
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     expect(find.text('Скоро здесь будет профиль'), findsOneWidget);
     expect(find.text('Выйти'), findsOneWidget);

@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/widgets/error_state_widget.dart';
+import '../../../core/widgets/skeleton_loader.dart';
 import '../../voting/domain/voting.dart';
 import 'voting_notifier.dart';
 import 'widgets/question_card.dart';
@@ -41,7 +43,7 @@ class _VotingScreenState extends ConsumerState<VotingScreen> {
       if (next.error != null && prev?.error != next.error) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(next.error!),
+            content: Text(ErrorStateWidget.friendlyMessage(next.error)),
             backgroundColor: AppColors.error,
           ),
         );
@@ -52,25 +54,18 @@ class _VotingScreenState extends ConsumerState<VotingScreen> {
     if (state.loading && state.session == null) {
       return Scaffold(
         appBar: AppBar(),
-        body: const Center(child: CircularProgressIndicator()),
+        body: const SafeArea(
+          child: VotingSessionSkeleton(),
+        ),
       );
     }
 
     if (state.error != null && state.session == null) {
       return Scaffold(
         appBar: AppBar(),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(state.error!, style: AppTextStyles.body),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () => notifier.loadSession(),
-                child: const Text('Повторить'),
-              ),
-            ],
-          ),
+        body: ErrorStateWidget(
+          message: state.error,
+          onRetry: () => notifier.loadSession(),
         ),
       );
     }

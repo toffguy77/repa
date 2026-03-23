@@ -3,6 +3,9 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/widgets/empty_state_widget.dart';
+import '../../../core/widgets/error_state_widget.dart';
+import '../../../core/widgets/skeleton_loader.dart';
 import '../../groups/presentation/widgets/member_avatar.dart';
 import '../domain/profile.dart';
 import 'profile_notifier.dart';
@@ -42,26 +45,41 @@ class _MemberProfileScreenState extends ConsumerState<MemberProfileScreen> {
     if (state.loading && state.profile == null) {
       return Scaffold(
         appBar: AppBar(),
-        body: const Center(child: CircularProgressIndicator()),
+        body: ListView(
+          padding: const EdgeInsets.all(16),
+          children: const [
+            Row(
+              children: [
+                SkeletonLoader(width: 64, height: 64, borderRadius: 32),
+                SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SkeletonLoader(width: 140, height: 24, borderRadius: 6),
+                      SizedBox(height: 8),
+                      SkeletonLoader(width: 200, height: 14, borderRadius: 6),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: 16),
+            SkeletonLoader(height: 60, borderRadius: 12),
+            SizedBox(height: 20),
+            SkeletonLoader(height: 200, borderRadius: 12),
+          ],
+        ),
       );
     }
 
     if (state.error != null && state.profile == null) {
       return Scaffold(
         appBar: AppBar(),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(state.error!, style: AppTextStyles.body),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () =>
-                    ref.read(profileProvider(_args).notifier).load(),
-                child: const Text('Повторить'),
-              ),
-            ],
-          ),
+        body: ErrorStateWidget(
+          message: state.error,
+          onRetry: () =>
+              ref.read(profileProvider(_args).notifier).load(),
         ),
       );
     }
@@ -84,12 +102,11 @@ class _MemberProfileScreenState extends ConsumerState<MemberProfileScreen> {
             const SizedBox(height: 20),
             _buildStats(profile.stats),
             const SizedBox(height: 20),
-            if (profile.achievements.isNotEmpty) ...[
-              _buildAchievements(profile.achievements),
+            _buildAchievements(profile.achievements),
+            if (profile.seasonHistory.isNotEmpty) ...[
               const SizedBox(height: 20),
-            ],
-            if (profile.seasonHistory.isNotEmpty)
               _buildSeasonHistory(profile.seasonHistory),
+            ],
           ],
         ),
       ),
@@ -201,6 +218,14 @@ class _MemberProfileScreenState extends ConsumerState<MemberProfileScreen> {
   }
 
   Widget _buildAchievements(List<ProfileAchievement> achievements) {
+    if (achievements.isEmpty) {
+      return const EmptyStateWidget(
+        emoji: '\u{1F3C6}',
+        title: 'Пока нет ачивок',
+        subtitle: 'Голосуй и узнай что о тебе думают',
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

@@ -24,11 +24,14 @@ class ParticipantCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return Semantics(
+      label: '$username${selected ? ", выбран" : ""}',
+      button: true,
+      child: GestureDetector(
       onTap: disabled
           ? null
           : () {
-              HapticFeedback.selectionClick();
+              HapticFeedback.mediumImpact();
               onTap();
             },
       child: AnimatedContainer(
@@ -91,6 +94,7 @@ class ParticipantCard extends StatelessWidget {
           ],
         ),
       ),
+    ),
     );
   }
 }

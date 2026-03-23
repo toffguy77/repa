@@ -3,8 +3,12 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../core/providers/connectivity_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/widgets/empty_state_widget.dart';
+import '../../../core/widgets/error_state_widget.dart';
+import '../../../core/widgets/skeleton_loader.dart';
 import '../../groups/presentation/widgets/member_avatar.dart';
 import '../domain/reveal.dart';
 import 'reveal_notifier.dart';
@@ -43,34 +47,74 @@ class _MembersRevealScreenState extends ConsumerState<MembersRevealScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(revealProvider(_args));
-    final cards = state.membersCards;
+
+    // Auto-refresh on reconnect
+    ref.listen<bool>(connectivityProvider, (prev, next) {
+      if (prev == false && next == true) {
+        ref.read(revealProvider(_args).notifier).loadMembersCards();
+      }
+    });
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Участники'),
       ),
-      body: cards == null
-          ? const Center(child: CircularProgressIndicator())
-          : cards.isEmpty
-              ? Center(
-                  child: Text(
-                    'Нет данных',
-                    style: AppTextStyles.bodySecondary,
-                  ),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: cards.length,
-                  itemBuilder: (context, index) {
-                    return _MemberCardTile(
-                      card: cards[index],
-                      index: index,
-                      groupId: widget.groupId,
-                      seasonId: widget.seasonId,
-                      seasonStatus: widget.seasonStatus,
-                    );
-                  },
-                ),
+      body: RefreshIndicator(
+        onRefresh: () =>
+            ref.read(revealProvider(_args).notifier).loadMembersCards(),
+        child: _buildBody(state),
+      ),
+    );
+  }
+
+  Widget _buildBody(RevealState state) {
+    final cards = state.membersCards;
+
+    if (state.error != null && cards == null) {
+      return ListView(
+        children: [
+          const SizedBox(height: 120),
+          ErrorStateWidget(
+            message: state.error,
+            onRetry: () =>
+                ref.read(revealProvider(_args).notifier).loadMembersCards(),
+          ),
+        ],
+      );
+    }
+
+    if (cards == null) {
+      return ListView(
+        padding: const EdgeInsets.all(16),
+        children: List.generate(3, (_) => const MemberCardSkeleton()),
+      );
+    }
+
+    if (cards.isEmpty) {
+      return ListView(
+        children: const [
+          SizedBox(height: 120),
+          EmptyStateWidget(
+            emoji: '\u{1F50D}',
+            title: 'Нет данных',
+            subtitle: 'Карточки участников пока недоступны',
+          ),
+        ],
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(16),
+      itemCount: cards.length,
+      itemBuilder: (context, index) {
+        return _MemberCardTile(
+          card: cards[index],
+          index: index,
+          groupId: widget.groupId,
+          seasonId: widget.seasonId,
+          seasonStatus: widget.seasonStatus,
+        );
+      },
     );
   }
 }

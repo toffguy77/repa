@@ -1,4 +1,4 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
@@ -21,6 +21,44 @@ import '../../features/telegram/presentation/telegram_setup_screen.dart';
 
 const _pendingInviteCodeKey = 'pending_invite_code';
 
+// --- Page transitions ---
+
+CustomTransitionPage<void> _slideFromRight(GoRouterState state, Widget child) {
+  return CustomTransitionPage(
+    key: state.pageKey,
+    child: child,
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      final tween = Tween(begin: const Offset(1, 0), end: Offset.zero)
+          .chain(CurveTween(curve: Curves.easeOutCubic));
+      return SlideTransition(position: animation.drive(tween), child: child);
+    },
+  );
+}
+
+CustomTransitionPage<void> _slideFromBottom(GoRouterState state, Widget child) {
+  return CustomTransitionPage(
+    key: state.pageKey,
+    child: child,
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      final tween = Tween(begin: const Offset(0, 1), end: Offset.zero)
+          .chain(CurveTween(curve: Curves.easeOutCubic));
+      return SlideTransition(position: animation.drive(tween), child: child);
+    },
+  );
+}
+
+CustomTransitionPage<void> _fadeTransition(GoRouterState state, Widget child) {
+  return CustomTransitionPage(
+    key: state.pageKey,
+    child: child,
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      return FadeTransition(opacity: animation, child: child);
+    },
+  );
+}
+
+// --- Router notifier ---
+
 class _RouterNotifier extends ChangeNotifier {
   final FlutterSecureStorage _storage;
   AuthState _authState = const AuthState();
@@ -28,12 +66,12 @@ class _RouterNotifier extends ChangeNotifier {
   _RouterNotifier(this._storage);
 
   void update(AuthState authState) {
-    if (_authState.status != authState.status ||
-        _authState.needsProfileSetup != authState.needsProfileSetup) {
-      _authState = authState;
+    final shouldNotify = _authState.status != authState.status ||
+        _authState.needsProfileSetup != authState.needsProfileSetup;
+    _authState = authState;
+    if (shouldNotify) {
       notifyListeners();
     }
-    _authState = authState;
   }
 
   String? redirect(GoRouterState state) {
@@ -84,24 +122,30 @@ final routerProvider = Provider<GoRouter>((ref) {
     refreshListenable: notifier,
     redirect: (context, state) => notifier.redirect(state),
     routes: [
+      // Auth — fade transitions
       GoRoute(
         path: '/auth/phone',
-        builder: (context, state) => const PhoneScreen(),
+        pageBuilder: (context, state) =>
+            _fadeTransition(state, const PhoneScreen()),
       ),
       GoRoute(
         path: '/auth/otp',
-        builder: (context, state) {
+        pageBuilder: (context, state) {
           final phone = state.extra as String? ?? '';
-          return OtpScreen(phone: phone);
+          return _fadeTransition(state, OtpScreen(phone: phone));
         },
       ),
       GoRoute(
         path: '/auth/setup',
-        builder: (context, state) => const ProfileSetupScreen(),
+        pageBuilder: (context, state) =>
+            _fadeTransition(state, const ProfileSetupScreen()),
       ),
+
+      // Home — fade in
       GoRoute(
         path: '/home',
-        builder: (context, state) => const HomeScreen(),
+        pageBuilder: (context, state) =>
+            _fadeTransition(state, const HomeScreen()),
         redirect: (context, state) async {
           final code = await storage.read(key: _pendingInviteCodeKey);
           if (code != null && code.isNotEmpty) {
@@ -111,68 +155,80 @@ final routerProvider = Provider<GoRouter>((ref) {
           return null;
         },
       ),
+
+      // Groups — slide from bottom (modal-style)
       GoRoute(
         path: '/groups/create',
-        builder: (context, state) => const CreateGroupScreen(),
+        pageBuilder: (context, state) =>
+            _slideFromBottom(state, const CreateGroupScreen()),
       ),
       GoRoute(
         path: '/groups/join',
-        builder: (context, state) {
+        pageBuilder: (context, state) {
           final code = state.uri.queryParameters['code'] ??
               state.extra as String?;
-          return JoinGroupScreen(initialCode: code);
+          return _slideFromBottom(state, JoinGroupScreen(initialCode: code));
         },
       ),
+
+      // Group detail — slide from right (drill-down)
       GoRoute(
         path: '/groups/:id',
-        builder: (context, state) {
+        pageBuilder: (context, state) {
           final id = state.pathParameters['id']!;
-          return GroupScreen(groupId: id);
+          return _slideFromRight(state, GroupScreen(groupId: id));
         },
         routes: [
           GoRoute(
             path: 'members/:userId',
-            builder: (context, state) {
+            pageBuilder: (context, state) {
               final groupId = state.pathParameters['id']!;
               final userId = state.pathParameters['userId']!;
-              return MemberProfileScreen(
-                groupId: groupId,
-                userId: userId,
+              return _slideFromRight(
+                state,
+                MemberProfileScreen(groupId: groupId, userId: userId),
               );
             },
           ),
           GoRoute(
             path: 'telegram',
-            builder: (context, state) {
+            pageBuilder: (context, state) {
               final groupId = state.pathParameters['id']!;
-              return TelegramSetupScreen(groupId: groupId);
+              return _slideFromRight(
+                  state, TelegramSetupScreen(groupId: groupId));
             },
           ),
           GoRoute(
             path: 'reveal/:seasonId',
-            builder: (context, state) {
+            pageBuilder: (context, state) {
               final groupId = state.pathParameters['id']!;
               final seasonId = state.pathParameters['seasonId']!;
               final status =
                   state.uri.queryParameters['status'] ?? 'REVEALED';
-              return RevealScreen(
-                groupId: groupId,
-                seasonId: seasonId,
-                seasonStatus: status,
+              return _slideFromBottom(
+                state,
+                RevealScreen(
+                  groupId: groupId,
+                  seasonId: seasonId,
+                  seasonStatus: status,
+                ),
               );
             },
             routes: [
               GoRoute(
                 path: 'members',
-                builder: (context, state) {
+                pageBuilder: (context, state) {
                   final groupId = state.pathParameters['id']!;
                   final seasonId = state.pathParameters['seasonId']!;
                   final status =
                       state.uri.queryParameters['status'] ?? 'REVEALED';
-                  return MembersRevealScreen(
-                    groupId: groupId,
-                    seasonId: seasonId,
-                    seasonStatus: status,
+                  return _slideFromRight(
+                    state,
+                    MembersRevealScreen(
+                      groupId: groupId,
+                      seasonId: seasonId,
+                      seasonStatus: status,
+                    ),
                   );
                 },
               ),
@@ -180,30 +236,40 @@ final routerProvider = Provider<GoRouter>((ref) {
           ),
           GoRoute(
             path: 'vote/:seasonId',
-            builder: (context, state) {
+            pageBuilder: (context, state) {
               final groupId = state.pathParameters['id']!;
               final seasonId = state.pathParameters['seasonId']!;
-              return VotingScreen(groupId: groupId, seasonId: seasonId);
+              return _slideFromBottom(
+                state,
+                VotingScreen(groupId: groupId, seasonId: seasonId),
+              );
             },
             routes: [
               GoRoute(
                 path: 'complete',
-                builder: (context, state) {
+                pageBuilder: (context, state) {
                   final groupId = state.pathParameters['id']!;
                   final seasonId = state.pathParameters['seasonId']!;
-                  return VotingCompleteScreen(
-                      groupId: groupId, seasonId: seasonId);
+                  return _fadeTransition(
+                    state,
+                    VotingCompleteScreen(
+                        groupId: groupId, seasonId: seasonId),
+                  );
                 },
               ),
             ],
           ),
         ],
       ),
+
+      // Shop — slide from bottom (modal)
       GoRoute(
         path: '/shop',
-        builder: (context, state) => const CrystalsShopScreen(),
+        pageBuilder: (context, state) =>
+            _slideFromBottom(state, const CrystalsShopScreen()),
       ),
-      // Deeplink: /join/:code — redirect handles auth-gating via _RouterNotifier
+
+      // Deeplink redirect
       GoRoute(
         path: '/join/:code',
         redirect: (context, state) {

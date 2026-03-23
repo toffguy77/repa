@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/providers/auth_provider.dart';
+import '../../core/providers/connectivity_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../core/widgets/empty_state_widget.dart';
+import '../../core/widgets/error_state_widget.dart';
+import '../../core/widgets/skeleton_loader.dart';
 import '../groups/presentation/groups_notifier.dart';
 import '../crystals/presentation/widgets/crystal_balance_widget.dart';
 import '../groups/presentation/widgets/group_card.dart';
@@ -69,6 +73,13 @@ class _GroupsTab extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(groupsListProvider);
 
+    // Auto-refresh on reconnect
+    ref.listen<bool>(connectivityProvider, (prev, next) {
+      if (prev == false && next == true) {
+        ref.read(groupsListProvider.notifier).refresh();
+      }
+    });
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Мои группы'),
@@ -84,52 +95,56 @@ class _GroupsTab extends ConsumerWidget {
       ),
       body: RefreshIndicator(
         onRefresh: () => ref.read(groupsListProvider.notifier).refresh(),
-        child: state.loading && state.groups.isEmpty
-            ? const Center(child: CircularProgressIndicator())
-            : state.groups.isEmpty
-                ? _EmptyState()
-                : ListView.builder(
-                    padding: const EdgeInsets.only(top: 8, bottom: 80),
-                    itemCount: state.groups.length,
-                    itemBuilder: (context, index) {
-                      final group = state.groups[index];
-                      return GroupCard(
-                        group: group,
-                        onTap: () => context.push('/groups/${group.id}'),
-                      );
-                    },
-                  ),
+        child: _buildBody(context, ref, state),
       ),
     );
   }
-}
 
-class _EmptyState extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return ListView(
-      children: [
-        const SizedBox(height: 120),
-        Center(
-          child: Column(
-            children: [
-              const Text('\u{1F351}', style: TextStyle(fontSize: 64)),
-              const SizedBox(height: 16),
-              Text('Пока нет групп', style: AppTextStyles.headline2),
-              const SizedBox(height: 8),
-              Text(
-                'Создай группу или вступи по ссылке',
-                style: AppTextStyles.bodySecondary,
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: () => context.push('/groups/create'),
-                child: const Text('Создать группу'),
-              ),
-            ],
+  Widget _buildBody(BuildContext context, WidgetRef ref, GroupsListState state) {
+    if (state.loading && state.groups.isEmpty) {
+      return ListView(
+        padding: const EdgeInsets.only(top: 8),
+        children: List.generate(4, (_) => const GroupCardSkeleton()),
+      );
+    }
+
+    if (state.error != null && state.groups.isEmpty) {
+      return ListView(
+        children: [
+          const SizedBox(height: 120),
+          ErrorStateWidget(
+            message: state.error,
+            onRetry: () => ref.read(groupsListProvider.notifier).load(),
           ),
-        ),
-      ],
+        ],
+      );
+    }
+
+    if (state.groups.isEmpty) {
+      return ListView(
+        children: [
+          const SizedBox(height: 120),
+          EmptyStateWidget(
+            emoji: '\u{1F351}',
+            title: 'Пока нет групп',
+            subtitle: 'Создай группу или вступи по ссылке',
+            buttonText: 'Создать группу',
+            onButtonPressed: () => context.push('/groups/create'),
+          ),
+        ],
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.only(top: 8, bottom: 80),
+      itemCount: state.groups.length,
+      itemBuilder: (context, index) {
+        final group = state.groups[index];
+        return GroupCard(
+          group: group,
+          onTap: () => context.push('/groups/${group.id}'),
+        );
+      },
     );
   }
 }

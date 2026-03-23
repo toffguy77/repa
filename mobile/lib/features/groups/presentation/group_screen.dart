@@ -5,8 +5,13 @@ import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../../core/providers/auth_provider.dart';
+import '../../../core/providers/connectivity_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/widgets/empty_state_widget.dart';
+import '../../../core/widgets/error_state_widget.dart';
+import '../../../core/widgets/reveal_countdown_widget.dart';
+import '../../../core/widgets/skeleton_loader.dart';
 import 'groups_notifier.dart';
 import 'widgets/member_avatar.dart';
 
@@ -43,30 +48,39 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(groupDetailProvider(widget.groupId));
 
+    // Auto-refresh on reconnect
+    ref.listen<bool>(connectivityProvider, (prev, next) {
+      if (prev == false && next == true) {
+        ref.read(groupDetailProvider(widget.groupId).notifier).load();
+      }
+    });
+
     if (state.loading && state.detail == null) {
       return Scaffold(
         appBar: AppBar(),
-        body: const Center(child: CircularProgressIndicator()),
+        body: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            // Season skeleton
+            const SkeletonLoader(height: 160, borderRadius: 16),
+            const SizedBox(height: 20),
+            // Members skeleton
+            const SkeletonLoader(width: 120, height: 22, borderRadius: 6),
+            const SizedBox(height: 12),
+            ...List.generate(5, (_) => const MemberAvatarSkeleton()),
+          ],
+        ),
       );
     }
 
     if (state.error != null && state.detail == null) {
       return Scaffold(
         appBar: AppBar(),
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Text(state.error!, style: AppTextStyles.body),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () => ref
-                    .read(groupDetailProvider(widget.groupId).notifier)
-                    .load(),
-                child: const Text('Повторить'),
-              ),
-            ],
-          ),
+        body: ErrorStateWidget(
+          message: state.error,
+          onRetry: () => ref
+              .read(groupDetailProvider(widget.groupId).notifier)
+              .load(),
         ),
       );
     }
@@ -84,6 +98,11 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
       appBar: AppBar(
         title: Text(group.name),
         actions: [
+          if (season != null && season.status == 'VOTING')
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
+              child: RevealCountdownWidget(revealAt: season.revealAt),
+            ),
           IconButton(
             icon: const Icon(Icons.share),
             onPressed: _shareInvite,
@@ -201,6 +220,17 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
             // Members
             Text('Участники', style: AppTextStyles.headline2),
             const SizedBox(height: 12),
+            if (members.length <= 1)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: EmptyStateWidget(
+                  emoji: '\u{1F517}',
+                  title: 'Пока мало участников',
+                  subtitle: 'Поделись ссылкой с друзьями',
+                  buttonText: 'Пригласить',
+                  onButtonPressed: _shareInvite,
+                ),
+              ),
             ...members.map(
               (m) => Padding(
                 padding: const EdgeInsets.only(bottom: 8),
@@ -210,36 +240,39 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
                     HapticFeedback.lightImpact();
                     context.push('/groups/${widget.groupId}/members/${m.id}');
                   },
-                  child: Row(
-                    children: [
-                      MemberAvatar(
-                        avatarEmoji: m.avatarEmoji,
-                        avatarUrl: m.avatarUrl,
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(m.username, style: AppTextStyles.body),
-                      ),
-                      if (m.isAdmin)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.primaryLight,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            'Админ',
-                            style: AppTextStyles.caption.copyWith(
-                              color: AppColors.primary,
-                              fontSize: 12,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        MemberAvatar(
+                          avatarEmoji: m.avatarEmoji,
+                          avatarUrl: m.avatarUrl,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(m.username, style: AppTextStyles.body),
+                        ),
+                        if (m.isAdmin)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryLight,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              'Админ',
+                              style: AppTextStyles.caption.copyWith(
+                                color: AppColors.primary,
+                                fontSize: 12,
+                              ),
                             ),
                           ),
-                        ),
-                      const Icon(Icons.chevron_right, color: AppColors.textSecondary),
-                    ],
+                        const Icon(Icons.chevron_right, color: AppColors.textSecondary),
+                      ],
+                    ),
                   ),
                 ),
               ),

@@ -26,7 +26,10 @@ class ReactionBar extends StatelessWidget {
 
         return Padding(
           padding: const EdgeInsets.only(right: 6),
-          child: GestureDetector(
+          child: Semantics(
+            label: 'Реакция $emoji${count > 0 ? ", $count" : ""}${isSelected ? ", выбрано" : ""}',
+            button: true,
+            child: GestureDetector(
             onTap: () {
               HapticFeedback.lightImpact();
               onReact(emoji);
@@ -63,6 +66,7 @@ class ReactionBar extends StatelessWidget {
                 ],
               ),
             ),
+          ),
           ),
         );
       }).toList(),

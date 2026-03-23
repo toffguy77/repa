@@ -26,7 +26,10 @@ class _CrystalBalanceWidgetState extends ConsumerState<CrystalBalanceWidget> {
   Widget build(BuildContext context) {
     final balance = ref.watch(crystalBalanceProvider);
 
-    return GestureDetector(
+    return Semantics(
+      label: 'Баланс кристаллов: $balance. Открыть магазин',
+      button: true,
+      child: GestureDetector(
       onTap: () => context.push('/shop'),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -50,6 +53,7 @@ class _CrystalBalanceWidgetState extends ConsumerState<CrystalBalanceWidget> {
           ],
         ),
       ),
+    ),
     );
   }
 }

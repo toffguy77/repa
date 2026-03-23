@@ -4,6 +4,7 @@ import 'core/providers/auth_provider.dart';
 import 'core/router/app_router.dart';
 import 'core/services/push_service.dart';
 import 'core/theme/app_theme.dart';
+import 'core/widgets/offline_banner.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -41,6 +42,7 @@ class _RepaAppState extends ConsumerState<RepaApp> {
       theme: AppTheme.light,
       routerConfig: router,
       debugShowCheckedModeBanner: false,
+      builder: (context, child) => OfflineBanner(child: child!),
     );
   }
 }
