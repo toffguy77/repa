@@ -98,6 +98,7 @@ func main() {
 		HSTSMaxAge:            31536000,
 		ContentSecurityPolicy: "default-src 'self'",
 	}))
+	e.Use(appmw.Sanitize())
 
 	// Services
 	queries := db.New(sqlDB)
@@ -207,14 +208,16 @@ func main() {
 
 	// Voting routes
 	protected.GET("/seasons/:seasonId/voting-session", votingHandler.GetVotingSession)
-	protected.POST("/seasons/:seasonId/votes", votingHandler.CastVote)
+	protected.POST("/seasons/:seasonId/votes", votingHandler.CastVote,
+		appmw.RateLimit(rdb, "vote", 30, time.Minute))
 	protected.GET("/seasons/:seasonId/progress", votingHandler.GetProgress)
 
 	// Reveal routes
 	protected.GET("/seasons/:seasonId/reveal", revealHandler.GetReveal)
 	protected.GET("/seasons/:seasonId/members-cards", revealHandler.GetMembersCards)
 	protected.POST("/seasons/:seasonId/reveal/open-hidden", revealHandler.OpenHidden)
-	protected.GET("/seasons/:seasonId/my-card-url", revealHandler.GetMyCardURL)
+	protected.GET("/seasons/:seasonId/my-card-url", revealHandler.GetMyCardURL,
+		appmw.RateLimit(rdb, "card", 5, time.Hour))
 	protected.GET("/seasons/:seasonId/detector", revealHandler.GetDetector)
 	protected.POST("/seasons/:seasonId/detector", revealHandler.BuyDetector)
 
@@ -223,8 +226,8 @@ func main() {
 	protected.GET("/crystals/packages", crystalsHandler.GetPackages)
 	protected.POST("/crystals/purchase/init", crystalsHandler.InitPurchase)
 	protected.GET("/crystals/purchase/verify/:paymentId", crystalsHandler.VerifyPurchase)
-	// Webhook — no JWT (called by YuKassa)
-	api.POST("/crystals/purchase/webhook", crystalsHandler.Webhook)
+	// Webhook — no JWT (called by YuKassa), IP-restricted
+	api.POST("/crystals/purchase/webhook", crystalsHandler.Webhook, appmw.YukassaIPAllowlist())
 
 	// Profile routes
 	protected.GET("/groups/:id/members/:userId/profile", profileHandler.GetProfile)
@@ -237,7 +240,8 @@ func main() {
 	protected.GET("/seasons/:seasonId/members/:targetId/reactions", reactionsHandler.GetReactions)
 
 	// Question moderation routes
-	protected.POST("/groups/:groupId/questions", questionsHandler.CreateQuestion)
+	protected.POST("/groups/:groupId/questions", questionsHandler.CreateQuestion,
+		appmw.RateLimit(rdb, "question", 10, time.Hour))
 	protected.GET("/groups/:groupId/questions", questionsHandler.ListQuestions)
 	protected.DELETE("/groups/:groupId/questions/:questionId", questionsHandler.DeleteQuestion)
 	protected.POST("/groups/:groupId/questions/:questionId/report", questionsHandler.ReportQuestion)
