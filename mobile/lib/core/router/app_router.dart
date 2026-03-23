@@ -16,6 +16,7 @@ import '../../features/voting/presentation/voting_complete_screen.dart';
 import '../../features/reveal/presentation/reveal_screen.dart';
 import '../../features/reveal/presentation/members_reveal_screen.dart';
 import '../../features/profile/presentation/member_profile_screen.dart';
+import '../../features/crystals/presentation/crystals_shop_screen.dart';
 
 const _pendingInviteCodeKey = 'pending_invite_code';
 
@@ -189,6 +190,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             ],
           ),
         ],
+      ),
+      GoRoute(
+        path: '/shop',
+        builder: (context, state) => const CrystalsShopScreen(),
       ),
       // Deeplink: /join/:code — redirect handles auth-gating via _RouterNotifier
       GoRoute(

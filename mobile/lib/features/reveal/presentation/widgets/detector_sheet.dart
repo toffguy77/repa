@@ -9,13 +9,17 @@ import '../../../groups/presentation/widgets/member_avatar.dart';
 class DetectorSheet extends StatelessWidget {
   final DetectorResult? detector;
   final bool buying;
+  final int crystalBalance;
   final VoidCallback onBuy;
+  final VoidCallback onGoToShop;
 
   const DetectorSheet({
     super.key,
     required this.detector,
     required this.buying,
+    this.crystalBalance = 0,
     required this.onBuy,
+    required this.onGoToShop,
   });
 
   @override
@@ -55,29 +59,52 @@ class DetectorSheet extends StatelessWidget {
             // Blurred placeholder
             ...List.generate(4, (i) => _buildBlurredTile(i)),
             const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: ElevatedButton.icon(
-                onPressed: buying
-                    ? null
-                    : () {
+            if (crystalBalance < 10)
+              Column(
+                children: [
+                  Text(
+                    'Не хватает кристаллов (\u{1F48E} $crystalBalance / 10)',
+                    style: AppTextStyles.caption,
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 52,
+                    child: ElevatedButton(
+                      onPressed: () {
                         HapticFeedback.mediumImpact();
-                        onBuy();
+                        Navigator.of(context).pop();
+                        onGoToShop();
                       },
-                icon: buying
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Text('\u{1F48E}'),
-                label: Text(buying ? 'Покупка...' : 'Узнать за 10'),
+                      child: const Text('Купить кристаллы'),
+                    ),
+                  ),
+                ],
+              )
+            else
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton.icon(
+                  onPressed: buying
+                      ? null
+                      : () {
+                          HapticFeedback.mediumImpact();
+                          onBuy();
+                        },
+                  icon: buying
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text('\u{1F48E}'),
+                  label: Text(buying ? 'Покупка...' : 'Узнать за 10'),
+                ),
               ),
-            ),
           ],
           const SizedBox(height: 16),
         ],

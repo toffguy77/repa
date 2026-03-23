@@ -5,6 +5,7 @@ import '../../core/providers/auth_provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../groups/presentation/groups_notifier.dart';
+import '../crystals/presentation/widgets/crystal_balance_widget.dart';
 import '../groups/presentation/widgets/group_card.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -72,6 +73,8 @@ class _GroupsTab extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Мои группы'),
         actions: [
+          const CrystalBalanceWidget(),
+          const SizedBox(width: 8),
           IconButton(
             icon: const Icon(Icons.person_add),
             onPressed: () => context.push('/groups/join'),

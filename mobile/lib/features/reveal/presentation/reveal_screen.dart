@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../crystals/presentation/crystals_notifier.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../domain/reveal.dart';
 import 'reveal_notifier.dart';
@@ -61,6 +62,7 @@ class _RevealScreenState extends ConsumerState<RevealScreen> {
 
   void _showDetector() {
     ref.read(revealProvider(_args).notifier).loadDetector();
+    ref.read(crystalBalanceProvider.notifier).load();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -68,11 +70,14 @@ class _RevealScreenState extends ConsumerState<RevealScreen> {
       builder: (_) => Consumer(
         builder: (context, ref, _) {
           final state = ref.watch(revealProvider(_args));
+          final balance = ref.watch(crystalBalanceProvider);
           return DetectorSheet(
             detector: state.detector,
             buying: state.buyingDetector,
+            crystalBalance: balance,
             onBuy: () =>
                 ref.read(revealProvider(_args).notifier).buyDetector(),
+            onGoToShop: () => context.push('/shop'),
           );
         },
       ),

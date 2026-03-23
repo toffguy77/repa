@@ -153,6 +153,30 @@ class ApiService {
     return response.data as Map<String, dynamic>;
   }
 
+  // --- Crystals ---
+
+  Future<Map<String, dynamic>> getCrystalBalance() async {
+    final response = await _dio.get('/crystals/balance');
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> getCrystalPackages() async {
+    final response = await _dio.get('/crystals/packages');
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> initCrystalPurchase(
+      Map<String, String> body) async {
+    final response = await _dio.post('/crystals/purchase/init', data: body);
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> verifyCrystalPurchase(String paymentId) async {
+    final response =
+        await _dio.get('/crystals/purchase/verify/$paymentId');
+    return response.data as Map<String, dynamic>;
+  }
+
   // --- Profile ---
 
   Future<Map<String, dynamic>> getMemberProfile(
