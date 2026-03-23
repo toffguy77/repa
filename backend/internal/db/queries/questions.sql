@@ -37,6 +37,18 @@ ORDER BY created_at DESC;
 -- name: UpdateQuestionStatus :exec
 UPDATE questions SET status = $2 WHERE id = $1;
 
+-- name: CountUserQuestionsInGroup :one
+SELECT COUNT(*) FROM questions
+WHERE author_id = $1 AND group_id = $2 AND source = 'USER' AND status != 'REJECTED';
+
+-- name: GetGroupAllQuestions :many
+SELECT * FROM questions
+WHERE (
+  (source = 'SYSTEM' AND status = 'ACTIVE' AND category = ANY($2::question_category[]))
+  OR (source = 'USER' AND group_id = $1 AND status = 'ACTIVE')
+)
+ORDER BY source DESC, created_at DESC;
+
 -- name: CreateQuestionSeed :exec
 INSERT INTO questions (id, text, category, source, status)
 VALUES ($1, $2, $3, 'SYSTEM', 'ACTIVE')

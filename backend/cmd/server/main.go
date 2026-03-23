@@ -19,6 +19,7 @@ import (
 	crystalshandler "github.com/repa-app/repa/internal/handler/crystals"
 	groupshandler "github.com/repa-app/repa/internal/handler/groups"
 	profilehandler "github.com/repa-app/repa/internal/handler/profile"
+	questionshandler "github.com/repa-app/repa/internal/handler/questions"
 	pushhandler "github.com/repa-app/repa/internal/handler/push"
 	reactionshandler "github.com/repa-app/repa/internal/handler/reactions"
 	revealhandler "github.com/repa-app/repa/internal/handler/reveal"
@@ -32,6 +33,7 @@ import (
 	crystalssvc "github.com/repa-app/repa/internal/service/crystals"
 	groupssvc "github.com/repa-app/repa/internal/service/groups"
 	profilesvc "github.com/repa-app/repa/internal/service/profile"
+	questionssvc "github.com/repa-app/repa/internal/service/questions"
 	pushsvc "github.com/repa-app/repa/internal/service/push"
 	reactionssvc "github.com/repa-app/repa/internal/service/reactions"
 	revealsvc "github.com/repa-app/repa/internal/service/reveal"
@@ -149,6 +151,15 @@ func main() {
 	reactionsService := reactionssvc.NewService(queries, asynqClient)
 	reactionsHandler := reactionshandler.NewHandler(reactionsService)
 
+	// Questions + AI moderation
+	var anthropicClient *lib.AnthropicClient
+	if cfg.AnthropicKey != "" {
+		anthropicClient = lib.NewAnthropicClient(cfg.AnthropicKey)
+		log.Info().Msg("Anthropic client initialized for AI moderation")
+	}
+	questionsService := questionssvc.NewService(queries, anthropicClient)
+	questionsHandler := questionshandler.NewHandler(questionsService, queries)
+
 	// Telegram
 	var telegramService *telegramsvc.Service
 	var telegramHandler *telegramhandler.Handler
@@ -224,6 +235,12 @@ func main() {
 	// Reaction routes
 	protected.POST("/seasons/:seasonId/members/:targetId/reactions", reactionsHandler.CreateReaction)
 	protected.GET("/seasons/:seasonId/members/:targetId/reactions", reactionsHandler.GetReactions)
+
+	// Question moderation routes
+	protected.POST("/groups/:groupId/questions", questionsHandler.CreateQuestion)
+	protected.GET("/groups/:groupId/questions", questionsHandler.ListQuestions)
+	protected.DELETE("/groups/:groupId/questions/:questionId", questionsHandler.DeleteQuestion)
+	protected.POST("/groups/:groupId/questions/:questionId/report", questionsHandler.ReportQuestion)
 
 	// Next-season question voting
 	protected.GET("/groups/:id/next-season/question-candidates", pushHandler.GetQuestionCandidates)

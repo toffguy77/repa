@@ -12,6 +12,23 @@ import (
 	"github.com/lib/pq"
 )
 
+const countUserQuestionsInGroup = `-- name: CountUserQuestionsInGroup :one
+SELECT COUNT(*) FROM questions
+WHERE author_id = $1 AND group_id = $2 AND source = 'USER' AND status != 'REJECTED'
+`
+
+type CountUserQuestionsInGroupParams struct {
+	AuthorID sql.NullString `json:"author_id"`
+	GroupID  sql.NullString `json:"group_id"`
+}
+
+func (q *Queries) CountUserQuestionsInGroup(ctx context.Context, arg CountUserQuestionsInGroupParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countUserQuestionsInGroup, arg.AuthorID, arg.GroupID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createQuestion = `-- name: CreateQuestion :one
 INSERT INTO questions (id, text, category, source, group_id, author_id, status)
 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, text, category, source, group_id, author_id, status, created_at
@@ -66,6 +83,52 @@ type CreateQuestionSeedParams struct {
 func (q *Queries) CreateQuestionSeed(ctx context.Context, arg CreateQuestionSeedParams) error {
 	_, err := q.db.ExecContext(ctx, createQuestionSeed, arg.ID, arg.Text, arg.Category)
 	return err
+}
+
+const getGroupAllQuestions = `-- name: GetGroupAllQuestions :many
+SELECT id, text, category, source, group_id, author_id, status, created_at FROM questions
+WHERE (
+  (source = 'SYSTEM' AND status = 'ACTIVE' AND category = ANY($2::question_category[]))
+  OR (source = 'USER' AND group_id = $1 AND status = 'ACTIVE')
+)
+ORDER BY source DESC, created_at DESC
+`
+
+type GetGroupAllQuestionsParams struct {
+	GroupID sql.NullString     `json:"group_id"`
+	Column2 []QuestionCategory `json:"column_2"`
+}
+
+func (q *Queries) GetGroupAllQuestions(ctx context.Context, arg GetGroupAllQuestionsParams) ([]Question, error) {
+	rows, err := q.db.QueryContext(ctx, getGroupAllQuestions, arg.GroupID, pq.Array(arg.Column2))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Question{}
+	for rows.Next() {
+		var i Question
+		if err := rows.Scan(
+			&i.ID,
+			&i.Text,
+			&i.Category,
+			&i.Source,
+			&i.GroupID,
+			&i.AuthorID,
+			&i.Status,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getGroupCustomQuestions = `-- name: GetGroupCustomQuestions :many
