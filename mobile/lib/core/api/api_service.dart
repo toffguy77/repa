@@ -185,4 +185,33 @@ class ApiService {
         await _dio.get('/groups/$groupId/members/$userId/profile');
     return response.data as Map<String, dynamic>;
   }
+
+  // --- Push ---
+
+  Future<Map<String, dynamic>> registerFCMToken(
+      String token, String platform) async {
+    final response = await _dio.post('/push/register', data: {
+      'token': token,
+      'platform': platform,
+    });
+    return response.data as Map<String, dynamic>;
+  }
+
+  // --- Reactions ---
+
+  Future<Map<String, dynamic>> createReaction(
+      String seasonId, String targetId, String emoji) async {
+    final response = await _dio.post(
+      '/seasons/$seasonId/members/$targetId/reactions',
+      data: {'emoji': emoji},
+    );
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> getReactions(
+      String seasonId, String targetId) async {
+    final response =
+        await _dio.get('/seasons/$seasonId/members/$targetId/reactions');
+    return response.data as Map<String, dynamic>;
+  }
 }

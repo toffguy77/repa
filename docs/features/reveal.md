@@ -169,7 +169,8 @@ mobile/lib/features/reveal/
         ├── reputation_card.dart             # Card with attributes + hidden section
         ├── attribute_bar.dart               # Animated progress bar
         ├── detector_sheet.dart              # Bottom sheet for detector
-        └── achievement_popup.dart           # Full-screen achievement overlay
+        ├── achievement_popup.dart           # Full-screen achievement overlay
+        └── reaction_bar.dart                # Emoji reaction buttons (see [reactions.md](reactions.md))
 ```
 
 ### Key Dependencies
@@ -178,4 +179,4 @@ mobile/lib/features/reveal/
 - Reveal worker -> Reveal service (ProcessReveal, GetSeasonsForReveal)
 - OpenHidden -> crystal_logs table (transactional deduct + log)
 - Detector -> detectors table + crystal_logs (transactional deduct + create)
-- Downstream: achievements (T11, implemented), push notifications (T17)
+- Downstream: achievements (T11, implemented), push notifications (T17), reactions (T18, see [reactions.md](reactions.md))

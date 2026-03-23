@@ -143,3 +143,14 @@ class CardUrlResult with _$CardUrlResult {
   factory CardUrlResult.fromJson(Map<String, dynamic> json) =>
       _$CardUrlResultFromJson(json);
 }
+
+@freezed
+class ReactionCounts with _$ReactionCounts {
+  const factory ReactionCounts({
+    required Map<String, int> counts,
+    @JsonKey(name: 'my_emoji') String? myEmoji,
+  }) = _ReactionCounts;
+
+  factory ReactionCounts.fromJson(Map<String, dynamic> json) =>
+      _$ReactionCountsFromJson(json);
+}

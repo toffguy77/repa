@@ -46,4 +46,18 @@ class RevealRepository {
     final data = response['data'] as Map<String, dynamic>;
     return DetectorResult.fromJson(data);
   }
+
+  Future<ReactionCounts> getReactions(
+      String seasonId, String targetId) async {
+    final response = await _api.getReactions(seasonId, targetId);
+    final data = response['data'] as Map<String, dynamic>;
+    return ReactionCounts.fromJson(data);
+  }
+
+  Future<ReactionCounts> createReaction(
+      String seasonId, String targetId, String emoji) async {
+    final response = await _api.createReaction(seasonId, targetId, emoji);
+    final data = response['data'] as Map<String, dynamic>;
+    return ReactionCounts.fromJson(data);
+  }
 }

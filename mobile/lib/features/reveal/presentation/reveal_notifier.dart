@@ -14,6 +14,8 @@ class RevealState {
   final String? error;
   final bool unlockingHidden;
   final bool buyingDetector;
+  // Reactions keyed by target user ID
+  final Map<String, ReactionCounts> reactions;
 
   const RevealState({
     this.phase = RevealPhase.loading,
@@ -24,6 +26,7 @@ class RevealState {
     this.error,
     this.unlockingHidden = false,
     this.buyingDetector = false,
+    this.reactions = const {},
   });
 
   RevealState copyWith({
@@ -35,6 +38,7 @@ class RevealState {
     String? error,
     bool? unlockingHidden,
     bool? buyingDetector,
+    Map<String, ReactionCounts>? reactions,
   }) {
     return RevealState(
       phase: phase ?? this.phase,
@@ -45,6 +49,7 @@ class RevealState {
       error: error,
       unlockingHidden: unlockingHidden ?? this.unlockingHidden,
       buyingDetector: buyingDetector ?? this.buyingDetector,
+      reactions: reactions ?? this.reactions,
     );
   }
 }
@@ -141,6 +146,45 @@ class RevealNotifier extends StateNotifier<RevealState> {
       final cards = await _repo.getMembersCards(seasonId);
       state = state.copyWith(membersCards: cards);
     } catch (_) {}
+  }
+
+  Future<void> loadReactions(String targetId) async {
+    try {
+      final result = await _repo.getReactions(seasonId, targetId);
+      final updated = Map<String, ReactionCounts>.from(state.reactions);
+      updated[targetId] = result;
+      state = state.copyWith(reactions: updated);
+    } catch (_) {}
+  }
+
+  Future<void> sendReaction(String targetId, String emoji) async {
+    // Optimistic update
+    final current = state.reactions[targetId];
+    final oldCounts = Map<String, int>.from(current?.counts ?? {});
+    final oldEmoji = current?.myEmoji;
+
+    final newCounts = Map<String, int>.from(oldCounts);
+    if (oldEmoji != null) {
+      newCounts[oldEmoji] = (newCounts[oldEmoji] ?? 1) - 1;
+      if (newCounts[oldEmoji]! <= 0) newCounts.remove(oldEmoji);
+    }
+    newCounts[emoji] = (newCounts[emoji] ?? 0) + 1;
+
+    final updated = Map<String, ReactionCounts>.from(state.reactions);
+    updated[targetId] = ReactionCounts(counts: newCounts, myEmoji: emoji);
+    state = state.copyWith(reactions: updated);
+
+    try {
+      final result = await _repo.createReaction(seasonId, targetId, emoji);
+      final refreshed = Map<String, ReactionCounts>.from(state.reactions);
+      refreshed[targetId] = result;
+      state = state.copyWith(reactions: refreshed);
+    } catch (_) {
+      // Rollback
+      final rollback = Map<String, ReactionCounts>.from(state.reactions);
+      rollback[targetId] = ReactionCounts(counts: oldCounts, myEmoji: oldEmoji);
+      state = state.copyWith(reactions: rollback);
+    }
   }
 
   void clearError() {

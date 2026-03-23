@@ -191,3 +191,16 @@ Map<String, dynamic> _$$CardUrlResultImplToJson(_$CardUrlResultImpl instance) =>
       'image_url': instance.imageUrl,
       'status': instance.status,
     };
+
+_$ReactionCountsImpl _$$ReactionCountsImplFromJson(Map<String, dynamic> json) =>
+    _$ReactionCountsImpl(
+      counts: Map<String, int>.from(json['counts'] as Map),
+      myEmoji: json['my_emoji'] as String?,
+    );
+
+Map<String, dynamic> _$$ReactionCountsImplToJson(
+        _$ReactionCountsImpl instance) =>
+    <String, dynamic>{
+      'counts': instance.counts,
+      'my_emoji': instance.myEmoji,
+    };

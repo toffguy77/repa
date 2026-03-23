@@ -20,6 +20,7 @@ import (
 	groupshandler "github.com/repa-app/repa/internal/handler/groups"
 	profilehandler "github.com/repa-app/repa/internal/handler/profile"
 	pushhandler "github.com/repa-app/repa/internal/handler/push"
+	reactionshandler "github.com/repa-app/repa/internal/handler/reactions"
 	revealhandler "github.com/repa-app/repa/internal/handler/reveal"
 	votinghandler "github.com/repa-app/repa/internal/handler/voting"
 	"github.com/repa-app/repa/internal/lib"
@@ -31,6 +32,7 @@ import (
 	groupssvc "github.com/repa-app/repa/internal/service/groups"
 	profilesvc "github.com/repa-app/repa/internal/service/profile"
 	pushsvc "github.com/repa-app/repa/internal/service/push"
+	reactionssvc "github.com/repa-app/repa/internal/service/reactions"
 	revealsvc "github.com/repa-app/repa/internal/service/reveal"
 	votingsvc "github.com/repa-app/repa/internal/service/voting"
 	"github.com/repa-app/repa/internal/worker/tasks"
@@ -142,6 +144,9 @@ func main() {
 	pushService := pushsvc.NewService(queries, rdb, fcmClient)
 	pushHandler := pushhandler.NewHandler(queries)
 
+	reactionsService := reactionssvc.NewService(queries, asynqClient)
+	reactionsHandler := reactionshandler.NewHandler(reactionsService)
+
 	// Routes
 	api := e.Group("/api/v1")
 	api.GET("/health", healthHandler(pool, rdb))
@@ -199,6 +204,10 @@ func main() {
 
 	// Push routes
 	protected.POST("/push/register", pushHandler.RegisterToken)
+
+	// Reaction routes
+	protected.POST("/seasons/:seasonId/members/:targetId/reactions", reactionsHandler.CreateReaction)
+	protected.GET("/seasons/:seasonId/members/:targetId/reactions", reactionsHandler.GetReactions)
 
 	// Next-season question voting
 	protected.GET("/groups/:id/next-season/question-candidates", pushHandler.GetQuestionCandidates)

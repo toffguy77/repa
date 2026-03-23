@@ -2343,3 +2343,173 @@ abstract class _CardUrlResult implements CardUrlResult {
   _$$CardUrlResultImplCopyWith<_$CardUrlResultImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }
+
+ReactionCounts _$ReactionCountsFromJson(Map<String, dynamic> json) {
+  return _ReactionCounts.fromJson(json);
+}
+
+/// @nodoc
+mixin _$ReactionCounts {
+  Map<String, int> get counts => throw _privateConstructorUsedError;
+  @JsonKey(name: 'my_emoji')
+  String? get myEmoji => throw _privateConstructorUsedError;
+
+  Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
+  @JsonKey(ignore: true)
+  $ReactionCountsCopyWith<ReactionCounts> get copyWith =>
+      throw _privateConstructorUsedError;
+}
+
+/// @nodoc
+abstract class $ReactionCountsCopyWith<$Res> {
+  factory $ReactionCountsCopyWith(
+          ReactionCounts value, $Res Function(ReactionCounts) then) =
+      _$ReactionCountsCopyWithImpl<$Res, ReactionCounts>;
+  @useResult
+  $Res call(
+      {Map<String, int> counts, @JsonKey(name: 'my_emoji') String? myEmoji});
+}
+
+/// @nodoc
+class _$ReactionCountsCopyWithImpl<$Res, $Val extends ReactionCounts>
+    implements $ReactionCountsCopyWith<$Res> {
+  _$ReactionCountsCopyWithImpl(this._value, this._then);
+
+  // ignore: unused_field
+  final $Val _value;
+  // ignore: unused_field
+  final $Res Function($Val) _then;
+
+  @pragma('vm:prefer-inline')
+  @override
+  $Res call({
+    Object? counts = null,
+    Object? myEmoji = freezed,
+  }) {
+    return _then(_value.copyWith(
+      counts: null == counts
+          ? _value.counts
+          : counts // ignore: cast_nullable_to_non_nullable
+              as Map<String, int>,
+      myEmoji: freezed == myEmoji
+          ? _value.myEmoji
+          : myEmoji // ignore: cast_nullable_to_non_nullable
+              as String?,
+    ) as $Val);
+  }
+}
+
+/// @nodoc
+abstract class _$$ReactionCountsImplCopyWith<$Res>
+    implements $ReactionCountsCopyWith<$Res> {
+  factory _$$ReactionCountsImplCopyWith(_$ReactionCountsImpl value,
+          $Res Function(_$ReactionCountsImpl) then) =
+      __$$ReactionCountsImplCopyWithImpl<$Res>;
+  @override
+  @useResult
+  $Res call(
+      {Map<String, int> counts, @JsonKey(name: 'my_emoji') String? myEmoji});
+}
+
+/// @nodoc
+class __$$ReactionCountsImplCopyWithImpl<$Res>
+    extends _$ReactionCountsCopyWithImpl<$Res, _$ReactionCountsImpl>
+    implements _$$ReactionCountsImplCopyWith<$Res> {
+  __$$ReactionCountsImplCopyWithImpl(
+      _$ReactionCountsImpl _value, $Res Function(_$ReactionCountsImpl) _then)
+      : super(_value, _then);
+
+  @pragma('vm:prefer-inline')
+  @override
+  $Res call({
+    Object? counts = null,
+    Object? myEmoji = freezed,
+  }) {
+    return _then(_$ReactionCountsImpl(
+      counts: null == counts
+          ? _value._counts
+          : counts // ignore: cast_nullable_to_non_nullable
+              as Map<String, int>,
+      myEmoji: freezed == myEmoji
+          ? _value.myEmoji
+          : myEmoji // ignore: cast_nullable_to_non_nullable
+              as String?,
+    ));
+  }
+}
+
+/// @nodoc
+@JsonSerializable()
+class _$ReactionCountsImpl implements _ReactionCounts {
+  const _$ReactionCountsImpl(
+      {required final Map<String, int> counts,
+      @JsonKey(name: 'my_emoji') this.myEmoji})
+      : _counts = counts;
+
+  factory _$ReactionCountsImpl.fromJson(Map<String, dynamic> json) =>
+      _$$ReactionCountsImplFromJson(json);
+
+  final Map<String, int> _counts;
+  @override
+  Map<String, int> get counts {
+    if (_counts is EqualUnmodifiableMapView) return _counts;
+    // ignore: implicit_dynamic_type
+    return EqualUnmodifiableMapView(_counts);
+  }
+
+  @override
+  @JsonKey(name: 'my_emoji')
+  final String? myEmoji;
+
+  @override
+  String toString() {
+    return 'ReactionCounts(counts: $counts, myEmoji: $myEmoji)';
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is _$ReactionCountsImpl &&
+            const DeepCollectionEquality().equals(other._counts, _counts) &&
+            (identical(other.myEmoji, myEmoji) || other.myEmoji == myEmoji));
+  }
+
+  @JsonKey(ignore: true)
+  @override
+  int get hashCode => Object.hash(
+      runtimeType, const DeepCollectionEquality().hash(_counts), myEmoji);
+
+  @JsonKey(ignore: true)
+  @override
+  @pragma('vm:prefer-inline')
+  _$$ReactionCountsImplCopyWith<_$ReactionCountsImpl> get copyWith =>
+      __$$ReactionCountsImplCopyWithImpl<_$ReactionCountsImpl>(
+          this, _$identity);
+
+  @override
+  Map<String, dynamic> toJson() {
+    return _$$ReactionCountsImplToJson(
+      this,
+    );
+  }
+}
+
+abstract class _ReactionCounts implements ReactionCounts {
+  const factory _ReactionCounts(
+      {required final Map<String, int> counts,
+      @JsonKey(name: 'my_emoji') final String? myEmoji}) = _$ReactionCountsImpl;
+
+  factory _ReactionCounts.fromJson(Map<String, dynamic> json) =
+      _$ReactionCountsImpl.fromJson;
+
+  @override
+  Map<String, int> get counts;
+  @override
+  @JsonKey(name: 'my_emoji')
+  String? get myEmoji;
+  @override
+  @JsonKey(ignore: true)
+  _$$ReactionCountsImplCopyWith<_$ReactionCountsImpl> get copyWith =>
+      throw _privateConstructorUsedError;
+}

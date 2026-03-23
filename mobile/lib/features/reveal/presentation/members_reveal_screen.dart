@@ -9,6 +9,7 @@ import '../../groups/presentation/widgets/member_avatar.dart';
 import '../domain/reveal.dart';
 import 'reveal_notifier.dart';
 import 'widgets/attribute_bar.dart';
+import 'widgets/reaction_bar.dart';
 
 class MembersRevealScreen extends ConsumerStatefulWidget {
   final String groupId;
@@ -65,6 +66,8 @@ class _MembersRevealScreenState extends ConsumerState<MembersRevealScreen> {
                       card: cards[index],
                       index: index,
                       groupId: widget.groupId,
+                      seasonId: widget.seasonId,
+                      seasonStatus: widget.seasonStatus,
                     );
                   },
                 ),
@@ -72,23 +75,48 @@ class _MembersRevealScreenState extends ConsumerState<MembersRevealScreen> {
   }
 }
 
-class _MemberCardTile extends StatelessWidget {
+class _MemberCardTile extends ConsumerStatefulWidget {
   final MemberCard card;
   final int index;
   final String groupId;
+  final String seasonId;
+  final String seasonStatus;
 
   const _MemberCardTile({
     required this.card,
     required this.index,
     required this.groupId,
+    required this.seasonId,
+    required this.seasonStatus,
   });
 
   @override
+  ConsumerState<_MemberCardTile> createState() => _MemberCardTileState();
+}
+
+class _MemberCardTileState extends ConsumerState<_MemberCardTile> {
+  late final _args =
+      (seasonId: widget.seasonId, status: widget.seasonStatus);
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(revealProvider(_args).notifier).loadReactions(widget.card.userId);
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final reactions = ref.watch(
+      revealProvider(_args).select((s) => s.reactions[widget.card.userId]),
+    );
+    final card = widget.card;
+
     return GestureDetector(
       onTap: () {
         HapticFeedback.lightImpact();
-        context.push('/groups/$groupId/members/${card.userId}');
+        context.push('/groups/${widget.groupId}/members/${card.userId}');
       },
       child: Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -146,10 +174,19 @@ class _MemberCardTile extends StatelessWidget {
               );
             }),
           ],
+          const SizedBox(height: 12),
+          ReactionBar(
+            counts: reactions?.counts ?? {},
+            myEmoji: reactions?.myEmoji,
+            onReact: (emoji) {
+              ref.read(revealProvider(_args).notifier)
+                  .sendReaction(card.userId, emoji);
+            },
+          ),
         ],
       ),
     ).animate()
-        .fadeIn(duration: 300.ms, delay: Duration(milliseconds: index * 100))
+        .fadeIn(duration: 300.ms, delay: Duration(milliseconds: widget.index * 100))
         .slideY(begin: 0.1, duration: 300.ms),
     );
   }
