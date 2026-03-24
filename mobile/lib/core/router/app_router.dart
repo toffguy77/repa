@@ -18,6 +18,8 @@ import '../../features/reveal/presentation/members_reveal_screen.dart';
 import '../../features/profile/presentation/member_profile_screen.dart';
 import '../../features/crystals/presentation/crystals_shop_screen.dart';
 import '../../features/telegram/presentation/telegram_setup_screen.dart';
+import '../../features/onboarding/presentation/onboarding_screen.dart';
+import '../../features/question_vote/presentation/question_vote_screen.dart';
 
 const _pendingInviteCodeKey = 'pending_invite_code';
 
@@ -67,7 +69,8 @@ class _RouterNotifier extends ChangeNotifier {
 
   void update(AuthState authState) {
     final shouldNotify = _authState.status != authState.status ||
-        _authState.needsProfileSetup != authState.needsProfileSetup;
+        _authState.needsProfileSetup != authState.needsProfileSetup ||
+        _authState.isNewUser != authState.isNewUser;
     _authState = authState;
     if (shouldNotify) {
       notifyListeners();
@@ -78,6 +81,7 @@ class _RouterNotifier extends ChangeNotifier {
     final isAuth = _authState.status == AuthStatus.authenticated;
     final isAuthRoute = state.matchedLocation.startsWith('/auth');
     final isDeeplink = state.matchedLocation.startsWith('/join/');
+    final isOnboarding = state.matchedLocation == '/onboarding';
 
     if (_authState.status == AuthStatus.unknown) return null;
 
@@ -95,6 +99,10 @@ class _RouterNotifier extends ChangeNotifier {
     if (isAuth && _authState.needsProfileSetup) {
       if (state.matchedLocation != '/auth/setup') return '/auth/setup';
       return null;
+    }
+
+    if (isAuth && _authState.isNewUser && !isOnboarding) {
+      return '/onboarding';
     }
 
     if (isAuth && isAuthRoute) return '/home';
@@ -139,6 +147,13 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/auth/setup',
         pageBuilder: (context, state) =>
             _fadeTransition(state, const ProfileSetupScreen()),
+      ),
+
+      // Onboarding — fade
+      GoRoute(
+        path: '/onboarding',
+        pageBuilder: (context, state) =>
+            _fadeTransition(state, const OnboardingScreen()),
       ),
 
       // Home — fade in
@@ -187,6 +202,16 @@ final routerProvider = Provider<GoRouter>((ref) {
               return _slideFromRight(
                 state,
                 MemberProfileScreen(groupId: groupId, userId: userId),
+              );
+            },
+          ),
+          GoRoute(
+            path: 'question-vote',
+            pageBuilder: (context, state) {
+              final groupId = state.pathParameters['id']!;
+              return _slideFromBottom(
+                state,
+                QuestionVoteScreen(groupId: groupId),
               );
             },
           ),

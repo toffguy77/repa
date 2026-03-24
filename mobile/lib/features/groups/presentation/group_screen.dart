@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:share_plus/share_plus.dart';
@@ -12,6 +13,7 @@ import '../../../core/widgets/empty_state_widget.dart';
 import '../../../core/widgets/error_state_widget.dart';
 import '../../../core/widgets/reveal_countdown_widget.dart';
 import '../../../core/widgets/skeleton_loader.dart';
+import '../../question_vote/presentation/question_vote_notifier.dart';
 import 'groups_notifier.dart';
 import 'widgets/member_avatar.dart';
 
@@ -214,6 +216,36 @@ class _GroupScreenState extends ConsumerState<GroupScreen> {
                   ],
                 ),
               ),
+              const SizedBox(height: 12),
+              if (QuestionVoteNotifier.isVotingWindowOpen())
+                SizedBox(
+                  width: double.infinity,
+                  height: 44,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      HapticFeedback.lightImpact();
+                      context
+                          .push('/groups/${widget.groupId}/question-vote');
+                    },
+                    icon: const Text('\u{1F5F3}',
+                        style: TextStyle(fontSize: 18)),
+                    label: const Text('Выбери вопрос недели'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                      side: const BorderSide(color: AppColors.primary),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
+                )
+                    .animate(onPlay: (c) => c.repeat(reverse: true))
+                    .scaleXY(
+                      begin: 1.0,
+                      end: 1.03,
+                      duration: 1200.ms,
+                      curve: Curves.easeInOut,
+                    ),
               const SizedBox(height: 20),
             ],
 

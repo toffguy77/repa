@@ -9,22 +9,26 @@ class AuthState {
   final AuthStatus status;
   final User? user;
   final bool needsProfileSetup;
+  final bool isNewUser;
 
   const AuthState({
     this.status = AuthStatus.unknown,
     this.user,
     this.needsProfileSetup = false,
+    this.isNewUser = false,
   });
 
   AuthState copyWith({
     AuthStatus? status,
     User? user,
     bool? needsProfileSetup,
+    bool? isNewUser,
   }) {
     return AuthState(
       status: status ?? this.status,
       user: user ?? this.user,
       needsProfileSetup: needsProfileSetup ?? this.needsProfileSetup,
+      isNewUser: isNewUser ?? this.isNewUser,
     );
   }
 }
@@ -76,7 +80,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
       status: AuthStatus.authenticated,
       user: user,
       needsProfileSetup: false,
+      isNewUser: true,
     );
+  }
+
+  void onboardingCompleted() {
+    state = state.copyWith(isNewUser: false);
   }
 
   Future<void> logout() async {

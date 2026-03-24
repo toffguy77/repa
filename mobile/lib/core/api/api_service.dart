@@ -233,4 +233,21 @@ class ApiService {
         await _dio.post('/seasons/$seasonId/share-to-telegram');
     return response.data as Map<String, dynamic>;
   }
+
+  // --- Question Vote ---
+
+  Future<Map<String, dynamic>> getQuestionCandidates(String groupId) async {
+    final response =
+        await _dio.get('/groups/$groupId/next-season/question-candidates');
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> voteQuestion(
+      String groupId, String questionId) async {
+    final response = await _dio.post(
+      '/groups/$groupId/next-season/vote-question',
+      data: {'questionId': questionId},
+    );
+    return response.data as Map<String, dynamic>;
+  }
 }
