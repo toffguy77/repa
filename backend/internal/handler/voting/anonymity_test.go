@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	revealsvc "github.com/repa-app/repa/internal/service/reveal"
+	votingsvc "github.com/repa-app/repa/internal/service/voting"
 )
 
 // TestAnonymity_HandlerSourceNoVoterLeak scans actual handler source files
@@ -130,6 +131,93 @@ func TestAnonymity_DetectorNoQuestionBinding(t *testing.T) {
 	for _, forbidden := range forbiddenFields {
 		if strings.Contains(bodyStr, forbidden) {
 			t.Errorf("ANONYMITY VIOLATION: serialized DetectorResult contains %q", forbidden)
+		}
+	}
+}
+
+// TestAnonymity_ProgressEndpointNoVoterLeak verifies the progress handler DTO
+// and VotingProgress service struct expose no individual voter identities.
+func TestAnonymity_ProgressEndpointNoVoterLeak(t *testing.T) {
+	// Handler-level DTOs
+	handlerDTO := progressDto{Answered: 3, Total: 5}
+	body, _ := json.Marshal(handlerDTO)
+	bodyStr := string(body)
+
+	for _, forbidden := range []string{"voter_id", "voterId", "voter"} {
+		if strings.Contains(bodyStr, forbidden) {
+			t.Errorf("ANONYMITY VIOLATION: serialized progressDto contains %q", forbidden)
+		}
+	}
+
+	// Service-level DTO
+	svcDTO := votingsvc.VotingProgress{
+		VotedCount:      3,
+		TotalCount:      5,
+		QuorumReached:   true,
+		QuorumThreshold: 0.5,
+		UserVoted:       true,
+	}
+
+	forbiddenFields := []string{"voter_id", "voterId"}
+	typ := reflect.TypeOf(svcDTO)
+	for i := range typ.NumField() {
+		field := typ.Field(i)
+		name := strings.ToLower(field.Name)
+		if strings.Contains(name, "voterid") || strings.Contains(name, "voter_id") {
+			t.Errorf("ANONYMITY VIOLATION: VotingProgress.%s exposes voter identity", field.Name)
+		}
+		jsonTag := field.Tag.Get("json")
+		for _, forbidden := range forbiddenFields {
+			if strings.Contains(jsonTag, forbidden) {
+				t.Errorf("ANONYMITY VIOLATION: VotingProgress.%s has json tag containing %q", field.Name, forbidden)
+			}
+		}
+	}
+}
+
+// TestAnonymity_ServiceSourceNoVoterInResponse scans service-level source files
+// for voter_id appearing in response struct json tags (not in DB query params).
+func TestAnonymity_ServiceSourceNoVoterInResponse(t *testing.T) {
+	serviceDirs := []string{
+		"../../service/reveal",
+		"../../service/voting",
+		"../../service/achievements",
+		"../../service/profile",
+		"../../service/reactions",
+	}
+
+	for _, dir := range serviceDirs {
+		absDir, err := filepath.Abs(dir)
+		if err != nil {
+			t.Fatalf("failed to resolve %s: %v", dir, err)
+		}
+
+		entries, err := os.ReadDir(absDir)
+		if err != nil {
+			continue // service may not exist yet
+		}
+
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".go") || strings.HasSuffix(entry.Name(), "_test.go") {
+				continue
+			}
+
+			path := filepath.Join(absDir, entry.Name())
+			content, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatalf("failed to read %s: %v", path, err)
+			}
+
+			src := string(content)
+			relPath := filepath.Join(filepath.Base(absDir), entry.Name())
+
+			// voter_id in json struct tags means it would be serialized to API responses
+			if strings.Contains(src, `json:"voter_id"`) {
+				t.Errorf("ANONYMITY VIOLATION in %s: contains json:\"voter_id\" struct tag — voter identity must not be exposed in API responses", relPath)
+			}
+			if strings.Contains(src, `json:"voterId"`) {
+				t.Errorf("ANONYMITY VIOLATION in %s: contains json:\"voterId\" struct tag — voter identity must not be exposed in API responses", relPath)
+			}
 		}
 	}
 }

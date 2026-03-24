@@ -175,6 +175,10 @@ func main() {
 		}
 	}
 
+	// Well-known routes (Universal Links / App Links)
+	e.GET("/.well-known/apple-app-site-association", wellKnownApple)
+	e.GET("/.well-known/assetlinks.json", wellKnownAndroid)
+
 	// Routes
 	api := e.Group("/api/v1")
 	api.GET("/health", healthHandler(pool, rdb))
@@ -307,6 +311,36 @@ func healthHandler(pool *pgxpool.Pool, rdb *redis.Client) echo.HandlerFunc {
 			},
 		})
 	}
+}
+
+func wellKnownApple(c echo.Context) error {
+	return c.JSON(http.StatusOK, map[string]any{
+		"applinks": map[string]any{
+			"apps":    []string{},
+			"details": []map[string]any{
+				{
+					"appID": "3GWRDGA8B7.app.repa.repa",
+					"paths": []string{"/join/*", "/invite/*"},
+				},
+			},
+		},
+	})
+}
+
+func wellKnownAndroid(c echo.Context) error {
+	return c.JSON(http.StatusOK, []map[string]any{
+		{
+			"relation": []string{"delegate_permission/common.handle_all_urls"},
+			"target": map[string]any{
+				"namespace":              "android_app",
+				"package_name":           "app.repa.repa",
+				"sha256_cert_fingerprints": []string{
+					"86:20:33:3D:E5:38:74:C5:79:72:03:41:46:39:FE:AA:B8:FC:3A:29:45:FA:BC:95:C0:0D:23:87:AC:02:87:A3",
+					"91:34:01:79:20:DD:10:5F:08:86:24:AD:71:2B:80:57:DA:5B:CD:57:45:5E:82:BE:51:F5:98:77:09:4C:E2:5C",
+				},
+			},
+		},
+	})
 }
 
 func startWorker(cfg *config.Config, revealSvc *revealsvc.Service, achieveSvc *achievesvc.Service, cardsSvc *cardssvc.Service, pushSvc *pushsvc.Service, telegramSvc *telegramsvc.Service, asynqClient *asynq.Client) {

@@ -1,0 +1,7 @@
+bin/
+*.md
+.env
+.env.*
+!.env.example
+**/*_test.go
+.git

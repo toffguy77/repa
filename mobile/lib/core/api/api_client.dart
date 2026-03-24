@@ -1,7 +1,8 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-const String apiBaseUrl = 'http://localhost:3000/api/v1';
+import 'env.dart';
+
 const String tokenKey = 'auth_token';
 
 class AppException implements Exception {
@@ -16,7 +17,7 @@ class AppException implements Exception {
 
 Dio createDio(FlutterSecureStorage storage, void Function() onUnauthorized) {
   final dio = Dio(BaseOptions(
-    baseUrl: apiBaseUrl,
+    baseUrl: Env.apiBaseUrl,
     connectTimeout: const Duration(seconds: 10),
     receiveTimeout: const Duration(seconds: 10),
     headers: {'Content-Type': 'application/json'},

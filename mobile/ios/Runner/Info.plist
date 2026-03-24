@@ -56,15 +56,16 @@
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>
-		<string>UIInterfaceOrientationPortraitUpsideDown</string>
-		<string>UIInterfaceOrientationLandscapeLeft</string>
-		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Репа использует камеру для фото профиля</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Репа использует фото для аватара профиля</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Репа сохраняет карточку репутации в галерею</string>
 </dict>
 </plist>

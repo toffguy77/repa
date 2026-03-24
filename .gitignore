@@ -19,6 +19,7 @@ mobile/.dart_tool/
 mobile/build/
 
 # iOS
+mobile/ios/Runner/GoogleService-Info.plist
 mobile/ios/Pods/
 mobile/ios/.symlinks/
 mobile/ios/Flutter/Flutter.framework
@@ -34,8 +35,12 @@ mobile/android/.gradle/
 mobile/android/app/build/
 mobile/android/local.properties
 mobile/android/**/GeneratedPluginRegistrant.java
+mobile/android/app/google-services.json
+mobile/android/key.properties
 *.apk
 *.aab
+*.jks
+*.keystore
 
 # Environment
 .env
