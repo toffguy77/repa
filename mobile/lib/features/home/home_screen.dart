@@ -155,23 +155,45 @@ class _ProfileTab extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final authState = ref.watch(authProvider);
+    final user = authState.user;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Профиль')),
+      appBar: AppBar(
+        title: const Text('Профиль'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () => context.push('/settings'),
+            tooltip: 'Настройки',
+          ),
+        ],
+      ),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text('\u{1F351}', style: TextStyle(fontSize: 64)),
-            const SizedBox(height: 16),
-            Text('Скоро здесь будет профиль', style: AppTextStyles.caption),
-            const SizedBox(height: 32),
-            OutlinedButton(
-              onPressed: () => ref.read(authProvider.notifier).logout(),
-              child: Text(
-                'Выйти',
-                style: TextStyle(color: AppColors.error),
-              ),
+            CircleAvatar(
+              radius: 40,
+              backgroundColor: AppColors.primaryLight,
+              backgroundImage: user?.avatarUrl != null
+                  ? NetworkImage(user!.avatarUrl!)
+                  : null,
+              child: user?.avatarUrl == null
+                  ? Text(
+                      user?.avatarEmoji ?? '\u{1F351}',
+                      style: const TextStyle(fontSize: 40),
+                    )
+                  : null,
             ),
+            const SizedBox(height: 16),
+            Text(
+              user?.username ?? '',
+              style: AppTextStyles.headline2,
+            ),
+            const SizedBox(height: 4),
+            Text('Скоро здесь будет полный профиль',
+                style: AppTextStyles.caption),
           ],
         ),
       ),

@@ -20,6 +20,7 @@ import '../../features/crystals/presentation/crystals_shop_screen.dart';
 import '../../features/telegram/presentation/telegram_setup_screen.dart';
 import '../../features/onboarding/presentation/onboarding_screen.dart';
 import '../../features/question_vote/presentation/question_vote_screen.dart';
+import '../../features/settings/presentation/settings_screen.dart';
 
 const _pendingInviteCodeKey = 'pending_invite_code';
 
@@ -285,6 +286,13 @@ final routerProvider = Provider<GoRouter>((ref) {
             ],
           ),
         ],
+      ),
+
+      // Settings — slide from right
+      GoRoute(
+        path: '/settings',
+        pageBuilder: (context, state) =>
+            _slideFromRight(state, const SettingsScreen()),
       ),
 
       // Shop — slide from bottom (modal)

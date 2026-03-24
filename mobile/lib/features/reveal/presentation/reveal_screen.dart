@@ -13,6 +13,7 @@ import '../../../core/theme/app_text_styles.dart';
 import '../../groups/presentation/groups_notifier.dart';
 import '../../telegram/presentation/telegram_notifier.dart';
 import '../domain/reveal.dart';
+import '../../../core/analytics/analytics_service.dart';
 import 'reveal_notifier.dart';
 import 'widgets/achievement_popup.dart';
 import 'widgets/detector_sheet.dart';
@@ -43,6 +44,7 @@ class _RevealScreenState extends ConsumerState<RevealScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(analyticsProvider).logRevealOpened(widget.groupId);
       ref.read(revealProvider(_args).notifier).load();
     });
   }

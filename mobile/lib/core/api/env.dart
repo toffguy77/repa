@@ -1,6 +1,9 @@
+import '../config/app_config.dart';
+
 class Env {
-  static const apiBaseUrl = String.fromEnvironment(
-    'API_BASE_URL',
-    defaultValue: 'http://localhost:3000/api/v1',
-  );
+  static const _flavor = String.fromEnvironment('FLAVOR', defaultValue: 'dev');
+  static final config = AppConfig.fromFlavor(_flavor);
+
+  static String get apiBaseUrl => config.apiBaseUrl;
+  static String get appUrl => config.appUrl;
 }

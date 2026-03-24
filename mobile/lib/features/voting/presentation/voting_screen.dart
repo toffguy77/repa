@@ -6,6 +6,7 @@ import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/error_state_widget.dart';
 import '../../../core/widgets/skeleton_loader.dart';
 import '../../voting/domain/voting.dart';
+import '../../../core/analytics/analytics_service.dart';
 import 'voting_notifier.dart';
 import 'widgets/question_card.dart';
 import 'widgets/participant_card.dart';
@@ -29,6 +30,7 @@ class _VotingScreenState extends ConsumerState<VotingScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(analyticsProvider).logVotingStarted(widget.groupId);
       ref.read(votingProvider(widget.seasonId).notifier).loadSession();
     });
   }

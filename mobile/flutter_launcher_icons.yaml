@@ -1,0 +1,10 @@
+flutter_launcher_icons:
+  android: true
+  ios: true
+  # TODO: Create assets/icon/icon.png — 1024x1024 PNG
+  #   Background: dark purple #1A0533
+  #   Foreground: eggplant emoji or SVG illustration centered
+  image_path: "assets/icon/icon.png"
+  adaptive_icon_background: "#1A0533"
+  # TODO: Create assets/icon/icon_foreground.png — eggplant on transparent background
+  adaptive_icon_foreground: "assets/icon/icon_foreground.png"

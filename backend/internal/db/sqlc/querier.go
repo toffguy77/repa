@@ -14,10 +14,14 @@ type Querier interface {
 	AddGroupMember(ctx context.Context, arg AddGroupMemberParams) (GroupMember, error)
 	AddSeasonQuestion(ctx context.Context, arg AddSeasonQuestionParams) (SeasonQuestion, error)
 	AggregateVotesByTarget(ctx context.Context, seasonID string) ([]AggregateVotesByTargetRow, error)
+	CountActiveUsers30Days(ctx context.Context) (int64, error)
+	CountActiveUsers7Days(ctx context.Context) (int64, error)
 	CountCompletedVoters(ctx context.Context, arg CountCompletedVotersParams) (int64, error)
 	CountGroupMembers(ctx context.Context, groupID string) (int64, error)
+	CountGroups(ctx context.Context) (int64, error)
 	CountMembersJoinedAfterUser(ctx context.Context, arg CountMembersJoinedAfterUserParams) (int64, error)
 	CountNextSeasonVotesByQuestion(ctx context.Context, arg CountNextSeasonVotesByQuestionParams) ([]CountNextSeasonVotesByQuestionRow, error)
+	CountReports(ctx context.Context) (int64, error)
 	CountSeasonQuestions(ctx context.Context, seasonID string) (int64, error)
 	CountSeasonVoters(ctx context.Context, seasonID string) (int64, error)
 	CountUniqueVoters(ctx context.Context, seasonID string) (int64, error)
@@ -72,6 +76,7 @@ type Querier interface {
 	GetRandomSystemQuestions(ctx context.Context, limit int32) ([]Question, error)
 	GetRandomSystemQuestionsByCategories(ctx context.Context, arg GetRandomSystemQuestionsByCategoriesParams) ([]Question, error)
 	GetReactionsForUser(ctx context.Context, arg GetReactionsForUserParams) ([]GetReactionsForUserRow, error)
+	GetReportByID(ctx context.Context, id string) (GetReportByIDRow, error)
 	GetRevealedSeasonsForGroup(ctx context.Context, groupID string) ([]Season, error)
 	GetSeasonAchievements(ctx context.Context, seasonID sql.NullString) ([]Achievement, error)
 	GetSeasonByID(ctx context.Context, id string) (Season, error)
@@ -115,8 +120,10 @@ type Querier interface {
 	HealthCheck(ctx context.Context) (int32, error)
 	IsGroupMember(ctx context.Context, arg IsGroupMemberParams) (int64, error)
 	IsPushEnabled(ctx context.Context, arg IsPushEnabledParams) (interface{}, error)
+	ListReports(ctx context.Context, arg ListReportsParams) ([]ListReportsRow, error)
 	RemoveGroupMember(ctx context.Context, arg RemoveGroupMemberParams) error
 	SetGroupConnectCode(ctx context.Context, arg SetGroupConnectCodeParams) error
+	SumRevenue7Days(ctx context.Context) (int64, error)
 	UpdateGroupAdmin(ctx context.Context, arg UpdateGroupAdminParams) error
 	UpdateGroupInviteCode(ctx context.Context, arg UpdateGroupInviteCodeParams) error
 	UpdateGroupName(ctx context.Context, arg UpdateGroupNameParams) error

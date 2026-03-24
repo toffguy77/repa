@@ -24,6 +24,7 @@ import (
 	reactionshandler "github.com/repa-app/repa/internal/handler/reactions"
 	revealhandler "github.com/repa-app/repa/internal/handler/reveal"
 	telegramhandler "github.com/repa-app/repa/internal/handler/telegram"
+	adminhandler "github.com/repa-app/repa/internal/handler/admin"
 	votinghandler "github.com/repa-app/repa/internal/handler/voting"
 	"github.com/repa-app/repa/internal/lib"
 	appmw "github.com/repa-app/repa/internal/middleware"
@@ -253,6 +254,13 @@ func main() {
 	// Next-season question voting
 	protected.GET("/groups/:id/next-season/question-candidates", pushHandler.GetQuestionCandidates)
 	protected.POST("/groups/:id/next-season/vote-question", pushHandler.VoteQuestion)
+
+	// Admin routes (Basic Auth)
+	adminHandler := adminhandler.NewHandler(queries, cfg.AdminUsername, cfg.AdminPassword)
+	admin := api.Group("/admin", adminHandler.BasicAuth)
+	admin.GET("/reports", adminHandler.ListReports)
+	admin.PATCH("/reports/:id", adminHandler.ResolveReport)
+	admin.GET("/stats", adminHandler.GetStats)
 
 	// Telegram routes
 	if telegramHandler != nil {

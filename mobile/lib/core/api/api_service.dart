@@ -197,6 +197,22 @@ class ApiService {
     return response.data as Map<String, dynamic>;
   }
 
+  Future<Map<String, dynamic>> updatePushPreferences(
+      String category, bool enabled) async {
+    final response = await _dio.patch('/push/preferences', data: {
+      'category': category,
+      'enabled': enabled,
+    });
+    return response.data as Map<String, dynamic>;
+  }
+
+  // --- Account ---
+
+  Future<Map<String, dynamic>> deleteAccount() async {
+    final response = await _dio.delete('/auth/account');
+    return response.data as Map<String, dynamic>;
+  }
+
   // --- Reactions ---
 
   Future<Map<String, dynamic>> createReaction(

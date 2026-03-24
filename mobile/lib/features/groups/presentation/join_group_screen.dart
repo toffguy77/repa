@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/analytics/analytics_service.dart';
 import 'groups_notifier.dart';
 
 class JoinGroupScreen extends ConsumerStatefulWidget {
@@ -55,6 +56,7 @@ class _JoinGroupScreenState extends ConsumerState<JoinGroupScreen> {
         .read(joinGroupProvider.notifier)
         .join(_controller.text);
     if (group != null && mounted) {
+      ref.read(analyticsProvider).logGroupJoined();
       ref.read(groupsListProvider.notifier).refresh();
       context.go('/groups/${group.id}');
     }

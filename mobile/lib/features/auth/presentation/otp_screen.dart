@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pinput/pinput.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/analytics/analytics_service.dart';
 import 'auth_notifier.dart';
 
 class OtpScreen extends ConsumerStatefulWidget {
@@ -54,8 +55,11 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
   }
 
   Future<void> _verify(String code) async {
-    await ref.read(otpVerifyProvider.notifier).verify(widget.phone, code);
-    // Navigation is handled by router redirect on auth state change
+    final success =
+        await ref.read(otpVerifyProvider.notifier).verify(widget.phone, code);
+    if (success) {
+      ref.read(analyticsProvider).logLogin('phone');
+    }
   }
 
   Future<void> _resend() async {

@@ -6,6 +6,7 @@ import 'package:share_plus/share_plus.dart';
 import '../../../core/providers/auth_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/analytics/analytics_service.dart';
 import 'groups_notifier.dart';
 
 const _allCategories = [
@@ -48,6 +49,7 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
           telegramUsername: _telegramController.text.trim().replaceAll('@', ''),
         );
     if (result != null && mounted) {
+      ref.read(analyticsProvider).logGroupCreated();
       ref.read(groupsListProvider.notifier).refresh();
       _showInviteSheet(result.inviteUrl);
     }
