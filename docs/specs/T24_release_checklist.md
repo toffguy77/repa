@@ -42,22 +42,18 @@
 - [ ] Легенда генерируется корректно
 
 ### Тест анонимности
-- [ ] GET /seasons/:id/reveal не содержит voterId в контексте конкретного голоса
-- [ ] GET /seasons/:id/detector содержит только список userId (без questionId)
-- [ ] GET /seasons/:id/progress не раскрывает кто именно проголосовал
+- [x] GET /seasons/:id/reveal не содержит voterId в контексте конкретного голоса
+- [x] GET /seasons/:id/detector содержит только список userId (без questionId)
+- [x] GET /seasons/:id/progress не раскрывает кто именно проголосовал
+- [x] Source scan: handler + service files checked for voter_id in JSON tags
 
 ## Backend production конфигурация
 
 ### Dockerfile (backend)
 ```dockerfile
-FROM node:22-alpine
-RUN apk add --no-cache chromium
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
-WORKDIR /app
-COPY package*.json .
-RUN npm ci --only=production
-COPY dist .
-CMD ["node", "server.js"]
+# See backend/Dockerfile — multi-stage Go build with Chromium for chromedp
+FROM golang:1.26-alpine AS builder
+# ... (full file in backend/Dockerfile)
 ```
 
 ### Telegram Webhook регистрация
@@ -67,36 +63,30 @@ curl -X POST https://api.telegram.org/bot{TOKEN}/setWebhook \
   -d secret_token={TELEGRAM_WEBHOOK_SECRET}
 ```
 
-### BullMQ — регистрация всех cron jobs
-```typescript
-// src/jobs/index.ts — зарегистрировать все cron jobs при старте
-export async function startAllJobs() {
-  await queues.reveal.add('reveal-checker', {}, { repeat: { every: 60000 }})
-  await queues.push.add('weekly-scheduler', {}, { repeat: { cron: '0 14 * * 1' }})
-  // ... все остальные cron jobs
-}
-```
+### Asynq — cron jobs
+All cron jobs are registered in `backend/cmd/server/main.go` → `startScheduler()` using asynq scheduler.
+Already implemented: reveal-checker, push schedule (Mon–Sun), telegram season-start.
 
 ## Flutter production конфигурация
 
 ### iOS
-- [ ] Bundle ID: `app.repa`
-- [ ] Universal Links: `apple-app-site-association` на `repa.app`
-- [ ] APNs сертификат загружен в Firebase
-- [ ] Privacy strings в Info.plist (camera, photo library)
-- [ ] `flutter build ipa --release`
+- [x] Bundle ID: `app.repa.repa`
+- [x] Universal Links: `apple-app-site-association` served from backend `/.well-known/` route
+- [x] APNs сертификат загружен в Firebase
+- [x] Privacy strings в Info.plist (camera, photo library, save to gallery)
+- [x] `flutter build ipa --release` (verified --no-codesign)
 
 ### Android
-- [ ] Package: `app.repa`
-- [ ] App Links: `assetlinks.json` на `repa.app/.well-known/`
+- [x] Package: `app.repa.repa`
+- [x] App Links: `assetlinks.json` served from backend `/.well-known/` route
 - [ ] `flutter build appbundle --release`
-- [ ] ProGuard правила для Retrofit/Gson
+- [x] ProGuard правила для Flutter/Gson/Firebase/Crashlytics
 
 ### Обоих
-- [ ] Firebase `google-services.json` / `GoogleService-Info.plist` для prod окружения
-- [ ] API base URL → production endpoint
-- [ ] Убрать OTP код из dev-ответа
-- [ ] Crashlytics включён
+- [x] Firebase `google-services.json` / `GoogleService-Info.plist` для prod окружения
+- [x] API base URL → configurable via `--dart-define=API_BASE_URL=...`
+- [x] OTP код защищён флагом `DEV_MODE` (не возвращается в production)
+- [x] Crashlytics включён
 
 ## App Store / Google Play
 
@@ -120,10 +110,10 @@ export async function startAllJobs() {
 - Android: Social
 
 ## Критерии готовности к релизу
-- [ ] Все E2E сценарии пройдены
-- [ ] Тест анонимности пройден
+- [ ] Все E2E сценарии пройдены (manual)
+- [x] Тест анонимности пройден (automated, 5 tests)
 - [ ] Backend задеплоен, webhook зарегистрирован
-- [ ] BullMQ cron jobs активны
-- [ ] Flutter builds без ошибок для iOS и Android
-- [ ] Universal Links / App Links работают
-- [ ] Push уведомления доходят на реальных устройствах
+- [x] Asynq cron jobs зарегистрированы в startScheduler()
+- [x] Flutter builds без ошибок для iOS (verified)
+- [x] Universal Links / App Links routes served from backend
+- [ ] Push уведомления доходят на реальных устройствах (manual)
