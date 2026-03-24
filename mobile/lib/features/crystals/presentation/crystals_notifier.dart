@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/api/api_client.dart';
 import '../../../core/providers/api_provider.dart';
 import '../data/crystals_repository.dart';
 import '../domain/crystals.dart';
@@ -71,8 +72,10 @@ class CrystalsNotifier extends StateNotifier<CrystalsState> {
         packages: results[1] as List<CrystalPackage>,
         loading: false,
       );
-    } catch (e) {
-      state = state.copyWith(loading: false, error: e.toString());
+    } on AppException catch (e) {
+      state = state.copyWith(loading: false, error: e.message);
+    } catch (_) {
+      state = state.copyWith(loading: false, error: 'Не удалось загрузить данные');
     }
   }
 
@@ -100,8 +103,10 @@ class CrystalsNotifier extends StateNotifier<CrystalsState> {
 
       final uri = Uri.parse(result.paymentUrl);
       await launchUrl(uri, mode: LaunchMode.externalApplication);
-    } catch (e) {
-      state = state.copyWith(purchasing: false, error: e.toString());
+    } on AppException catch (e) {
+      state = state.copyWith(purchasing: false, error: e.message);
+    } catch (_) {
+      state = state.copyWith(purchasing: false, error: 'Не удалось начать покупку');
     }
   }
 

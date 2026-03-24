@@ -66,7 +66,10 @@ func (h *Handler) GetQuestionCandidates(c echo.Context) error {
 
 	// Verify membership
 	isMember, err := h.queries.IsGroupMember(ctx, db.IsGroupMemberParams{UserID: userID, GroupID: groupID})
-	if err != nil || isMember == 0 {
+	if err != nil {
+		return handler.ErrorResponse(c, http.StatusInternalServerError, "INTERNAL", "Failed to check membership")
+	}
+	if isMember == 0 {
 		return handler.ErrorResponse(c, http.StatusForbidden, "FORBIDDEN", "Not a group member")
 	}
 
@@ -105,7 +108,10 @@ func (h *Handler) VoteQuestion(c echo.Context) error {
 
 	// Verify membership
 	isMember, err := h.queries.IsGroupMember(ctx, db.IsGroupMemberParams{UserID: userID, GroupID: groupID})
-	if err != nil || isMember == 0 {
+	if err != nil {
+		return handler.ErrorResponse(c, http.StatusInternalServerError, "INTERNAL", "Failed to check membership")
+	}
+	if isMember == 0 {
 		return handler.ErrorResponse(c, http.StatusForbidden, "FORBIDDEN", "Not a group member")
 	}
 

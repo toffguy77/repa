@@ -278,5 +278,9 @@ func (s *Service) VerifyPurchase(ctx context.Context, userID, paymentID string) 
 
 func isDuplicateKeyError(err error) bool {
 	// PostgreSQL unique_violation error code 23505
+	var pgErr interface{ SQLState() string }
+	if errors.As(err, &pgErr) {
+		return pgErr.SQLState() == "23505"
+	}
 	return strings.Contains(err.Error(), "23505") || strings.Contains(err.Error(), "duplicate key")
 }

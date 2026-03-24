@@ -51,6 +51,7 @@ type Querier interface {
 	GetAdminUsername(ctx context.Context, id string) (string, error)
 	GetAllGroups(ctx context.Context) ([]Group, error)
 	GetAllGroupsWithMembers(ctx context.Context) ([]GetAllGroupsWithMembersRow, error)
+	GetAllSeasonResultsWithUsers(ctx context.Context, seasonID string) ([]GetAllSeasonResultsWithUsersRow, error)
 	GetAllVotingSeasons(ctx context.Context) ([]Season, error)
 	GetCardCache(ctx context.Context, arg GetCardCacheParams) (CardCache, error)
 	GetDetector(ctx context.Context, arg GetDetectorParams) (Detector, error)
@@ -101,6 +102,7 @@ type Querier interface {
 	GetUserFCMTokens(ctx context.Context, userID string) ([]FcmToken, error)
 	GetUserGroupStats(ctx context.Context, arg GetUserGroupStatsParams) (UserGroupStat, error)
 	GetUserGroups(ctx context.Context, userID string) ([]Group, error)
+	GetUserGroupsWithStats(ctx context.Context, voterID string) ([]GetUserGroupsWithStatsRow, error)
 	GetUserProfileInfo(ctx context.Context, id string) (GetUserProfileInfoRow, error)
 	GetUserPushPreferences(ctx context.Context, userID string) ([]PushPreference, error)
 	GetUserSeasonHistory(ctx context.Context, arg GetUserSeasonHistoryParams) ([]GetUserSeasonHistoryRow, error)
@@ -114,6 +116,7 @@ type Querier interface {
 	HasAchievementInGroup(ctx context.Context, arg HasAchievementInGroupParams) (int64, error)
 	HasDetector(ctx context.Context, arg HasDetectorParams) (bool, error)
 	HasNextSeasonVote(ctx context.Context, arg HasNextSeasonVoteParams) (int64, error)
+	HasQuestionBeenToppedInGroup(ctx context.Context, arg HasQuestionBeenToppedInGroupParams) (int64, error)
 	HasUserReported(ctx context.Context, arg HasUserReportedParams) (bool, error)
 	HasUserVotedInSeason(ctx context.Context, arg HasUserVotedInSeasonParams) (int64, error)
 	HasVoteForQuestion(ctx context.Context, arg HasVoteForQuestionParams) (int64, error)
@@ -121,6 +124,7 @@ type Querier interface {
 	IsGroupMember(ctx context.Context, arg IsGroupMemberParams) (int64, error)
 	IsPushEnabled(ctx context.Context, arg IsPushEnabledParams) (interface{}, error)
 	ListReports(ctx context.Context, arg ListReportsParams) ([]ListReportsRow, error)
+	LockUserForUpdate(ctx context.Context, id string) (string, error)
 	RemoveGroupMember(ctx context.Context, arg RemoveGroupMemberParams) error
 	SetGroupConnectCode(ctx context.Context, arg SetGroupConnectCodeParams) error
 	SumRevenue7Days(ctx context.Context) (int64, error)
@@ -133,6 +137,7 @@ type Querier interface {
 	UpdateSeasonStatus(ctx context.Context, arg UpdateSeasonStatusParams) error
 	UpdateUserAvatarURL(ctx context.Context, arg UpdateUserAvatarURLParams) (User, error)
 	UpdateUserProfile(ctx context.Context, arg UpdateUserProfileParams) (User, error)
+	UpdateUserProfileWithUsername(ctx context.Context, arg UpdateUserProfileWithUsernameParams) (User, error)
 	UpsertCardCache(ctx context.Context, arg UpsertCardCacheParams) (CardCache, error)
 	UpsertFCMToken(ctx context.Context, arg UpsertFCMTokenParams) (FcmToken, error)
 	UpsertPushPreference(ctx context.Context, arg UpsertPushPreferenceParams) (PushPreference, error)

@@ -49,7 +49,7 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
     if (birthYearText.isEmpty) return false;
     final birthYear = int.tryParse(birthYearText);
     final maxYear = DateTime.now().year - 14;
-    final minYear = DateTime.now().year - 22;
+    final minYear = DateTime.now().year - 100;
     if (birthYear == null || birthYear < minYear || birthYear > maxYear) return false;
     return true;
   }

@@ -478,16 +478,17 @@ type SeasonResult struct {
 }
 
 type User struct {
-	ID          string         `json:"id"`
-	Phone       sql.NullString `json:"phone"`
-	AppleID     sql.NullString `json:"apple_id"`
-	GoogleID    sql.NullString `json:"google_id"`
-	Username    string         `json:"username"`
-	AvatarUrl   sql.NullString `json:"avatar_url"`
-	AvatarEmoji sql.NullString `json:"avatar_emoji"`
-	BirthYear   sql.NullInt32  `json:"birth_year"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
+	ID                string         `json:"id"`
+	Phone             sql.NullString `json:"phone"`
+	AppleID           sql.NullString `json:"apple_id"`
+	GoogleID          sql.NullString `json:"google_id"`
+	Username          string         `json:"username"`
+	AvatarUrl         sql.NullString `json:"avatar_url"`
+	AvatarEmoji       sql.NullString `json:"avatar_emoji"`
+	BirthYear         sql.NullInt32  `json:"birth_year"`
+	CreatedAt         time.Time      `json:"created_at"`
+	UpdatedAt         time.Time      `json:"updated_at"`
+	UsernameChangedAt sql.NullTime   `json:"username_changed_at"`
 }
 
 type UserGroupStat struct {

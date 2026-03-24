@@ -12,8 +12,8 @@ import (
 )
 
 const countActiveUsers30Days = `-- name: CountActiveUsers30Days :one
-SELECT count(DISTINCT user_id) FROM group_members
-WHERE joined_at > NOW() - INTERVAL '30 days'
+SELECT count(DISTINCT voter_id) FROM votes
+WHERE created_at > NOW() - INTERVAL '30 days'
 `
 
 func (q *Queries) CountActiveUsers30Days(ctx context.Context) (int64, error) {
@@ -24,8 +24,8 @@ func (q *Queries) CountActiveUsers30Days(ctx context.Context) (int64, error) {
 }
 
 const countActiveUsers7Days = `-- name: CountActiveUsers7Days :one
-SELECT count(DISTINCT user_id) FROM group_members
-WHERE joined_at > NOW() - INTERVAL '7 days'
+SELECT count(DISTINCT voter_id) FROM votes
+WHERE created_at > NOW() - INTERVAL '7 days'
 `
 
 func (q *Queries) CountActiveUsers7Days(ctx context.Context) (int64, error) {

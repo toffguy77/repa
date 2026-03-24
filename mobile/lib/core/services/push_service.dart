@@ -25,7 +25,6 @@ class PushService {
   PushService(this._api, this._router);
 
   Future<void> init() async {
-    await Firebase.initializeApp();
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
     final settings = await FirebaseMessaging.instance.requestPermission(

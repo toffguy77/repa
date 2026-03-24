@@ -72,14 +72,13 @@ type AuthResult struct {
 
 func (s *Service) OTPSend(ctx context.Context, phone string) (string, error) {
 	rlKey := fmt.Sprintf("rl:otp:%s", phone)
-	count, err := s.rdb.Incr(ctx, rlKey).Result()
-	if err != nil {
+	pipe := s.rdb.TxPipeline()
+	incrCmd := pipe.Incr(ctx, rlKey)
+	pipe.Expire(ctx, rlKey, time.Hour)
+	if _, err := pipe.Exec(ctx); err != nil {
 		return "", err
 	}
-	if count == 1 {
-		s.rdb.Expire(ctx, rlKey, time.Hour)
-	}
-	if count > 3 {
+	if incrCmd.Val() > 3 {
 		return "", ErrOTPRateLimit
 	}
 
@@ -90,10 +89,14 @@ func (s *Service) OTPSend(ctx context.Context, phone string) (string, error) {
 	code := fmt.Sprintf("%06d", n.Int64())
 
 	otpKey := fmt.Sprintf("otp:%s", phone)
-	s.rdb.Set(ctx, otpKey, code, 5*time.Minute)
+	if err := s.rdb.Set(ctx, otpKey, code, 5*time.Minute).Err(); err != nil {
+		return "", fmt.Errorf("store OTP in redis: %w", err)
+	}
 
 	attKey := fmt.Sprintf("otp-attempts:%s", phone)
-	s.rdb.Del(ctx, attKey)
+	if err := s.rdb.Del(ctx, attKey).Err(); err != nil {
+		return "", fmt.Errorf("clear OTP attempts in redis: %w", err)
+	}
 
 	if s.devMode {
 		return code, nil
@@ -103,14 +106,13 @@ func (s *Service) OTPSend(ctx context.Context, phone string) (string, error) {
 
 func (s *Service) OTPVerify(ctx context.Context, phone, code string) (*AuthResult, error) {
 	attKey := fmt.Sprintf("otp-attempts:%s", phone)
-	attempts, err := s.rdb.Incr(ctx, attKey).Result()
-	if err != nil {
+	pipe := s.rdb.TxPipeline()
+	attCmd := pipe.Incr(ctx, attKey)
+	pipe.Expire(ctx, attKey, 5*time.Minute)
+	if _, err := pipe.Exec(ctx); err != nil {
 		return nil, err
 	}
-	if attempts == 1 {
-		s.rdb.Expire(ctx, attKey, 5*time.Minute)
-	}
-	if attempts > 5 {
+	if attCmd.Val() > 5 {
 		return nil, ErrOTPBlocked
 	}
 
@@ -120,8 +122,8 @@ func (s *Service) OTPVerify(ctx context.Context, phone, code string) (*AuthResul
 		return nil, ErrInvalidOTP
 	}
 
-	s.rdb.Del(ctx, otpKey)
-	s.rdb.Del(ctx, attKey)
+	_ = s.rdb.Del(ctx, otpKey)
+	_ = s.rdb.Del(ctx, attKey)
 
 	return s.upsertByPhone(ctx, phone)
 }
@@ -220,6 +222,15 @@ func (s *Service) AppleAuth(ctx context.Context, idToken string) (*AuthResult, e
 	if !ok {
 		return nil, ErrInvalidToken
 	}
+
+	// Validate issuer and audience per Apple's ID token spec
+	iss, _ := claims["iss"].(string)
+	if iss != "https://appleid.apple.com" {
+		return nil, ErrInvalidToken
+	}
+	// TODO: set APPLE_BUNDLE_ID env var and validate aud claim
+	// aud, _ := claims["aud"].(string)
+	// if aud != expectedBundleID { return nil, ErrInvalidToken }
 
 	sub, _ := claims["sub"].(string)
 	if sub == "" {
@@ -369,11 +380,13 @@ func (s *Service) UpdateProfile(ctx context.Context, userID string, params Updat
 	}
 
 	newUsername := user.Username
+	usernameChanged := false
 	if params.Username != nil && *params.Username != user.Username {
 		if !usernameRegex.MatchString(*params.Username) {
 			return db.User{}, ErrInvalidUsername
 		}
-		if time.Since(user.UpdatedAt) < 30*24*time.Hour {
+		cooldownRef := user.UsernameChangedAt
+		if cooldownRef.Valid && time.Since(cooldownRef.Time) < 30*24*time.Hour {
 			return db.User{}, ErrUsernameRecent
 		}
 		existing, err := s.queries.GetUserByUsername(ctx, *params.Username)
@@ -384,6 +397,7 @@ func (s *Service) UpdateProfile(ctx context.Context, userID string, params Updat
 			return db.User{}, ErrUsernameTaken
 		}
 		newUsername = *params.Username
+		usernameChanged = true
 	}
 
 	newEmoji := user.AvatarEmoji
@@ -394,6 +408,16 @@ func (s *Service) UpdateProfile(ctx context.Context, userID string, params Updat
 	newBirthYear := user.BirthYear
 	if params.BirthYear != nil {
 		newBirthYear = sql.NullInt32{Int32: int32(*params.BirthYear), Valid: true}
+	}
+
+	if usernameChanged {
+		return s.queries.UpdateUserProfileWithUsername(ctx, db.UpdateUserProfileWithUsernameParams{
+			ID:          userID,
+			Username:    newUsername,
+			AvatarEmoji: newEmoji,
+			AvatarUrl:   user.AvatarUrl,
+			BirthYear:   newBirthYear,
+		})
 	}
 
 	return s.queries.UpdateUserProfile(ctx, db.UpdateUserProfileParams{

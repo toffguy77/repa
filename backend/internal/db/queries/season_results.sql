@@ -36,3 +36,22 @@ LIMIT 1;
 SELECT COALESCE(MAX(sr.percentage), 0)::float as max_pct
 FROM season_results sr
 WHERE sr.season_id = $1 AND sr.target_id = $2;
+
+-- name: GetAllSeasonResultsWithUsers :many
+SELECT sr.target_id, sr.question_id, sr.vote_count, sr.percentage,
+  q.text as question_text, q.category as question_category,
+  u.username, u.avatar_emoji, u.avatar_url
+FROM season_results sr
+JOIN questions q ON q.id = sr.question_id
+JOIN users u ON u.id = sr.target_id
+WHERE sr.season_id = $1
+ORDER BY sr.target_id, sr.percentage DESC;
+
+-- name: HasQuestionBeenToppedInGroup :one
+SELECT COUNT(*) FROM season_results sr
+JOIN seasons s ON s.id = sr.season_id
+WHERE s.group_id = $1 AND sr.question_id = $2 AND sr.season_id != $3
+AND sr.percentage = (
+  SELECT MAX(sr2.percentage) FROM season_results sr2
+  WHERE sr2.season_id = sr.season_id AND sr2.question_id = sr.question_id
+);

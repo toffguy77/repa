@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/api/api_client.dart';
 import '../../../core/providers/api_provider.dart';
 import '../data/reveal_repository.dart';
 import '../domain/reveal.dart';
@@ -79,10 +80,15 @@ class RevealNotifier extends StateNotifier<RevealState> {
 
       // Fetch card URL in background
       _loadCardUrl();
-    } catch (e) {
+    } on AppException catch (e) {
       state = state.copyWith(
         phase: RevealPhase.waiting,
-        error: e.toString(),
+        error: e.message,
+      );
+    } catch (_) {
+      state = state.copyWith(
+        phase: RevealPhase.waiting,
+        error: 'Не удалось загрузить данные',
       );
     }
   }
@@ -111,10 +117,15 @@ class RevealNotifier extends StateNotifier<RevealState> {
     try {
       final data = await _repo.openHidden(seasonId);
       state = state.copyWith(data: data, unlockingHidden: false);
-    } catch (e) {
+    } on AppException catch (e) {
       state = state.copyWith(
         unlockingHidden: false,
-        error: e.toString(),
+        error: e.message,
+      );
+    } catch (_) {
+      state = state.copyWith(
+        unlockingHidden: false,
+        error: 'Не удалось открыть атрибуты',
       );
     }
   }
@@ -133,10 +144,15 @@ class RevealNotifier extends StateNotifier<RevealState> {
     try {
       final result = await _repo.buyDetector(seasonId);
       state = state.copyWith(detector: result, buyingDetector: false);
-    } catch (e) {
+    } on AppException catch (e) {
       state = state.copyWith(
         buyingDetector: false,
-        error: e.toString(),
+        error: e.message,
+      );
+    } catch (_) {
+      state = state.copyWith(
+        buyingDetector: false,
+        error: 'Не удалось купить детектор',
       );
     }
   }

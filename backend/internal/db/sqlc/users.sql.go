@@ -12,7 +12,7 @@ import (
 
 const createUser = `-- name: CreateUser :one
 INSERT INTO users (id, phone, apple_id, google_id, username, avatar_emoji, birth_year)
-VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, phone, apple_id, google_id, username, avatar_url, avatar_emoji, birth_year, created_at, updated_at
+VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, phone, apple_id, google_id, username, avatar_url, avatar_emoji, birth_year, created_at, updated_at, username_changed_at
 `
 
 type CreateUserParams struct {
@@ -47,6 +47,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.BirthYear,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UsernameChangedAt,
 	)
 	return i, err
 }
@@ -61,7 +62,7 @@ func (q *Queries) DeleteUser(ctx context.Context, id string) error {
 }
 
 const getUserByAppleID = `-- name: GetUserByAppleID :one
-SELECT id, phone, apple_id, google_id, username, avatar_url, avatar_emoji, birth_year, created_at, updated_at FROM users WHERE apple_id = $1
+SELECT id, phone, apple_id, google_id, username, avatar_url, avatar_emoji, birth_year, created_at, updated_at, username_changed_at FROM users WHERE apple_id = $1
 `
 
 func (q *Queries) GetUserByAppleID(ctx context.Context, appleID sql.NullString) (User, error) {
@@ -78,12 +79,13 @@ func (q *Queries) GetUserByAppleID(ctx context.Context, appleID sql.NullString) 
 		&i.BirthYear,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UsernameChangedAt,
 	)
 	return i, err
 }
 
 const getUserByGoogleID = `-- name: GetUserByGoogleID :one
-SELECT id, phone, apple_id, google_id, username, avatar_url, avatar_emoji, birth_year, created_at, updated_at FROM users WHERE google_id = $1
+SELECT id, phone, apple_id, google_id, username, avatar_url, avatar_emoji, birth_year, created_at, updated_at, username_changed_at FROM users WHERE google_id = $1
 `
 
 func (q *Queries) GetUserByGoogleID(ctx context.Context, googleID sql.NullString) (User, error) {
@@ -100,12 +102,13 @@ func (q *Queries) GetUserByGoogleID(ctx context.Context, googleID sql.NullString
 		&i.BirthYear,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UsernameChangedAt,
 	)
 	return i, err
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, phone, apple_id, google_id, username, avatar_url, avatar_emoji, birth_year, created_at, updated_at FROM users WHERE id = $1
+SELECT id, phone, apple_id, google_id, username, avatar_url, avatar_emoji, birth_year, created_at, updated_at, username_changed_at FROM users WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id string) (User, error) {
@@ -122,12 +125,13 @@ func (q *Queries) GetUserByID(ctx context.Context, id string) (User, error) {
 		&i.BirthYear,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UsernameChangedAt,
 	)
 	return i, err
 }
 
 const getUserByPhone = `-- name: GetUserByPhone :one
-SELECT id, phone, apple_id, google_id, username, avatar_url, avatar_emoji, birth_year, created_at, updated_at FROM users WHERE phone = $1
+SELECT id, phone, apple_id, google_id, username, avatar_url, avatar_emoji, birth_year, created_at, updated_at, username_changed_at FROM users WHERE phone = $1
 `
 
 func (q *Queries) GetUserByPhone(ctx context.Context, phone sql.NullString) (User, error) {
@@ -144,12 +148,13 @@ func (q *Queries) GetUserByPhone(ctx context.Context, phone sql.NullString) (Use
 		&i.BirthYear,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UsernameChangedAt,
 	)
 	return i, err
 }
 
 const getUserByUsername = `-- name: GetUserByUsername :one
-SELECT id, phone, apple_id, google_id, username, avatar_url, avatar_emoji, birth_year, created_at, updated_at FROM users WHERE username = $1
+SELECT id, phone, apple_id, google_id, username, avatar_url, avatar_emoji, birth_year, created_at, updated_at, username_changed_at FROM users WHERE username = $1
 `
 
 func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User, error) {
@@ -166,12 +171,13 @@ func (q *Queries) GetUserByUsername(ctx context.Context, username string) (User,
 		&i.BirthYear,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UsernameChangedAt,
 	)
 	return i, err
 }
 
 const updateUserAvatarURL = `-- name: UpdateUserAvatarURL :one
-UPDATE users SET avatar_url = $2, updated_at = NOW() WHERE id = $1 RETURNING id, phone, apple_id, google_id, username, avatar_url, avatar_emoji, birth_year, created_at, updated_at
+UPDATE users SET avatar_url = $2, updated_at = NOW() WHERE id = $1 RETURNING id, phone, apple_id, google_id, username, avatar_url, avatar_emoji, birth_year, created_at, updated_at, username_changed_at
 `
 
 type UpdateUserAvatarURLParams struct {
@@ -193,13 +199,14 @@ func (q *Queries) UpdateUserAvatarURL(ctx context.Context, arg UpdateUserAvatarU
 		&i.BirthYear,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UsernameChangedAt,
 	)
 	return i, err
 }
 
 const updateUserProfile = `-- name: UpdateUserProfile :one
 UPDATE users SET username = $2, avatar_emoji = $3, avatar_url = $4,
-  birth_year = $5, updated_at = NOW() WHERE id = $1 RETURNING id, phone, apple_id, google_id, username, avatar_url, avatar_emoji, birth_year, created_at, updated_at
+  birth_year = $5, updated_at = NOW() WHERE id = $1 RETURNING id, phone, apple_id, google_id, username, avatar_url, avatar_emoji, birth_year, created_at, updated_at, username_changed_at
 `
 
 type UpdateUserProfileParams struct {
@@ -230,6 +237,45 @@ func (q *Queries) UpdateUserProfile(ctx context.Context, arg UpdateUserProfilePa
 		&i.BirthYear,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.UsernameChangedAt,
+	)
+	return i, err
+}
+
+const updateUserProfileWithUsername = `-- name: UpdateUserProfileWithUsername :one
+UPDATE users SET username = $2, avatar_emoji = $3, avatar_url = $4,
+  birth_year = $5, username_changed_at = NOW(), updated_at = NOW() WHERE id = $1 RETURNING id, phone, apple_id, google_id, username, avatar_url, avatar_emoji, birth_year, created_at, updated_at, username_changed_at
+`
+
+type UpdateUserProfileWithUsernameParams struct {
+	ID          string         `json:"id"`
+	Username    string         `json:"username"`
+	AvatarEmoji sql.NullString `json:"avatar_emoji"`
+	AvatarUrl   sql.NullString `json:"avatar_url"`
+	BirthYear   sql.NullInt32  `json:"birth_year"`
+}
+
+func (q *Queries) UpdateUserProfileWithUsername(ctx context.Context, arg UpdateUserProfileWithUsernameParams) (User, error) {
+	row := q.db.QueryRowContext(ctx, updateUserProfileWithUsername,
+		arg.ID,
+		arg.Username,
+		arg.AvatarEmoji,
+		arg.AvatarUrl,
+		arg.BirthYear,
+	)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Phone,
+		&i.AppleID,
+		&i.GoogleID,
+		&i.Username,
+		&i.AvatarUrl,
+		&i.AvatarEmoji,
+		&i.BirthYear,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.UsernameChangedAt,
 	)
 	return i, err
 }

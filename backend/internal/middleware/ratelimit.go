@@ -22,16 +22,14 @@ func RateLimit(rdb *redis.Client, key string, limit int, window time.Duration) e
 			redisKey := fmt.Sprintf("rl:%s:%s", key, identifier)
 			ctx := c.Request().Context()
 
-			count, err := rdb.Incr(ctx, redisKey).Result()
-			if err != nil {
+			pipe := rdb.TxPipeline()
+			incrCmd := pipe.Incr(ctx, redisKey)
+			pipe.Expire(ctx, redisKey, window)
+			if _, err := pipe.Exec(ctx); err != nil {
 				return next(c)
 			}
 
-			if count == 1 {
-				rdb.Expire(ctx, redisKey, window)
-			}
-
-			if count > int64(limit) {
+			if incrCmd.Val() > int64(limit) {
 				return c.JSON(http.StatusTooManyRequests, map[string]any{
 					"error": map[string]string{
 						"code":    "RATE_LIMIT",

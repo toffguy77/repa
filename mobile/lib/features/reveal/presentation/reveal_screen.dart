@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../../core/providers/auth_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../crystals/presentation/crystals_notifier.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -342,6 +343,9 @@ class _RevealScreenState extends ConsumerState<RevealScreen> {
   }
 
   Widget _buildUserHeader(RevealData data) {
+    final user = ref.watch(authProvider).user;
+    final emoji = user?.avatarEmoji ?? '\u{1F346}';
+
     return Column(
       children: [
         Container(
@@ -353,7 +357,7 @@ class _RevealScreenState extends ConsumerState<RevealScreen> {
           ),
           child: Center(
             child: Text(
-              '\u{1F346}',
+              emoji,
               style: const TextStyle(fontSize: 40),
             ),
           ),

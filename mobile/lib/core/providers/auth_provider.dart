@@ -91,6 +91,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   Future<void> logout() async {
     final storage = _ref.read(secureStorageProvider);
     await storage.delete(key: tokenKey);
+    await storage.delete(key: 'pending_invite_code');
     state = const AuthState(status: AuthStatus.unauthenticated);
   }
 }

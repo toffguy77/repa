@@ -298,33 +298,17 @@ func (s *Service) checkPioneer(ctx context.Context, userID, seasonID, groupID st
 			continue
 		}
 
-		// Check if this question's top result was ever won by anyone in previous seasons
-		prevSeasons, err := s.queries.GetRevealedSeasonsForGroup(ctx, groupID)
+		// Single query: check if this question was ever topped in any previous season
+		count, err := s.queries.HasQuestionBeenToppedInGroup(ctx, db.HasQuestionBeenToppedInGroupParams{
+			GroupID:    groupID,
+			QuestionID: top.QuestionID,
+			SeasonID:   seasonID,
+		})
 		if err != nil {
 			continue
 		}
 
-		isFirstTime := true
-		for _, ps := range prevSeasons {
-			if ps.ID == seasonID {
-				continue
-			}
-			prevTops, err := s.queries.GetTopResultPerQuestion(ctx, ps.ID)
-			if err != nil {
-				continue
-			}
-			for _, pt := range prevTops {
-				if pt.QuestionID == top.QuestionID {
-					isFirstTime = false
-					break
-				}
-			}
-			if !isFirstTime {
-				break
-			}
-		}
-
-		if isFirstTime {
+		if count == 0 {
 			s.grantAchievement(ctx, userID, groupID, seasonID, db.AchievementTypePIONEER, map[string]any{
 				"question_id":   top.QuestionID,
 				"question_text": top.QuestionText,

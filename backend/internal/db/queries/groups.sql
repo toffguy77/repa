@@ -87,3 +87,20 @@ SELECT * FROM groups WHERE telegram_connect_code = $1 AND telegram_connect_expir
 -- name: DisconnectTelegramByChat :exec
 UPDATE groups SET telegram_chat_id = NULL, telegram_chat_username = NULL
 WHERE telegram_chat_id = $1;
+
+-- name: GetUserGroupsWithStats :many
+SELECT g.*,
+  (SELECT COUNT(*) FROM group_members gm2 WHERE gm2.group_id = g.id) as member_count,
+  s.id as active_season_id,
+  s.number as active_season_number,
+  s.status as active_season_status,
+  s.starts_at as active_season_starts_at,
+  s.reveal_at as active_season_reveal_at,
+  s.ends_at as active_season_ends_at,
+  COALESCE((SELECT COUNT(DISTINCT v.voter_id) FROM votes v WHERE v.season_id = s.id), 0)::bigint as voted_count,
+  COALESCE((SELECT COUNT(*) FROM votes v WHERE v.season_id = s.id AND v.voter_id = $1), 0)::bigint as user_vote_count
+FROM groups g
+JOIN group_members gm ON gm.group_id = g.id
+LEFT JOIN seasons s ON s.group_id = g.id AND s.status = 'VOTING'
+WHERE gm.user_id = $1
+ORDER BY gm.joined_at DESC;

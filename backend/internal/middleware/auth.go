@@ -69,5 +69,6 @@ func JWTAuth(secret string) echo.MiddlewareFunc {
 }
 
 func GetCurrentUser(c echo.Context) *JWTClaims {
-	return c.Get("user").(*JWTClaims)
+	v, _ := c.Get("user").(*JWTClaims)
+	return v
 }

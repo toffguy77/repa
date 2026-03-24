@@ -19,12 +19,12 @@ JOIN questions q ON q.id = r.question_id
 WHERE r.id = $1;
 
 -- name: CountActiveUsers7Days :one
-SELECT count(DISTINCT user_id) FROM group_members
-WHERE joined_at > NOW() - INTERVAL '7 days';
+SELECT count(DISTINCT voter_id) FROM votes
+WHERE created_at > NOW() - INTERVAL '7 days';
 
 -- name: CountActiveUsers30Days :one
-SELECT count(DISTINCT user_id) FROM group_members
-WHERE joined_at > NOW() - INTERVAL '30 days';
+SELECT count(DISTINCT voter_id) FROM votes
+WHERE created_at > NOW() - INTERVAL '30 days';
 
 -- name: CountGroups :one
 SELECT count(*) FROM groups;

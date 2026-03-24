@@ -199,42 +199,43 @@ type GroupListItem struct {
 }
 
 func (s *Service) ListUserGroups(ctx context.Context, userID string) ([]GroupListItem, error) {
-	groups, err := s.queries.GetUserGroups(ctx, userID)
+	rows, err := s.queries.GetUserGroupsWithStats(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 
-	items := make([]GroupListItem, 0, len(groups))
-	for _, g := range groups {
-		item := GroupListItem{Group: g}
-
-		memberCount, err := s.queries.CountGroupMembers(ctx, g.ID)
-		if err != nil {
-			return nil, err
+	items := make([]GroupListItem, 0, len(rows))
+	for _, r := range rows {
+		group := db.Group{
+			ID:                   r.ID,
+			Name:                 r.Name,
+			InviteCode:           r.InviteCode,
+			AdminID:              r.AdminID,
+			TelegramChatID:       r.TelegramChatID,
+			TelegramChatUsername: r.TelegramChatUsername,
+			TelegramConnectCode:  r.TelegramConnectCode,
+			TelegramConnectExpiry: r.TelegramConnectExpiry,
+			CreatedAt:            r.CreatedAt,
+			Categories:           r.Categories,
 		}
-		item.MemberCount = memberCount
-
-		season, err := s.queries.GetActiveSeasonByGroup(ctx, g.ID)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return nil, err
+		item := GroupListItem{
+			Group:       group,
+			MemberCount: r.MemberCount,
 		}
-		if err == nil {
+
+		if r.ActiveSeasonID.Valid {
+			season := db.Season{
+				ID:       r.ActiveSeasonID.String,
+				GroupID:  r.ID,
+				Number:   r.ActiveSeasonNumber.Int32,
+				Status:   r.ActiveSeasonStatus.SeasonStatus,
+				StartsAt: r.ActiveSeasonStartsAt.Time,
+				RevealAt: r.ActiveSeasonRevealAt.Time,
+				EndsAt:   r.ActiveSeasonEndsAt.Time,
+			}
 			item.ActiveSeason = &season
-
-			votedCount, err := s.queries.CountSeasonVoters(ctx, season.ID)
-			if err != nil {
-				return nil, err
-			}
-			item.VotedCount = votedCount
-
-			userVoted, err := s.queries.HasUserVotedInSeason(ctx, db.HasUserVotedInSeasonParams{
-				SeasonID: season.ID,
-				VoterID:  userID,
-			})
-			if err != nil {
-				return nil, err
-			}
-			item.UserVoted = userVoted > 0
+			item.VotedCount = r.VotedCount
+			item.UserVoted = r.UserVoteCount > 0
 		}
 
 		items = append(items, item)

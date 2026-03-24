@@ -89,6 +89,23 @@ func (m *mockQuerier) GetRevealedSeasonsForGroup(_ context.Context, groupID stri
 	return m.revealedSeasons[groupID], nil
 }
 
+func (m *mockQuerier) HasQuestionBeenToppedInGroup(_ context.Context, arg db.HasQuestionBeenToppedInGroupParams) (int64, error) {
+	// Check if any revealed season for this group has this question in top results
+	seasons := m.revealedSeasons[arg.GroupID]
+	for _, s := range seasons {
+		if s.ID == arg.SeasonID {
+			continue
+		}
+		tops := m.topResultPerQuestion[s.ID]
+		for _, t := range tops {
+			if t.QuestionID == arg.QuestionID {
+				return 1, nil
+			}
+		}
+	}
+	return 0, nil
+}
+
 func (m *mockQuerier) GetLastNRevealedSeasons(_ context.Context, arg db.GetLastNRevealedSeasonsParams) ([]db.Season, error) {
 	seasons := m.lastNSeasons[arg.GroupID]
 	if int32(len(seasons)) > arg.Limit {

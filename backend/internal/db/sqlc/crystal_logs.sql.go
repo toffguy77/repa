@@ -101,3 +101,13 @@ func (q *Queries) GetUserCrystalLogs(ctx context.Context, arg GetUserCrystalLogs
 	}
 	return items, nil
 }
+
+const lockUserForUpdate = `-- name: LockUserForUpdate :one
+SELECT id FROM users WHERE id = $1 FOR UPDATE
+`
+
+func (q *Queries) LockUserForUpdate(ctx context.Context, id string) (string, error) {
+	row := q.db.QueryRowContext(ctx, lockUserForUpdate, id)
+	err := row.Scan(&id)
+	return id, err
+}

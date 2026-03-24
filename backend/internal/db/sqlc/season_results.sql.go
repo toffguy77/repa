@@ -57,6 +57,62 @@ func (q *Queries) DeleteSeasonResultsBySeason(ctx context.Context, seasonID stri
 	return err
 }
 
+const getAllSeasonResultsWithUsers = `-- name: GetAllSeasonResultsWithUsers :many
+SELECT sr.target_id, sr.question_id, sr.vote_count, sr.percentage,
+  q.text as question_text, q.category as question_category,
+  u.username, u.avatar_emoji, u.avatar_url
+FROM season_results sr
+JOIN questions q ON q.id = sr.question_id
+JOIN users u ON u.id = sr.target_id
+WHERE sr.season_id = $1
+ORDER BY sr.target_id, sr.percentage DESC
+`
+
+type GetAllSeasonResultsWithUsersRow struct {
+	TargetID         string           `json:"target_id"`
+	QuestionID       string           `json:"question_id"`
+	VoteCount        int32            `json:"vote_count"`
+	Percentage       float64          `json:"percentage"`
+	QuestionText     string           `json:"question_text"`
+	QuestionCategory QuestionCategory `json:"question_category"`
+	Username         string           `json:"username"`
+	AvatarEmoji      sql.NullString   `json:"avatar_emoji"`
+	AvatarUrl        sql.NullString   `json:"avatar_url"`
+}
+
+func (q *Queries) GetAllSeasonResultsWithUsers(ctx context.Context, seasonID string) ([]GetAllSeasonResultsWithUsersRow, error) {
+	rows, err := q.db.QueryContext(ctx, getAllSeasonResultsWithUsers, seasonID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetAllSeasonResultsWithUsersRow{}
+	for rows.Next() {
+		var i GetAllSeasonResultsWithUsersRow
+		if err := rows.Scan(
+			&i.TargetID,
+			&i.QuestionID,
+			&i.VoteCount,
+			&i.Percentage,
+			&i.QuestionText,
+			&i.QuestionCategory,
+			&i.Username,
+			&i.AvatarEmoji,
+			&i.AvatarUrl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getMaxPercentageForUser = `-- name: GetMaxPercentageForUser :one
 SELECT COALESCE(MAX(sr.percentage), 0)::float as max_pct
 FROM season_results sr
@@ -243,4 +299,27 @@ func (q *Queries) GetTopResultPerQuestion(ctx context.Context, seasonID string) 
 		return nil, err
 	}
 	return items, nil
+}
+
+const hasQuestionBeenToppedInGroup = `-- name: HasQuestionBeenToppedInGroup :one
+SELECT COUNT(*) FROM season_results sr
+JOIN seasons s ON s.id = sr.season_id
+WHERE s.group_id = $1 AND sr.question_id = $2 AND sr.season_id != $3
+AND sr.percentage = (
+  SELECT MAX(sr2.percentage) FROM season_results sr2
+  WHERE sr2.season_id = sr.season_id AND sr2.question_id = sr.question_id
+)
+`
+
+type HasQuestionBeenToppedInGroupParams struct {
+	GroupID    string `json:"group_id"`
+	QuestionID string `json:"question_id"`
+	SeasonID   string `json:"season_id"`
+}
+
+func (q *Queries) HasQuestionBeenToppedInGroup(ctx context.Context, arg HasQuestionBeenToppedInGroupParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, hasQuestionBeenToppedInGroup, arg.GroupID, arg.QuestionID, arg.SeasonID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }

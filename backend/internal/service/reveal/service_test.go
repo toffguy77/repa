@@ -21,8 +21,9 @@ type mockQuerier struct {
 	resultsByUser    map[string][]db.GetSeasonResultsByUserRow
 	topPerQuestion   map[string][]db.GetTopResultPerQuestionRow
 	prevSeason       map[string]db.Season // groupID -> prev season
-	balance          map[string]int32     // userID -> balance
-	createdResults   []db.CreateSeasonResultParams
+	allResultsWithUsers map[string][]db.GetAllSeasonResultsWithUsersRow
+	balance             map[string]int32 // userID -> balance
+	createdResults      []db.CreateSeasonResultParams
 	createdCrystals  []db.CreateCrystalLogParams
 	deletedSeasons   []string
 	updatedStatuses  []db.UpdateSeasonStatusParams
@@ -113,6 +114,10 @@ func (m *mockQuerier) CreateCrystalLog(_ context.Context, arg db.CreateCrystalLo
 	return db.CrystalLog{}, nil
 }
 
+func (m *mockQuerier) GetAllSeasonResultsWithUsers(_ context.Context, seasonID string) ([]db.GetAllSeasonResultsWithUsersRow, error) {
+	return m.allResultsWithUsers[seasonID], nil
+}
+
 func (m *mockQuerier) GetSeasonAchievements(_ context.Context, _ sql.NullString) ([]db.Achievement, error) {
 	return []db.Achievement{}, nil
 }
@@ -161,6 +166,15 @@ func newMock() *mockQuerier {
 			"s2": {
 				{QuestionID: "q1", TargetID: "u1", QuestionText: "Who is funniest?", Username: "alice", Percentage: 80},
 				{QuestionID: "q2", TargetID: "u1", QuestionText: "Who is hottest?", Username: "alice", Percentage: 60},
+			},
+		},
+		allResultsWithUsers: map[string][]db.GetAllSeasonResultsWithUsersRow{
+			"s2": {
+				{TargetID: "u1", QuestionID: "q1", QuestionText: "Who is funniest?", QuestionCategory: db.QuestionCategoryFUNNY, Percentage: 80, Username: "alice"},
+				{TargetID: "u1", QuestionID: "q2", QuestionText: "Who is hottest?", QuestionCategory: db.QuestionCategoryHOT, Percentage: 60, Username: "alice"},
+				{TargetID: "u1", QuestionID: "q3", QuestionText: "Who knows secrets?", QuestionCategory: db.QuestionCategorySECRETS, Percentage: 40, Username: "alice"},
+				{TargetID: "u1", QuestionID: "q4", QuestionText: "Who studies most?", QuestionCategory: db.QuestionCategorySTUDY, Percentage: 20, Username: "alice"},
+				{TargetID: "u2", QuestionID: "q1", QuestionText: "Who is funniest?", QuestionCategory: db.QuestionCategoryHOT, Percentage: 50, Username: "bob"},
 			},
 		},
 		balance:         map[string]int32{"u1": 20},
@@ -351,11 +365,6 @@ func TestGetReveal_TitleFromCategory(t *testing.T) {
 
 func TestGetMembersCards_Success(t *testing.T) {
 	m := newMock()
-	// Add results for all members
-	m.resultsByUser["s2:u2"] = []db.GetSeasonResultsByUserRow{
-		{QuestionID: "q1", QuestionText: "Who is funniest?", QuestionCategory: db.QuestionCategoryHOT, Percentage: 50},
-	}
-	m.resultsByUser["s2:u3"] = []db.GetSeasonResultsByUserRow{}
 	svc := NewService(m, nil)
 
 	cards, err := svc.GetMembersCards(context.Background(), "s2", "u1")
@@ -363,8 +372,9 @@ func TestGetMembersCards_Success(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if len(cards) != 3 {
-		t.Errorf("expected 3 member cards, got %d", len(cards))
+	// 2 users have results in the allResultsWithUsers fixture (u1, u2)
+	if len(cards) != 2 {
+		t.Errorf("expected 2 member cards, got %d", len(cards))
 	}
 
 	// u1 should have 3 top attributes (out of 4 total)

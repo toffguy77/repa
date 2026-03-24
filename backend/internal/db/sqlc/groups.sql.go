@@ -8,6 +8,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"github.com/lib/pq"
 )
@@ -350,6 +351,89 @@ func (q *Queries) GetUserGroups(ctx context.Context, userID string) ([]Group, er
 			&i.TelegramConnectExpiry,
 			&i.CreatedAt,
 			pq.Array(&i.Categories),
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getUserGroupsWithStats = `-- name: GetUserGroupsWithStats :many
+SELECT g.id, g.name, g.invite_code, g.admin_id, g.telegram_chat_id, g.telegram_chat_username, g.telegram_connect_code, g.telegram_connect_expiry, g.created_at, g.categories,
+  (SELECT COUNT(*) FROM group_members gm2 WHERE gm2.group_id = g.id) as member_count,
+  s.id as active_season_id,
+  s.number as active_season_number,
+  s.status as active_season_status,
+  s.starts_at as active_season_starts_at,
+  s.reveal_at as active_season_reveal_at,
+  s.ends_at as active_season_ends_at,
+  COALESCE((SELECT COUNT(DISTINCT v.voter_id) FROM votes v WHERE v.season_id = s.id), 0)::bigint as voted_count,
+  COALESCE((SELECT COUNT(*) FROM votes v WHERE v.season_id = s.id AND v.voter_id = $1), 0)::bigint as user_vote_count
+FROM groups g
+JOIN group_members gm ON gm.group_id = g.id
+LEFT JOIN seasons s ON s.group_id = g.id AND s.status = 'VOTING'
+WHERE gm.user_id = $1
+ORDER BY gm.joined_at DESC
+`
+
+type GetUserGroupsWithStatsRow struct {
+	ID                    string           `json:"id"`
+	Name                  string           `json:"name"`
+	InviteCode            string           `json:"invite_code"`
+	AdminID               string           `json:"admin_id"`
+	TelegramChatID        sql.NullString   `json:"telegram_chat_id"`
+	TelegramChatUsername  sql.NullString   `json:"telegram_chat_username"`
+	TelegramConnectCode   sql.NullString   `json:"telegram_connect_code"`
+	TelegramConnectExpiry sql.NullTime     `json:"telegram_connect_expiry"`
+	CreatedAt             time.Time        `json:"created_at"`
+	Categories            []string         `json:"categories"`
+	MemberCount           int64            `json:"member_count"`
+	ActiveSeasonID        sql.NullString   `json:"active_season_id"`
+	ActiveSeasonNumber    sql.NullInt32    `json:"active_season_number"`
+	ActiveSeasonStatus    NullSeasonStatus `json:"active_season_status"`
+	ActiveSeasonStartsAt  sql.NullTime     `json:"active_season_starts_at"`
+	ActiveSeasonRevealAt  sql.NullTime     `json:"active_season_reveal_at"`
+	ActiveSeasonEndsAt    sql.NullTime     `json:"active_season_ends_at"`
+	VotedCount            int64            `json:"voted_count"`
+	UserVoteCount         int64            `json:"user_vote_count"`
+}
+
+func (q *Queries) GetUserGroupsWithStats(ctx context.Context, voterID string) ([]GetUserGroupsWithStatsRow, error) {
+	rows, err := q.db.QueryContext(ctx, getUserGroupsWithStats, voterID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetUserGroupsWithStatsRow{}
+	for rows.Next() {
+		var i GetUserGroupsWithStatsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.InviteCode,
+			&i.AdminID,
+			&i.TelegramChatID,
+			&i.TelegramChatUsername,
+			&i.TelegramConnectCode,
+			&i.TelegramConnectExpiry,
+			&i.CreatedAt,
+			pq.Array(&i.Categories),
+			&i.MemberCount,
+			&i.ActiveSeasonID,
+			&i.ActiveSeasonNumber,
+			&i.ActiveSeasonStatus,
+			&i.ActiveSeasonStartsAt,
+			&i.ActiveSeasonRevealAt,
+			&i.ActiveSeasonEndsAt,
+			&i.VotedCount,
+			&i.UserVoteCount,
 		); err != nil {
 			return nil, err
 		}

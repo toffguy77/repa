@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 
 	"github.com/google/uuid"
@@ -68,16 +69,8 @@ func (s *Service) ProcessReveal(ctx context.Context, seasonID string, attempt in
 		return &RevealResult{Revealed: false, Retry: true}, nil
 	}
 
-	// Quorum met or forced reveal after max attempts — aggregate results
-	if err := s.aggregateResults(ctx, seasonID); err != nil {
-		return nil, err
-	}
-
-	// Update season status to REVEALED
-	if err := s.queries.UpdateSeasonStatus(ctx, db.UpdateSeasonStatusParams{
-		ID:     seasonID,
-		Status: db.SeasonStatusREVEALED,
-	}); err != nil {
+	// Quorum met or forced reveal after max attempts — aggregate and update status atomically
+	if err := s.aggregateAndReveal(ctx, seasonID); err != nil {
 		return nil, err
 	}
 
@@ -92,18 +85,30 @@ func (s *Service) ProcessReveal(ctx context.Context, seasonID string, attempt in
 	return &RevealResult{Revealed: true}, nil
 }
 
-func (s *Service) aggregateResults(ctx context.Context, seasonID string) error {
+func (s *Service) aggregateAndReveal(ctx context.Context, seasonID string) error {
+	q := s.queries
+	var tx *sql.Tx
+	if s.sqlDB != nil {
+		var txErr error
+		tx, txErr = s.sqlDB.BeginTx(ctx, nil)
+		if txErr != nil {
+			return txErr
+		}
+		defer tx.Rollback()
+		q = db.New(tx)
+	}
+
 	// Delete existing results for idempotency
-	if err := s.queries.DeleteSeasonResultsBySeason(ctx, seasonID); err != nil {
+	if err := q.DeleteSeasonResultsBySeason(ctx, seasonID); err != nil {
 		return err
 	}
 
-	aggregated, err := s.queries.AggregateVotesByTarget(ctx, seasonID)
+	aggregated, err := q.AggregateVotesByTarget(ctx, seasonID)
 	if err != nil {
 		return err
 	}
 
-	uniqueVoters, err := s.queries.CountUniqueVoters(ctx, seasonID)
+	uniqueVoters, err := q.CountUniqueVoters(ctx, seasonID)
 	if err != nil {
 		return err
 	}
@@ -117,7 +122,7 @@ func (s *Service) aggregateResults(ctx context.Context, seasonID string) error {
 			percentage = math.Round(float64(voteCount)/float64(totalVoters)*1000) / 10 // one decimal
 		}
 
-		_, err := s.queries.CreateSeasonResult(ctx, db.CreateSeasonResultParams{
+		_, err := q.CreateSeasonResult(ctx, db.CreateSeasonResultParams{
 			ID:          uuid.New().String(),
 			SeasonID:    seasonID,
 			TargetID:    agg.TargetID,
@@ -131,6 +136,17 @@ func (s *Service) aggregateResults(ctx context.Context, seasonID string) error {
 		}
 	}
 
+	// Update season status atomically with aggregation
+	if err := q.UpdateSeasonStatus(ctx, db.UpdateSeasonStatusParams{
+		ID:     seasonID,
+		Status: db.SeasonStatusREVEALED,
+	}); err != nil {
+		return err
+	}
+
+	if tx != nil {
+		return tx.Commit()
+	}
 	return nil
 }
 
@@ -302,39 +318,61 @@ type MemberCardDto struct {
 }
 
 func (s *Service) GetMembersCards(ctx context.Context, seasonID, userID string) ([]MemberCardDto, error) {
-	season, err := s.ValidateRevealAccess(ctx, seasonID, userID)
+	if _, err := s.ValidateRevealAccess(ctx, seasonID, userID); err != nil {
+		return nil, err
+	}
+
+	// Single query: all results for this season with user info
+	allResults, err := s.queries.GetAllSeasonResultsWithUsers(ctx, seasonID)
 	if err != nil {
 		return nil, err
 	}
 
-	members, err := s.queries.GetGroupMembers(ctx, season.GroupID)
-	if err != nil {
-		return nil, err
+	// Group results by target user, preserving order (sorted by target_id, percentage DESC)
+	type userInfo struct {
+		username    string
+		avatarEmoji sql.NullString
+		avatarUrl   sql.NullString
+		results     []db.GetSeasonResultsByUserRow
 	}
+	byUser := make(map[string]*userInfo)
+	userOrder := make([]string, 0)
 
-	cards := make([]MemberCardDto, 0, len(members))
-	for _, m := range members {
-		results, err := s.queries.GetSeasonResultsByUser(ctx, db.GetSeasonResultsByUserParams{
-			SeasonID: seasonID,
-			TargetID: m.ID,
-		})
-		if err != nil {
-			return nil, err
+	for _, r := range allResults {
+		ui, ok := byUser[r.TargetID]
+		if !ok {
+			ui = &userInfo{
+				username:    r.Username,
+				avatarEmoji: r.AvatarEmoji,
+				avatarUrl:   r.AvatarUrl,
+			}
+			byUser[r.TargetID] = ui
+			userOrder = append(userOrder, r.TargetID)
 		}
+		ui.results = append(ui.results, db.GetSeasonResultsByUserRow{
+			QuestionID:       r.QuestionID,
+			QuestionText:     r.QuestionText,
+			QuestionCategory: r.QuestionCategory,
+			Percentage:       r.Percentage,
+		})
+	}
 
-		topAttrs, _ := splitAttributes(results)
+	cards := make([]MemberCardDto, 0, len(byUser))
+	for _, uid := range userOrder {
+		ui := byUser[uid]
+		topAttrs, _ := splitAttributes(ui.results)
 
 		card := MemberCardDto{
-			UserID:          m.ID,
-			Username:        m.Username,
+			UserID:          uid,
+			Username:        ui.username,
 			TopAttributes:   topAttrs,
 			ReputationTitle: generateTitle(topAttrs),
 		}
-		if m.AvatarEmoji.Valid {
-			card.AvatarEmoji = &m.AvatarEmoji.String
+		if ui.avatarEmoji.Valid {
+			card.AvatarEmoji = &ui.avatarEmoji.String
 		}
-		if m.AvatarUrl.Valid {
-			card.AvatarURL = &m.AvatarUrl.String
+		if ui.avatarUrl.Valid {
+			card.AvatarURL = &ui.avatarUrl.String
 		}
 		cards = append(cards, card)
 	}
@@ -367,6 +405,11 @@ func (s *Service) OpenHidden(ctx context.Context, seasonID, userID string) (*Ope
 		}
 		defer tx.Rollback()
 		q = db.New(tx)
+
+		// Lock user row to prevent concurrent spend race
+		if _, err := q.LockUserForUpdate(ctx, userID); err != nil {
+			return nil, fmt.Errorf("lock user: %w", err)
+		}
 	}
 
 	balance, err := q.GetUserBalance(ctx, userID)
@@ -452,7 +495,7 @@ func (s *Service) GetDetector(ctx context.Context, seasonID, userID string) (*De
 
 	balance, err := s.queries.GetUserBalance(ctx, userID)
 	if err != nil {
-		balance = 0
+		return nil, fmt.Errorf("get user balance: %w", err)
 	}
 
 	result := &DetectorResult{
@@ -502,6 +545,11 @@ func (s *Service) BuyDetector(ctx context.Context, seasonID, userID string) (*De
 		}
 		defer tx.Rollback()
 		q = db.New(tx)
+
+		// Lock user row to prevent concurrent spend race
+		if _, err := q.LockUserForUpdate(ctx, userID); err != nil {
+			return nil, fmt.Errorf("lock user: %w", err)
+		}
 	}
 
 	// Check if already purchased (inside transaction to prevent race condition)
