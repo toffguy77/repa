@@ -28,13 +28,17 @@ type CreateResult struct {
 	Reason   *string
 }
 
-type Service struct {
-	queries   *db.Queries
-	anthropic *lib.AnthropicClient
+type Moderator interface {
+	ModerateQuestion(ctx context.Context, text string) (*lib.ModerationResult, error)
 }
 
-func NewService(queries *db.Queries, anthropic *lib.AnthropicClient) *Service {
-	return &Service{queries: queries, anthropic: anthropic}
+type Service struct {
+	queries   db.Querier
+	moderator Moderator
+}
+
+func NewService(queries db.Querier, moderator Moderator) *Service {
+	return &Service{queries: queries, moderator: moderator}
 }
 
 func (s *Service) CreateQuestion(ctx context.Context, userID, groupID, text string, category db.QuestionCategory) (*CreateResult, error) {
@@ -58,8 +62,8 @@ func (s *Service) CreateQuestion(ctx context.Context, userID, groupID, text stri
 	status := db.QuestionStatusACTIVE
 	var reason *string
 
-	if s.anthropic != nil {
-		modResult, err := s.anthropic.ModerateQuestion(ctx, text)
+	if s.moderator != nil {
+		modResult, err := s.moderator.ModerateQuestion(ctx, text)
 		if err != nil {
 			log.Warn().Err(err).Str("text", text).Msg("moderation timeout/error, setting PENDING")
 			status = db.QuestionStatusPENDING

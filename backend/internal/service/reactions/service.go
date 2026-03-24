@@ -34,12 +34,16 @@ type ReactionCounts struct {
 	MyEmoji  *string        `json:"my_emoji"`
 }
 
-type Service struct {
-	queries     *db.Queries
-	asynqClient *asynq.Client
+type TaskEnqueuer interface {
+	Enqueue(task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error)
 }
 
-func NewService(queries *db.Queries, asynqClient *asynq.Client) *Service {
+type Service struct {
+	queries     db.Querier
+	asynqClient TaskEnqueuer
+}
+
+func NewService(queries db.Querier, asynqClient TaskEnqueuer) *Service {
 	return &Service{queries: queries, asynqClient: asynqClient}
 }
 

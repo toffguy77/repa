@@ -45,8 +45,23 @@ var (
 	ErrAvatarUnavailable = errors.New("avatar uploads not configured")
 )
 
+// Querier defines the subset of db.Queries methods used by this service.
+type Querier interface {
+	GetUserByID(ctx context.Context, id string) (db.User, error)
+	GetUserByPhone(ctx context.Context, phone sql.NullString) (db.User, error)
+	GetUserByUsername(ctx context.Context, username string) (db.User, error)
+	GetUserByAppleID(ctx context.Context, appleID sql.NullString) (db.User, error)
+	GetUserByGoogleID(ctx context.Context, googleID sql.NullString) (db.User, error)
+	CreateUser(ctx context.Context, arg db.CreateUserParams) (db.User, error)
+	UpdateUserProfile(ctx context.Context, arg db.UpdateUserProfileParams) (db.User, error)
+	UpdateUserProfileWithUsername(ctx context.Context, arg db.UpdateUserProfileWithUsernameParams) (db.User, error)
+	UpdateUserAvatarURL(ctx context.Context, arg db.UpdateUserAvatarURLParams) (db.User, error)
+	DeleteUser(ctx context.Context, id string) error
+	UpsertPushPreference(ctx context.Context, arg db.UpsertPushPreferenceParams) (db.PushPreference, error)
+}
+
 type Service struct {
-	queries   *db.Queries
+	queries   Querier
 	rdb       *redis.Client
 	s3        *lib.S3Client
 	jwtSecret string
@@ -56,6 +71,17 @@ type Service struct {
 func NewService(queries *db.Queries, rdb *redis.Client, s3 *lib.S3Client, jwtSecret string, devMode bool) *Service {
 	return &Service{
 		queries:   queries,
+		rdb:       rdb,
+		s3:        s3,
+		jwtSecret: jwtSecret,
+		devMode:   devMode,
+	}
+}
+
+// NewServiceWithQuerier constructs a Service with a custom Querier, for testing.
+func NewServiceWithQuerier(q Querier, rdb *redis.Client, s3 *lib.S3Client, jwtSecret string, devMode bool) *Service {
+	return &Service{
+		queries:   q,
 		rdb:       rdb,
 		s3:        s3,
 		jwtSecret: jwtSecret,

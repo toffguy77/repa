@@ -159,7 +159,11 @@ func main() {
 		anthropicClient = lib.NewAnthropicClient(cfg.AnthropicKey)
 		log.Info().Msg("Anthropic client initialized for AI moderation")
 	}
-	questionsService := questionssvc.NewService(queries, anthropicClient)
+	var moderator questionssvc.Moderator
+	if anthropicClient != nil {
+		moderator = anthropicClient
+	}
+	questionsService := questionssvc.NewService(queries, moderator)
 	questionsHandler := questionshandler.NewHandler(questionsService, queries)
 
 	// Telegram
