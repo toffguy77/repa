@@ -1276,6 +1276,8 @@ mixin _$TopQuestionResult {
   String get questionId => throw _privateConstructorUsedError;
   @JsonKey(name: 'question_text')
   String get questionText => throw _privateConstructorUsedError;
+  @JsonKey(name: 'user_id')
+  String get userId => throw _privateConstructorUsedError;
   String get username => throw _privateConstructorUsedError;
   @JsonKey(name: 'avatar_emoji')
   String? get avatarEmoji => throw _privateConstructorUsedError;
@@ -1296,6 +1298,7 @@ abstract class $TopQuestionResultCopyWith<$Res> {
   $Res call(
       {@JsonKey(name: 'question_id') String questionId,
       @JsonKey(name: 'question_text') String questionText,
+      @JsonKey(name: 'user_id') String userId,
       String username,
       @JsonKey(name: 'avatar_emoji') String? avatarEmoji,
       double percentage});
@@ -1316,6 +1319,7 @@ class _$TopQuestionResultCopyWithImpl<$Res, $Val extends TopQuestionResult>
   $Res call({
     Object? questionId = null,
     Object? questionText = null,
+    Object? userId = null,
     Object? username = null,
     Object? avatarEmoji = freezed,
     Object? percentage = null,
@@ -1328,6 +1332,10 @@ class _$TopQuestionResultCopyWithImpl<$Res, $Val extends TopQuestionResult>
       questionText: null == questionText
           ? _value.questionText
           : questionText // ignore: cast_nullable_to_non_nullable
+              as String,
+      userId: null == userId
+          ? _value.userId
+          : userId // ignore: cast_nullable_to_non_nullable
               as String,
       username: null == username
           ? _value.username
@@ -1356,6 +1364,7 @@ abstract class _$$TopQuestionResultImplCopyWith<$Res>
   $Res call(
       {@JsonKey(name: 'question_id') String questionId,
       @JsonKey(name: 'question_text') String questionText,
+      @JsonKey(name: 'user_id') String userId,
       String username,
       @JsonKey(name: 'avatar_emoji') String? avatarEmoji,
       double percentage});
@@ -1374,6 +1383,7 @@ class __$$TopQuestionResultImplCopyWithImpl<$Res>
   $Res call({
     Object? questionId = null,
     Object? questionText = null,
+    Object? userId = null,
     Object? username = null,
     Object? avatarEmoji = freezed,
     Object? percentage = null,
@@ -1386,6 +1396,10 @@ class __$$TopQuestionResultImplCopyWithImpl<$Res>
       questionText: null == questionText
           ? _value.questionText
           : questionText // ignore: cast_nullable_to_non_nullable
+              as String,
+      userId: null == userId
+          ? _value.userId
+          : userId // ignore: cast_nullable_to_non_nullable
               as String,
       username: null == username
           ? _value.username
@@ -1409,6 +1423,7 @@ class _$TopQuestionResultImpl implements _TopQuestionResult {
   const _$TopQuestionResultImpl(
       {@JsonKey(name: 'question_id') required this.questionId,
       @JsonKey(name: 'question_text') required this.questionText,
+      @JsonKey(name: 'user_id') required this.userId,
       required this.username,
       @JsonKey(name: 'avatar_emoji') this.avatarEmoji,
       required this.percentage});
@@ -1423,6 +1438,9 @@ class _$TopQuestionResultImpl implements _TopQuestionResult {
   @JsonKey(name: 'question_text')
   final String questionText;
   @override
+  @JsonKey(name: 'user_id')
+  final String userId;
+  @override
   final String username;
   @override
   @JsonKey(name: 'avatar_emoji')
@@ -1432,7 +1450,7 @@ class _$TopQuestionResultImpl implements _TopQuestionResult {
 
   @override
   String toString() {
-    return 'TopQuestionResult(questionId: $questionId, questionText: $questionText, username: $username, avatarEmoji: $avatarEmoji, percentage: $percentage)';
+    return 'TopQuestionResult(questionId: $questionId, questionText: $questionText, userId: $userId, username: $username, avatarEmoji: $avatarEmoji, percentage: $percentage)';
   }
 
   @override
@@ -1444,6 +1462,7 @@ class _$TopQuestionResultImpl implements _TopQuestionResult {
                 other.questionId == questionId) &&
             (identical(other.questionText, questionText) ||
                 other.questionText == questionText) &&
+            (identical(other.userId, userId) || other.userId == userId) &&
             (identical(other.username, username) ||
                 other.username == username) &&
             (identical(other.avatarEmoji, avatarEmoji) ||
@@ -1454,8 +1473,8 @@ class _$TopQuestionResultImpl implements _TopQuestionResult {
 
   @JsonKey(ignore: true)
   @override
-  int get hashCode => Object.hash(
-      runtimeType, questionId, questionText, username, avatarEmoji, percentage);
+  int get hashCode => Object.hash(runtimeType, questionId, questionText, userId,
+      username, avatarEmoji, percentage);
 
   @JsonKey(ignore: true)
   @override
@@ -1476,6 +1495,7 @@ abstract class _TopQuestionResult implements TopQuestionResult {
   const factory _TopQuestionResult(
       {@JsonKey(name: 'question_id') required final String questionId,
       @JsonKey(name: 'question_text') required final String questionText,
+      @JsonKey(name: 'user_id') required final String userId,
       required final String username,
       @JsonKey(name: 'avatar_emoji') final String? avatarEmoji,
       required final double percentage}) = _$TopQuestionResultImpl;
@@ -1489,6 +1509,9 @@ abstract class _TopQuestionResult implements TopQuestionResult {
   @override
   @JsonKey(name: 'question_text')
   String get questionText;
+  @override
+  @JsonKey(name: 'user_id')
+  String get userId;
   @override
   String get username;
   @override

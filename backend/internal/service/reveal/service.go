@@ -177,6 +177,7 @@ type GroupSummary struct {
 type TopAttributeDto struct {
 	QuestionID   string  `json:"question_id"`
 	QuestionText string  `json:"question_text"`
+	UserID       string  `json:"user_id"`
 	Username     string  `json:"username"`
 	AvatarEmoji  *string `json:"avatar_emoji"`
 	Percentage   float64 `json:"percentage"`
@@ -251,6 +252,7 @@ func (s *Service) GetReveal(ctx context.Context, seasonID, userID string) (*Reve
 		dto := TopAttributeDto{
 			QuestionID:   t.QuestionID,
 			QuestionText: t.QuestionText,
+			UserID:       t.TargetID,
 			Username:     t.Username,
 			Percentage:   t.Percentage,
 		}

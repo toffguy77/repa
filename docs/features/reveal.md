@@ -2,7 +2,7 @@
 
 ## Overview
 
-The Reveal engine processes voting results every Friday at 17:00 UTC (20:00 MSK). It checks quorum, aggregates votes into per-user reputation cards, and triggers downstream jobs (achievements, push notifications). Each user sees their top attributes, a reputation title, trend vs. previous season, and can pay crystals to unlock hidden attributes.
+The Reveal engine processes voting results every Friday at 17:00 UTC (20:00 MSK). It checks quorum, aggregates votes into per-user reputation cards, and triggers downstream jobs (achievements, card generation, push notifications). Each user sees their top attributes, a reputation title, trend vs. previous season, and can pay crystals to unlock hidden attributes or buy a detector to see who voted.
 
 ## API Endpoints
 
@@ -30,6 +30,30 @@ Unlock hidden attributes for 5 crystals.
 - **Error 400:** `SEASON_NOT_REVEALED`
 - **Error 403:** `NOT_MEMBER`
 - **Behavior:** Deducts 5 crystals atomically (transaction), creates crystal_log with type `SPEND_ATTRIBUTES`, returns all attributes (top + hidden) with updated balance.
+
+### `GET /api/v1/seasons/:seasonId/detector`
+Get detector status for the current user.
+- **Success 200:** `{ "data": { "purchased": bool, "voters": [VoterProfile], "crystal_balance": number } }`
+- **Error 400:** `SEASON_NOT_REVEALED`
+- **Error 403:** `NOT_MEMBER`
+- **Behavior:** If purchased, returns voter profiles (IDs only, no question/answer binding). If not purchased, returns empty voters list.
+
+### `POST /api/v1/seasons/:seasonId/detector`
+Buy a detector for 10 crystals.
+- **Success 200:** `{ "data": { "purchased": true, "voters": [VoterProfile], "crystal_balance": number } }`
+- **Error 402:** `INSUFFICIENT_FUNDS` — balance < 10 crystals
+- **Error 409:** `ALREADY_PURCHASED` — detector already bought for this season
+- **Error 400:** `SEASON_NOT_REVEALED`
+- **Error 403:** `NOT_MEMBER`
+- **Behavior:** Deducts 10 crystals atomically, creates detector record and crystal_log, returns voter profiles.
+
+### `GET /api/v1/seasons/:seasonId/my-card-url`
+Get the current user's card image URL for a season.
+- **Success 200:** `{ "data": { "image_url": "https://...", "status": "ready" } }`
+- **Generating:** `{ "data": { "image_url": null, "status": "generating" } }` — card not yet ready
+- **Error 400:** `SEASON_NOT_REVEALED`
+- **Error 403:** `NOT_MEMBER`
+- **Rate limit:** 5 requests per hour
 
 ### Response DTOs
 
@@ -63,6 +87,8 @@ Unlock hidden attributes for 5 crystals.
 // GroupSummaryDto
 {
   "top_per_question": [{ "question_id", "question_text", "user_id", "username", "avatar_emoji", "percentage" }],
+  // VoterProfile (used by detector endpoints)
+  // { "id", "username", "avatar_emoji", "avatar_url" }
   "voter_count": 5
 }
 ```
@@ -73,6 +99,7 @@ Unlock hidden attributes for 5 crystals.
 
 - **season_results** — id, season_id (FK seasons), target_id (FK users), question_id (FK questions), vote_count, total_voters, percentage. Stores aggregated vote counts per (target, question) pair.
 - **crystal_logs** — id, user_id (FK users), delta (integer), type (crystal_log_type enum), ref_id, created_at. Balance = `SUM(delta)`.
+- **detectors** — id, user_id (FK users), season_id (FK seasons), group_id (FK groups), created_at. Tracks detector purchases per user per season.
 
 ### Key Queries (sqlc)
 
@@ -83,6 +110,9 @@ Unlock hidden attributes for 5 crystals.
 - `CreateSeasonResult` — insert aggregated result row
 - `GetUserBalance` — `SUM(delta)` from crystal_logs
 - `CreateCrystalLog` — insert crystal transaction
+- `HasDetector` — check if user already purchased detector for a season
+- `CreateDetector` — insert detector record
+- `GetVoterProfilesBySeason` — voter user profiles for detector result (without question/answer binding)
 
 ## Business Rules
 
@@ -121,30 +151,24 @@ Unlock hidden attributes for 5 crystals.
 3. If quorum not met and attempt < 3:
    - Re-enqueue with attempt+1, delay 2 hours
 
+### Task Deduplication
+
+`reveal:process` uses `asynq.TaskID("reveal:" + seasonID)` to prevent duplicate processing of the same season.
+
 ## Architecture
 
-```
+```text
 backend/
 ├── internal/
-│   ├── handler/reveal/handler.go          # 3 endpoints: GetReveal, GetMembersCards, OpenHidden
-│   ├── service/reveal/service.go          # ProcessReveal, aggregateResults, GetReveal, GetMembersCards, OpenHidden
+│   ├── handler/reveal/handler.go          # 6 endpoints: GetReveal, GetMembersCards, OpenHidden, GetDetector, BuyDetector, GetMyCardURL
+│   ├── service/reveal/service.go          # ProcessReveal, aggregateResults, GetReveal, GetMembersCards, OpenHidden, GetDetector, BuyDetector, ValidateRevealAccess, GetSeasonsForReveal
 │   ├── worker/tasks/reveal.go             # HandleRevealChecker, HandleRevealProcess
 │   └── db/
 │       ├── queries/season_results.sql     # Result CRUD + aggregation queries
 │       ├── queries/votes.sql              # CountUniqueVoters, AggregateVotesByTarget
-│       └── queries/crystal_logs.sql       # GetUserBalance, CreateCrystalLog
+│       ├── queries/crystal_logs.sql       # GetUserBalance, CreateCrystalLog
+│       └── queries/detectors.sql          # HasDetector, CreateDetector, GetVoterProfilesBySeason
 ```
-
-### `GET /api/v1/seasons/:seasonId/detector`
-Get detector status (purchased or not) and voter list.
-- **Success 200:** `{ "data": { "purchased": bool, "voters": [VoterProfile], "crystal_balance": int } }`
-- **Voters only returned if purchased.** Otherwise empty array.
-
-### `POST /api/v1/seasons/:seasonId/detector`
-Buy a detector for 10 crystals.
-- **Success 200:** `{ "data": { "purchased": true, "voters": [VoterProfile], "crystal_balance": int } }`
-- **Error 402:** `INSUFFICIENT_FUNDS`
-- **Idempotent:** if already purchased, returns existing detector result.
 
 ## Mobile (Flutter)
 
@@ -155,9 +179,9 @@ Buy a detector for 10 crystals.
 - **DetectorBottomSheet** — blurred voter list until purchased (10 crystals), then reveals voter profiles
 - **AchievementPopup** — full-screen overlay with bounce animation for new achievements, tap to cycle/dismiss
 
-### Architecture
+### Flutter Architecture
 
-```
+```text
 mobile/lib/features/reveal/
 ├── data/reveal_repository.dart              # API calls
 ├── domain/reveal.dart                       # Freezed models (RevealData, MyCard, MemberCard, DetectorResult, etc.)

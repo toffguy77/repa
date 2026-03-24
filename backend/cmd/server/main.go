@@ -271,7 +271,7 @@ func main() {
 	}
 
 	// Asynq worker
-	go startWorker(cfg, revealService, achieveService, cardsService, pushService, telegramService, asynqClient)
+	go startWorker(cfg, revealService, achieveService, cardsService, pushService, telegramService, groupsService, asynqClient)
 
 	// Graceful shutdown
 	go func() {
@@ -351,7 +351,7 @@ func wellKnownAndroid(c echo.Context) error {
 	})
 }
 
-func startWorker(cfg *config.Config, revealSvc *revealsvc.Service, achieveSvc *achievesvc.Service, cardsSvc *cardssvc.Service, pushSvc *pushsvc.Service, telegramSvc *telegramsvc.Service, asynqClient *asynq.Client) {
+func startWorker(cfg *config.Config, revealSvc *revealsvc.Service, achieveSvc *achievesvc.Service, cardsSvc *cardssvc.Service, pushSvc *pushsvc.Service, telegramSvc *telegramsvc.Service, groupsSvc *groupssvc.Service, asynqClient *asynq.Client) {
 	srv, err := lib.NewAsynqServer(cfg.RedisURL)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to create asynq server")
@@ -378,6 +378,9 @@ func startWorker(cfg *config.Config, revealSvc *revealsvc.Service, achieveSvc *a
 	mux.HandleFunc(lib.TypePushSundayPrev, pushProcessor.HandleSundayPreview)
 	mux.HandleFunc(lib.TypePushSundayStreak, pushProcessor.HandleSundayStreak)
 	mux.HandleFunc(lib.TypeReactionPush, pushProcessor.HandleReactionPush)
+
+	seasonCreator := tasks.NewSeasonCreator(groupsSvc)
+	mux.HandleFunc(lib.TypeSeasonCreator, seasonCreator.HandleSeasonCreator)
 
 	if telegramSvc != nil {
 		telegramProcessor := tasks.NewTelegramProcessor(telegramSvc)
@@ -414,6 +417,9 @@ func startScheduler(cfg *config.Config) {
 	registerCron(scheduler, "0 16 * * 5", lib.TypePushFriPreReveal, "default", "friday-pre-reveal (Fri 19:00 MSK)")
 	registerCron(scheduler, "0 9 * * 0", lib.TypePushSundayPrev, "default", "sunday-preview (Sun 12:00 MSK)")
 	registerCron(scheduler, "0 15 * * 0", lib.TypePushSundayStreak, "default", "sunday-streak (Sun 18:00 MSK)")
+
+	// Season creator: Sunday 18:00 UTC (21:00 MSK) — create new seasons for active groups
+	registerCron(scheduler, "0 18 * * 0", lib.TypeSeasonCreator, "critical", "season-creator (Sun 21:00 MSK)")
 
 	// Telegram season-start: same time as weekly push (Mon 17:00 MSK)
 	registerCron(scheduler, "0 14 * * 1", lib.TypeTelegramStart, "default", "telegram-season-start (Mon 17:00 MSK)")

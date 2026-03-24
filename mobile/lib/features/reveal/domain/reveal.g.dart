@@ -110,6 +110,7 @@ _$TopQuestionResultImpl _$$TopQuestionResultImplFromJson(
     _$TopQuestionResultImpl(
       questionId: json['question_id'] as String,
       questionText: json['question_text'] as String,
+      userId: json['user_id'] as String,
       username: json['username'] as String,
       avatarEmoji: json['avatar_emoji'] as String?,
       percentage: (json['percentage'] as num).toDouble(),
@@ -120,6 +121,7 @@ Map<String, dynamic> _$$TopQuestionResultImplToJson(
     <String, dynamic>{
       'question_id': instance.questionId,
       'question_text': instance.questionText,
+      'user_id': instance.userId,
       'username': instance.username,
       'avatar_emoji': instance.avatarEmoji,
       'percentage': instance.percentage,

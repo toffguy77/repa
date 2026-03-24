@@ -6,13 +6,14 @@ The member profile screen shows a user's stats, achievements, legend text, and s
 
 ## API Endpoint
 
-### `GET /api/v1/groups/:groupId/members/:userId/profile`
+### `GET /api/v1/groups/:id/members/:userId/profile`
 
 Returns the full profile of a group member.
 
 - **Success 200:** `{ "data": ProfileResponse }`
 - **Error 404:** `NOT_FOUND` — user not found
 - **Error 403:** `NOT_MEMBER` — target user is not a member of the group
+- **Auth:** requester must be a member of the group (JWT user is checked, not just target)
 
 ### Response DTO
 
@@ -54,6 +55,10 @@ Returns the full profile of a group member.
   ]
 }
 ```
+
+### Null-safety: top_attribute_all_time
+
+`GetTopAttributeAllTime` query may return `sql.ErrNoRows` if the user has no votes — this is treated as empty data (nil). Other DB errors propagate normally. Fixed in commit `a3e8377`.
 
 ## Legend Generation
 

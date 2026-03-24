@@ -84,6 +84,7 @@ class TopQuestionResult with _$TopQuestionResult {
   const factory TopQuestionResult({
     @JsonKey(name: 'question_id') required String questionId,
     @JsonKey(name: 'question_text') required String questionText,
+    @JsonKey(name: 'user_id') required String userId,
     required String username,
     @JsonKey(name: 'avatar_emoji') String? avatarEmoji,
     required double percentage,

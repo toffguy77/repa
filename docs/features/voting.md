@@ -37,44 +37,59 @@ Get group-wide voting progress for a season.
 
 ### VotingScreen (`/groups/:id/vote/:seasonId`)
 Sequential question-answer flow:
-- **Progress bar** at top showing X of N questions answered
-- **QuestionCard** displays question text with category emoji, slide-in animation
-- **Participant grid** (2x2 for <= 4 targets, scrollable grid for more) showing group members
-- **Selection flow:** tap participant -> purple border + checkmark animation -> 400ms delay -> slide to next question
-- **Back swipe blocked** (PopScope canPop: false) — answers cannot be changed
-- **Exit dialog** confirms exit, notes progress is saved
-- **Resume:** loads session from API, skips already-answered questions automatically
+- Progress bar at top showing current question number out of total (e.g. "2 из 5" in AppBar title)
+- QuestionCard displays question text with category emoji, keyed by question ID to trigger slide-in animation on change
+- Participant grid: 2x2 fixed grid for <= 4 targets (non-scrollable), scrollable GridView for more
+- Selection flow: tap participant → purple border highlight → API call and 400ms delay run in parallel → advance to next question
+- Back swipe blocked (PopScope canPop: false) — answers cannot be changed once submitted
+- Exit via close button in AppBar shows a confirmation dialog; notes that progress is saved and voting can be resumed later
+- On load: skips already-answered questions, starts from the first unanswered one
+- Error state shows a retry button; errors during vote submission appear as a SnackBar
 
 ### VotingCompleteScreen (`/groups/:id/vote/:seasonId/complete`)
-Shown after last vote:
-- Party emoji with elastic scale-in animation
-- "Ты проголосовал!" headline
+Shown automatically after the last vote is submitted (VotingScreen navigates via `context.go`):
+- Party emoji with elastic scale-in + fade-in animation (flutter_animate)
+- "Ты проголосовал!" headline with slide-up fade-in
 - "Reveal в пятницу в 20:00" subtitle
-- Group progress card: X of N voted, quorum status
-- "Назад в группу" button navigates to group detail
+- Group progress card: linear progress bar, "X из N проголосовали", "Кворум достигнут!" if quorum reached
+- Progress is fetched independently via `groupVotingProgressProvider` (separate FutureProvider, not from VotingNotifier)
+- "Назад в группу" button navigates to `/groups/:id`
+- Back swipe blocked (PopScope canPop: false)
+- Heavy haptic feedback on init
 
 ## State Management
 
-**VotingNotifier** (Riverpod StateNotifier):
-- `loadSession()` — fetches voting session, determines unanswered questions, shuffles targets
-- `selectTarget(targetId)` — submits vote, advances to next question or completes
-- Prevents double-taps during submission
-- Targets are re-shuffled between questions
+**VotingNotifier** (Riverpod StateNotifier, `votingProvider.autoDispose.family` keyed by seasonId):
+- `loadSession()` — fetches voting session, filters unanswered questions, shuffles targets
+- `selectTarget(targetId)` — guards against double-tap (checks `submitting` and `selectedTargetId`), submits vote via API with a parallel 400ms minimum delay, advances `currentIndex` or sets `completed = true`
+- Targets are re-shuffled after each question advances
+- If session loads with all questions already answered, sets `completed = true` immediately
+
+**groupVotingProgressProvider** — separate `FutureProvider.autoDispose.family` keyed by seasonId, used by VotingCompleteScreen to fetch progress independently of the autoDispose VotingNotifier.
 
 ## File Structure
 
 ```
 mobile/lib/features/voting/
-  domain/voting.dart          — Freezed models (VotingQuestion, VotingTarget, VotingSession, etc.)
-  data/voting_repository.dart — API calls via ApiService
+  domain/voting.dart               — Freezed models: VotingQuestion, VotingTarget, VotingProgress,
+                                     VotingSession, VoteResultData, VoteInfo, GroupVotingProgress
+  data/voting_repository.dart      — getVotingSession, castVote, getVotingProgress via ApiService
   presentation/
-    voting_notifier.dart       — State management + providers
-    voting_screen.dart         — Main voting flow screen
-    voting_complete_screen.dart — Completion screen with animations
+    voting_notifier.dart           — VotingState, VotingNotifier, votingProvider, groupVotingProgressProvider
+    voting_screen.dart             — Main voting flow screen
+    voting_complete_screen.dart    — Completion screen with animations
     widgets/
-      question_card.dart       — Question display with category emoji
-      participant_card.dart    — Tappable member card with selection state
+      question_card.dart           — Question text + category emoji display
+      participant_card.dart        — Tappable member card with selected/disabled states
 ```
+
+## Tests
+
+31 tests across 4 files (added in T09):
+- `test/features/voting/domain/voting_test.dart` — Freezed model JSON serialization
+- `test/features/voting/presentation/voting_notifier_test.dart` — notifier logic (load, selectTarget, double-tap guard, completion)
+- `test/features/voting/presentation/widgets/question_card_test.dart` — widget rendering
+- `test/features/voting/presentation/widgets/participant_card_test.dart` — widget rendering + tap
 
 ## Business Rules
 
@@ -83,4 +98,4 @@ mobile/lib/features/voting/
 - Answers cannot be changed once submitted
 - Session can be interrupted and resumed — progress persists server-side
 - Quorum: >= 50% of members must complete voting (>= 40% for groups < 8 members)
-- voter_id is stored but NEVER exposed in API responses tied to specific votes
+- voter_id is stored in the `votes` table but NEVER exposed in API responses tied to specific votes

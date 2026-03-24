@@ -1,4 +1,4 @@
-# Settings, Analytics, Assets & Admin
+# Settings, Analytics, App Config & Admin
 
 ## Settings Screen (`/settings`)
 - Accessible from Profile tab via gear icon in AppBar

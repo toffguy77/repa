@@ -4,10 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	db "github.com/repa-app/repa/internal/db/sqlc"
+	"github.com/rs/zerolog/log"
 )
 
 var (
@@ -548,4 +550,91 @@ func getNextSeasonDates() (startsAt, revealAt, endsAt time.Time) {
 	endsAt = time.Date(sunday.Year(), sunday.Month(), sunday.Day(), 23, 59, 0, 0, msk).UTC()
 
 	return startsAt, revealAt, endsAt
+}
+
+// CreateNewSeasons creates a new VOTING season for all active groups (>=3 members)
+// that don't currently have one. It also closes any previously REVEALED seasons.
+func (s *Service) CreateNewSeasons(ctx context.Context) error {
+	groups, err := s.queries.GetGroupsNeedingNewSeason(ctx)
+	if err != nil {
+		return err
+	}
+
+	var failed int
+	for _, g := range groups {
+		if err := s.createSeasonForGroup(ctx, g); err != nil {
+			log.Error().Err(err).Str("group_id", g.ID).Msg("failed to create new season for group")
+			failed++
+			continue
+		}
+	}
+
+	if failed > 0 && failed == len(groups) {
+		return fmt.Errorf("season creator: all %d groups failed", failed)
+	}
+	if failed > 0 {
+		log.Warn().Int("failed", failed).Int("total", len(groups)).Msg("season creator: some groups failed")
+	}
+	return nil
+}
+
+func (s *Service) createSeasonForGroup(ctx context.Context, g db.Group) error {
+	tx, err := s.sqlDB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	qtx := s.queries.WithTx(tx)
+
+	// Close any REVEALED seasons for this group
+	revealedSeasons, err := qtx.GetRevealedSeasonsForGroup(ctx, g.ID)
+	if err != nil {
+		return err
+	}
+	for _, rs := range revealedSeasons {
+		if err := qtx.UpdateSeasonStatus(ctx, db.UpdateSeasonStatusParams{
+			ID:     rs.ID,
+			Status: db.SeasonStatusCLOSED,
+		}); err != nil {
+			return err
+		}
+	}
+
+	// Get next season number
+	lastNum, err := qtx.GetLastSeasonNumber(ctx, g.ID)
+	if err != nil {
+		return err
+	}
+	newNumber := lastNum + 1
+
+	startsAt, revealAt, endsAt := getNextSeasonDates()
+
+	season, err := qtx.CreateSeason(ctx, db.CreateSeasonParams{
+		ID:       uuid.New().String(),
+		GroupID:  g.ID,
+		Number:   int32(newNumber),
+		StartsAt: startsAt,
+		RevealAt: revealAt,
+		EndsAt:   endsAt,
+	})
+	if err != nil {
+		return err
+	}
+
+	categories := make([]db.QuestionCategory, 0, len(g.Categories))
+	for _, c := range g.Categories {
+		categories = append(categories, db.QuestionCategory(c))
+	}
+
+	memberCount, err := qtx.CountGroupMembers(ctx, g.ID)
+	if err != nil {
+		return err
+	}
+
+	if err := s.selectAndAssignQuestionsTx(ctx, qtx, season.ID, g.ID, categories, int(memberCount)); err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }

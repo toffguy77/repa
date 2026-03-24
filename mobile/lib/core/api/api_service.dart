@@ -35,14 +35,14 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> checkUsername(String username) async {
-    final response = await _dio.get('/auth/username/check',
+    final response = await _dio.get('/auth/username-check',
         queryParameters: {'username': username});
     return response.data as Map<String, dynamic>;
   }
 
   Future<Map<String, dynamic>> updateProfile(
       Map<String, dynamic> body) async {
-    final response = await _dio.put('/auth/profile', data: body);
+    final response = await _dio.patch('/auth/profile', data: body);
     return response.data as Map<String, dynamic>;
   }
 
@@ -55,7 +55,7 @@ class ApiService {
   // --- App ---
 
   Future<Map<String, dynamic>> appVersion() async {
-    final response = await _dio.get('/auth/version');
+    final response = await _dio.get('/app/version');
     return response.data as Map<String, dynamic>;
   }
 

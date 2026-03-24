@@ -41,9 +41,22 @@ The achievements engine calculates and awards achievements to group members afte
 
 ### Not yet implemented
 
-| Type | Condition | Status |
-|---|---|---|
-| EXPERT_OF | Correctly predicted a specific member's wins 5+ times in a row across seasons | TODO |
+The DB enum defines additional achievement types that have no implementation in the service yet:
+
+| Type | Status |
+|---|---|
+| EXPERT_OF | Reserved — correctly predicted a specific member's wins 5+ times |
+| RANDOM | Reserved |
+| BEST_FRIEND | Reserved |
+| DETECTIVE | Reserved |
+| STRANGER | Reserved |
+| CHANGEABLE | Reserved |
+| ENIGMA | Reserved |
+| RISING | Reserved |
+| LAST_VOTER | Reserved |
+| ANALYST | Reserved |
+| MEDIA | Reserved |
+| CONSPIRATOR | Reserved |
 
 ## Worker Job
 
@@ -97,7 +110,7 @@ The achievements engine calculates and awards achievements to group members afte
 
 ## Architecture
 
-```
+```text
 backend/
 ├── internal/
 │   ├── service/achievements/

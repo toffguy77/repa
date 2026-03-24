@@ -63,20 +63,20 @@ void main() {
   });
 
   test('checkUsername gets with query param', () async {
-    when(() => mockDio.get('/auth/username/check',
+    when(() => mockDio.get('/auth/username-check',
             queryParameters: any(named: 'queryParameters')))
         .thenAnswer((_) async => Response(
               data: {'data': {'available': true}},
               statusCode: 200,
-              requestOptions: RequestOptions(path: '/auth/username/check'),
+              requestOptions: RequestOptions(path: '/auth/username-check'),
             ));
 
     final result = await service.checkUsername('testname');
     expect(result['data']['available'], true);
   });
 
-  test('updateProfile puts to correct path', () async {
-    when(() => mockDio.put('/auth/profile', data: any(named: 'data')))
+  test('updateProfile patches to correct path', () async {
+    when(() => mockDio.patch('/auth/profile', data: any(named: 'data')))
         .thenAnswer((_) async => Response(
               data: {
                 'data': {'id': 'u1', 'username': 'newname', 'created_at': '2026-01-01'}
@@ -90,7 +90,7 @@ void main() {
   });
 
   test('appVersion gets from correct path', () async {
-    when(() => mockDio.get('/auth/version')).thenAnswer((_) async => Response(
+    when(() => mockDio.get('/app/version')).thenAnswer((_) async => Response(
           data: {
             'data': {
               'min_version': '1.0.0',
@@ -99,7 +99,7 @@ void main() {
             }
           },
           statusCode: 200,
-          requestOptions: RequestOptions(path: '/auth/version'),
+          requestOptions: RequestOptions(path: '/app/version'),
         ));
 
     final result = await service.appVersion();

@@ -110,48 +110,53 @@ Delete user account (hard delete, cascades to all related data).
 ## Business Rules
 
 - **OTP rate limiting:** max 3 sends per phone per hour, max 5 verify attempts per 5 minutes
+- **OTP storage:** code stored in Redis with 5-minute TTL; attempt counter stored with 5-minute TTL; both deleted on successful verify
 - **Username format:** regex `^[a-zA-Za-яА-ЯёЁ0-9_]{3,20}$` — letters (Latin + Cyrillic), digits, underscore
-- **Username cooldown:** can only change username once every 30 days
+- **Username cooldown:** can only change username once every 30 days (enforced against `updated_at`)
 - **New user detection (mobile):** if `avatar_emoji == null || birth_year == null` after auth → redirect to profile setup
 - **JWT:** HS256, 90-day expiry, claims: UserID, Username
-- **Avatar:** max 5MB, JPEG/PNG only (validated by magic bytes), resized to 256x256, stored as JPEG 85% in S3
+- **Avatar:** max 5MB, JPEG/PNG only (validated by magic bytes: `FF D8 FF` for JPEG, `89 50 4E 47` for PNG), resized to 256x256 using `imaging.Fill` (Lanczos), stored as JPEG 85% in S3
 - **Dev mode:** when `DEV_MODE=true`, OTP code is returned in the send response
 - **Push preferences:** default to enabled if no preference record exists
 - **Account deletion:** hard delete with CASCADE — removes all user data
+- **App version:** `compareSemver` does simple numeric part comparison; `force_update` is true when client version is below `AppMinVersion`
 
 ## Mobile Screens
 
 ### Phone Screen (`/auth/phone`)
 - Text field with `+7 (___) ___-__-__` mask (mask_text_input_formatter)
 - "Получить код" button, disabled until 10 digits entered
-- Apple/Google sign-in buttons (stubs, disabled)
-- Loading spinner during OTP send
-- Error message display
+- Apple/Google sign-in buttons (stubs, `onPressed: null`)
+- Loading spinner inline in button during OTP send
+- Error message display below text field
 
 ### OTP Screen (`/auth/otp`)
-- 6-digit Pinput input, auto-submits on completion
+- Receives phone number via GoRouter `extra` parameter
+- 6-digit Pinput input, auto-submits on completion (`onCompleted` callback)
 - 5-minute countdown timer (Отправить повторно через MM:SS)
-- "Отправить код повторно" button appears after timer expires
+- "Отправить код повторно" button appears after timer expires; resets timer and clears pin on success
+- `OtpVerifyNotifier.reset()` called on resend to clear previous error state
 - Error message display for invalid code
-- Navigation: success → router redirect to `/home` or `/auth/setup`
+- Navigation: success → router redirect to `/home` or `/auth/setup` (driven by `AuthNotifier.login`)
 
 ### Profile Setup Screen (`/auth/setup`)
 - Shown only when `needsProfileSetup == true` (no avatar_emoji or no birth_year)
-- Emoji avatar picker: 20 emojis in a grid, tap to select
-- Username field with 500ms debounce availability check (green checkmark / red X)
-- Birth year field: digits only, 4 chars max
+- Emoji avatar picker: 20 hardcoded emojis in a `Wrap` grid, tap to select (first emoji pre-selected)
+- Username field with 500ms debounce availability check (green checkmark / red X / spinner suffix icon)
+- Birth year field: digits only, 4 chars max (FilteringTextInputFormatter + LengthLimitingTextInputFormatter)
 - "Готово" button, disabled until valid form (username >= 3 chars, birth year in range)
 - Validation: birth year between `currentYear - 22` and `currentYear - 14`
+- Navigation handled by router redirect after `AuthNotifier.profileCompleted`
 
 ### Home Screen (`/home`) — stub
-- Welcome message, logout button
-- Placeholder for groups (T07)
+- Peach emoji, welcome text, "Экран групп появится в T07" label
+- Logout button (calls `AuthNotifier.logout()`)
 
 ### Navigation (go_router)
 - Auth redirect: no token → `/auth/phone`
 - Profile setup redirect: authenticated + needsProfileSetup → `/auth/setup`
 - Authenticated + complete profile → `/home`
-- Uses `ChangeNotifier` + `refreshListenable` pattern to avoid GoRouter recreation
+- Uses `_RouterNotifier extends ChangeNotifier` + `refreshListenable` pattern to avoid GoRouter recreation on every provider rebuild; only notifies when `status` or `needsProfileSetup` changes
 
 ## Architecture
 
@@ -161,25 +166,27 @@ Delete user account (hard delete, cascades to all related data).
 backend/
 ├── cmd/server/main.go                    # Entrypoint, route registration
 ├── internal/
-│   ├── config/config.go                  # Env-based config (34 vars)
+│   ├── config/config.go                  # Env-based config (includes DevMode bool)
 │   ├── handler/
 │   │   ├── errors.go                     # ErrorResponse(), ErrorHandler()
-│   │   └── auth/handler.go              # 11 handler methods
-│   ├── service/auth/service.go          # Business logic, JWT signing, S3 upload
+│   │   ├── auth/handler.go               # 11 handler methods
+│   │   └── auth/handler_test.go          # Handler-level tests (toUserDto, AppVersion, etc.)
+│   ├── service/auth/service.go           # Business logic, JWT signing, S3 upload
+│   └── service/auth/service_test.go      # Unit tests (isValidImage, usernameRegex, generateUsername)
 │   ├── middleware/
-│   │   ├── auth.go                      # JWTAuth middleware, GetCurrentUser()
-│   │   ├── ratelimit.go                 # Redis-based rate limiter
-│   │   └── validator.go                 # go-playground/validator wrapper
+│   │   ├── auth.go                       # JWTAuth middleware, GetCurrentUser()
+│   │   ├── ratelimit.go                  # Redis-based rate limiter
+│   │   └── validator.go                  # go-playground/validator wrapper
 │   ├── db/
-│   │   ├── migrations/001_init.up.sql   # Full schema (14 tables, 7 enums)
-│   │   ├── queries/users.sql            # User CRUD queries
-│   │   ├── queries/push_preferences.sql # Push pref queries
-│   │   └── sqlc/                        # Generated Go code (DO NOT EDIT)
+│   │   ├── migrations/001_init.up.sql    # Full schema (14 tables, 7 enums)
+│   │   ├── queries/users.sql             # User CRUD queries
+│   │   ├── queries/push_preferences.sql  # Push pref queries
+│   │   └── sqlc/                         # Generated Go code (DO NOT EDIT)
 │   └── lib/
-│       ├── db.go                        # pgxpool connection
-│       ├── redis.go                     # go-redis client
-│       ├── s3.go                        # S3 upload client
-│       └── asynq.go                     # Task queue client + 15 task types
+│       ├── db.go                         # pgxpool connection
+│       ├── redis.go                      # go-redis client
+│       ├── s3.go                         # S3 upload client
+│       └── asynq.go                      # Task queue client
 ```
 
 ### Mobile
@@ -189,12 +196,12 @@ mobile/lib/
 ├── main.dart                                         # App entrypoint, ProviderScope
 ├── core/
 │   ├── api/
-│   │   ├── api_client.dart                          # Dio factory, auth interceptor, parseError
-│   │   └── api_service.dart                         # API methods (Dio wrapper)
+│   │   ├── api_client.dart                          # Dio factory, auth interceptor, parseError, AppException
+│   │   └── api_service.dart                         # Raw API methods (Dio wrapper, no code generation)
 │   ├── providers/
 │   │   ├── api_provider.dart                        # Dio, ApiService, SecureStorage providers
 │   │   └── auth_provider.dart                       # AuthNotifier, AuthState, AuthStatus
-│   ├── router/app_router.dart                       # GoRouter with refreshListenable
+│   ├── router/app_router.dart                       # GoRouter with _RouterNotifier + refreshListenable
 │   └── theme/
 │       ├── app_colors.dart                          # #7C3AED purple, surface, text colors
 │       ├── app_text_styles.dart                     # headline1/2, body, caption, button
@@ -211,9 +218,37 @@ mobile/lib/
     └── home/home_screen.dart                        # Stub home screen
 ```
 
-### Key Dependencies
+### Key Dependencies (Mobile)
 
-- **Backend:** Dio interceptor adds `Authorization: Bearer {token}` from FlutterSecureStorage
-- **401 handling:** Dio interceptor on 401 → deletes token → calls `AuthNotifier.logout()` → router redirects to `/auth/phone`
-- **Token validation on startup:** `AuthNotifier.checkAuth()` reads token from storage → calls `GET /auth/me` → populates user or clears token
-- **State management:** All auth state via Riverpod `StateNotifier` providers, no setState for business logic
+- **Dio interceptor (onRequest):** reads token from `FlutterSecureStorage`, adds `Authorization: Bearer {token}` header
+- **Dio interceptor (onError):** on 401 → deletes token from storage → calls `onUnauthorized` callback → `AuthNotifier.logout()` → router redirects to `/auth/phone`
+- **Token validation on startup:** `AuthNotifier.checkAuth()` reads token from storage → calls `GET /auth/me` via raw Dio (not `ApiService`) → populates user or clears token
+- **State management:** All auth state via Riverpod `StateNotifier` providers, no `setState` for business logic
+- **ApiService** is a plain Dio wrapper (not retrofit/code-gen); methods return `Map<String, dynamic>`
+
+### Mobile/Backend Path Alignment
+
+All mobile API paths now match the backend routes. Previously mismatched paths were fixed:
+- `GET /auth/username-check` (was `/auth/username/check`)
+- `PATCH /auth/profile` (was `PUT`)
+- `GET /app/version` (was `/auth/version`)
+
+## Tests
+
+### Backend (T04)
+- `backend/internal/handler/auth/handler_test.go` — handler-level tests: `toUserDto` field mapping, `AppVersion` semver logic (6 cases), missing param / bad JSON error handling
+- `backend/internal/service/auth/service_test.go` — unit tests: `isValidImage` magic byte detection (7 cases), `usernameRegex` (11 cases), `generateUsername` uniqueness and prefix
+
+### Mobile (T05)
+- 60 tests across 10 test files, 83% line coverage (excluding generated files)
+- Mocking via `mocktail`; widget tests use `ProviderScope` overrides
+- `test/core/api/api_client_test.dart` — `parseError` (API error, generic, timeout cases), `AppException.toString`
+- `test/core/api/api_service_test.dart` — `ApiService` method calls
+- `test/core/providers/auth_provider_test.dart` — `AuthNotifier` (checkAuth, login, logout, profileCompleted, needsProfileSetup detection)
+- `test/core/router/app_router_test.dart` — redirect logic
+- `test/features/auth/data/auth_repository_test.dart` — `AuthRepository` (sendOtp, verifyOtp, checkUsername, updateProfile; error propagation)
+- `test/features/auth/presentation/auth_notifier_test.dart` — `OtpSendNotifier`, `OtpVerifyNotifier`, `ProfileSetupNotifier` (loading states, error states, success flows, reset)
+- `test/features/auth/presentation/phone_screen_test.dart` — widget test for phone screen
+- `test/features/auth/presentation/otp_screen_test.dart` — widget test for OTP screen
+- `test/features/auth/presentation/profile_setup_screen_test.dart` — widget test for profile setup
+- `test/features/home/home_screen_test.dart` — widget test for home screen stub
