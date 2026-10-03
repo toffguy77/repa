@@ -120,6 +120,55 @@ func (h *Handler) GetMyCardURL(c echo.Context) error {
 	})
 }
 
+// GetAnticipation returns what a member may know about votes concerning them mid-week: a count and,
+// from Thursday, one category emoji. Nothing that identifies anyone or names an attribute.
+func (h *Handler) GetAnticipation(c echo.Context) error {
+	seasonID := c.Param("seasonId")
+	claims := appmw.GetCurrentUser(c)
+
+	state, err := h.svc.GetAnticipation(c.Request().Context(), seasonID, claims.UserID)
+	if err != nil {
+		return mapServiceError(c, err)
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{"data": state})
+}
+
+// BuyDetectorHint reveals one more voter partially — the middle rung of the detector ladder.
+func (h *Handler) BuyDetectorHint(c echo.Context) error {
+	seasonID := c.Param("seasonId")
+	claims := appmw.GetCurrentUser(c)
+
+	result, err := h.svc.BuyDetectorHint(c.Request().Context(), seasonID, claims.UserID)
+	if err != nil {
+		return mapServiceError(c, err)
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{"data": result})
+}
+
+type recordShareRequest struct {
+	Channel string `json:"channel"`
+}
+
+// RecordShare notes that the member shared their card. Never fails the caller's flow for a
+// telemetry write — see revealsvc.RecordShare.
+func (h *Handler) RecordShare(c echo.Context) error {
+	seasonID := c.Param("seasonId")
+	claims := appmw.GetCurrentUser(c)
+
+	var req recordShareRequest
+	// A missing or malformed body is not worth failing a share over; the channel simply
+	// becomes "other".
+	_ = c.Bind(&req)
+
+	if err := h.svc.RecordShare(c.Request().Context(), seasonID, claims.UserID, req.Channel); err != nil {
+		return mapServiceError(c, err)
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{"data": map[string]any{"recorded": true}})
+}
+
 func mapServiceError(c echo.Context, err error) error {
 	switch {
 	case errors.Is(err, revealsvc.ErrSeasonNotFound):
@@ -130,6 +179,15 @@ func mapServiceError(c echo.Context, err error) error {
 		return handler.ErrorResponse(c, http.StatusForbidden, "NOT_MEMBER", "You are not a member of this group")
 	case errors.Is(err, revealsvc.ErrInsufficientFunds):
 		return handler.ErrorResponse(c, http.StatusPaymentRequired, "INSUFFICIENT_FUNDS", "Not enough crystals")
+	case errors.Is(err, revealsvc.ErrSeasonAlreadyRevealed):
+		return handler.ErrorResponse(c, http.StatusBadRequest, "SEASON_ALREADY_REVEALED",
+			"Результаты уже готовы")
+	case errors.Is(err, revealsvc.ErrNothingToReveal):
+		return handler.ErrorResponse(c, http.StatusConflict, "NOTHING_TO_REVEAL",
+			"Больше подсказок нет")
+	case errors.Is(err, revealsvc.ErrGroupTooSmall):
+		return handler.ErrorResponse(c, http.StatusForbidden, "GROUP_TOO_SMALL",
+			"Детектор доступен в группах от 5 человек")
 	default:
 		return handler.ErrorResponse(c, http.StatusInternalServerError, "INTERNAL", "Something went wrong")
 	}

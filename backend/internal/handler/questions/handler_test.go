@@ -652,11 +652,11 @@ func TestDeleteQuestion_Success(t *testing.T) {
 			"id", "name", "invite_code", "admin_id",
 			"telegram_chat_id", "telegram_chat_username",
 			"telegram_connect_code", "telegram_connect_expiry",
-			"created_at", "categories",
+			"created_at", "categories", "kind_only",
 		}).AddRow(
 			"grp-1", "Test", "inv-1", "admin-1",
 			nil, nil, nil, nil,
-			time.Now(), `{"HOT"}`,
+			time.Now(), `{"HOT"}`, false,
 		))
 
 	e := newTestEcho()
@@ -697,11 +697,11 @@ func TestDeleteQuestion_NotFound(t *testing.T) {
 			"id", "name", "invite_code", "admin_id",
 			"telegram_chat_id", "telegram_chat_username",
 			"telegram_connect_code", "telegram_connect_expiry",
-			"created_at", "categories",
+			"created_at", "categories", "kind_only",
 		}).AddRow(
 			"grp-1", "Test", "inv-1", "user-1",
 			nil, nil, nil, nil,
-			time.Now(), `{"HOT"}`,
+			time.Now(), `{"HOT"}`, false,
 		))
 
 	e := newTestEcho()

@@ -607,17 +607,21 @@ func TestHandleBotRemoved_ErrorIsLoggedNotReturned(t *testing.T) {
 
 // --- SendMessage tests ---
 
-func TestSendMessage_NilBotPanics(t *testing.T) {
+func TestSendMessage_NilBotIsANoOp(t *testing.T) {
 	m := newMockQuerier()
 	svc := NewService(m, nil, "https://repa.app")
 
+	// The Telegram integration is optional, and SendMessage is called from a detached goroutine
+	// in the webhook — a panic there takes the process down instead of failing a request.
 	defer func() {
-		if r := recover(); r == nil {
-			t.Error("expected panic when bot is nil, but did not panic")
+		if r := recover(); r != nil {
+			t.Errorf("a nil bot must not panic, got %v", r)
 		}
 	}()
 
-	_ = svc.SendMessage(12345, "hello")
+	if err := svc.SendMessage(12345, "hello"); err != nil {
+		t.Errorf("expected a no-op, got %v", err)
+	}
 }
 
 // --- HandleConnect tests ---
@@ -1175,4 +1179,134 @@ func TestPostReveal_LimitedTo5ResultsNoBotPanics(t *testing.T) {
 	}()
 
 	_ = svc.PostReveal(context.Background(), "s1")
+}
+
+// --- /join ---
+
+func TestHandleJoinCommand_ConnectedChatGetsTheGroupInvite(t *testing.T) {
+	m := newMockQuerier()
+	m.groupsByTelegramID["456"] = db.Group{
+		ID:             "g1",
+		Name:           "9Б",
+		InviteCode:     "AB2CD3",
+		TelegramChatID: sql.NullString{String: "456", Valid: true},
+	}
+	svc := NewService(m, nil, "https://repa.app")
+
+	msg, err := svc.HandleJoinCommand(context.Background(), 456)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(msg, "9Б") {
+		t.Error("the reply should name the group: a person may be in several connected chats")
+	}
+	if !strings.Contains(msg, "https://repa.app/join/AB2CD3") {
+		t.Errorf("the reply should carry the group's invite link, got %q", msg)
+	}
+	if !strings.Contains(msg, "s=telegram") {
+		t.Error("the invite should mark Telegram as the channel so chat joins are measurable")
+	}
+}
+
+func TestHandleJoinCommand_UnconnectedChatRevealsNoGroup(t *testing.T) {
+	m := newMockQuerier()
+	// 999 is deliberately absent from groupsByTelegramID: the chat is not connected.
+	svc := NewService(m, nil, "https://repa.app")
+
+	msg, err := svc.HandleJoinCommand(context.Background(), 999)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(msg, "не привязан") {
+		t.Errorf("expected an explanation, got %q", msg)
+	}
+	if strings.Contains(msg, "/join/") {
+		t.Error("an unconnected chat must not be handed any group's invite")
+	}
+	if !strings.Contains(msg, "/connect") {
+		t.Error("the reply should say how to connect")
+	}
+}
+
+func TestHandleJoinCommand_ReplyCarriesNoResults(t *testing.T) {
+	m := newMockQuerier()
+	m.groupsByTelegramID["456"] = db.Group{ID: "g1", Name: "9Б", InviteCode: "AB2CD3"}
+	svc := NewService(m, nil, "https://repa.app")
+
+	msg, err := svc.HandleJoinCommand(context.Background(), 456)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The anonymity model depends on results existing only in the app.
+	for _, forbidden := range []string{"%", "Сезон", "атрибут", "проголосовал"} {
+		if strings.Contains(msg, forbidden) {
+			t.Errorf("the join reply must carry no results data, found %q in %q", forbidden, msg)
+		}
+	}
+}
+
+func TestHelpText_NamesEveryCommand(t *testing.T) {
+	svc := NewService(newMockQuerier(), nil, "https://repa.app")
+
+	help := svc.HelpText()
+
+	for _, cmd := range []string{"/join", "/repa", "/connect", "/disconnect"} {
+		if !strings.Contains(help, cmd) {
+			t.Errorf("help should name %s, got %q", cmd, help)
+		}
+	}
+}
+
+func TestInviteURLForTelegram(t *testing.T) {
+	got := inviteURLForTelegram("AB2CD3")
+	if got != "https://repa.app/join/AB2CD3?s=telegram" {
+		t.Errorf("inviteURLForTelegram = %q", got)
+	}
+}
+
+// --- Connect conflicts ---
+
+func TestHandleConnect_AlreadyConnectedToAnotherGroupIsRefused(t *testing.T) {
+	m := newMockQuerier()
+	// The chat is already group A's.
+	m.groupsByTelegramID["456"] = db.Group{
+		ID:             "group-a",
+		Name:           "A",
+		TelegramChatID: sql.NullString{String: "456", Valid: true},
+	}
+	// Group B presents a valid code for the same chat.
+	m.groupsByConnectCode["CODE-B"] = db.Group{ID: "group-b", Name: "B"}
+	svc := NewService(m, nil, "https://repa.app")
+
+	_, err := svc.HandleConnect(context.Background(), 456, "testchat", "CODE-B")
+
+	if !errors.Is(err, ErrChatAlreadyConnected) {
+		t.Fatalf("expected ErrChatAlreadyConnected, got %v", err)
+	}
+	// Silently re-pointing would move every future announcement to B, invisible to A's members.
+	if got := m.groupsByTelegramID["456"].ID; got != "group-a" {
+		t.Errorf("the chat should still belong to group A, got %q", got)
+	}
+}
+
+func TestHandleConnect_ReconnectingTheSameGroupSucceeds(t *testing.T) {
+	m := newMockQuerier()
+	m.groupsByTelegramID["456"] = db.Group{
+		ID:             "group-a",
+		Name:           "A",
+		TelegramChatID: sql.NullString{String: "456", Valid: true},
+	}
+	m.groupsByConnectCode["CODE-A"] = db.Group{ID: "group-a", Name: "A"}
+	svc := NewService(m, nil, "https://repa.app")
+
+	name, err := svc.HandleConnect(context.Background(), 456, "testchat", "CODE-A")
+	if err != nil {
+		t.Fatalf("a code pasted twice is not an error worth surfacing: %v", err)
+	}
+	if name != "A" {
+		t.Errorf("name = %q, want A", name)
+	}
 }

@@ -32,14 +32,14 @@ import (
 var usernameRegex = regexp.MustCompile(`^[a-zA-Zа-яА-ЯёЁ0-9_]{3,20}$`)
 
 var (
-	ErrInvalidOTP     = errors.New("invalid OTP code")
-	ErrOTPBlocked     = errors.New("too many OTP attempts")
-	ErrOTPRateLimit   = errors.New("OTP rate limit exceeded")
-	ErrUserNotFound   = errors.New("user not found")
-	ErrUsernameTaken  = errors.New("username already taken")
-	ErrUsernameRecent = errors.New("username changed too recently")
-	ErrInvalidUsername = errors.New("invalid username format")
-	ErrInvalidToken   = errors.New("invalid token")
+	ErrInvalidOTP        = errors.New("invalid OTP code")
+	ErrOTPBlocked        = errors.New("too many OTP attempts")
+	ErrOTPRateLimit      = errors.New("OTP rate limit exceeded")
+	ErrUserNotFound      = errors.New("user not found")
+	ErrUsernameTaken     = errors.New("username already taken")
+	ErrUsernameRecent    = errors.New("username changed too recently")
+	ErrInvalidUsername   = errors.New("invalid username format")
+	ErrInvalidToken      = errors.New("invalid token")
 	ErrInvalidImage      = errors.New("invalid image file")
 	ErrImageTooLarge     = errors.New("image too large")
 	ErrAvatarUnavailable = errors.New("avatar uploads not configured")
@@ -60,12 +60,35 @@ type Querier interface {
 	UpsertPushPreference(ctx context.Context, arg db.UpsertPushPreferenceParams) (db.PushPreference, error)
 }
 
+// WelcomeGranter gives a new user their starting crystals. Implemented by the crystals
+// service; a narrow interface keeps auth from depending on the whole billing surface.
+type WelcomeGranter interface {
+	GrantWelcome(ctx context.Context, userID string)
+}
+
 type Service struct {
 	queries   Querier
 	rdb       *redis.Client
 	s3        *lib.S3Client
 	jwtSecret string
 	devMode   bool
+	welcome   WelcomeGranter
+}
+
+// WithWelcomeGrant wires the welcome grant. Optional: nil simply means no grant, which is what
+// unit tests that only exercise token signing want.
+func (s *Service) WithWelcomeGrant(g WelcomeGranter) *Service {
+	s.welcome = g
+	return s
+}
+
+// grantWelcome is called on every path that can create a user. The grant is idempotent, so
+// calling it for an existing user costs nothing, and a failure never blocks a registration.
+func (s *Service) grantWelcome(ctx context.Context, userID string) {
+	if s.welcome == nil {
+		return
+	}
+	s.welcome.GrantWelcome(ctx, userID)
 }
 
 func NewService(queries *db.Queries, rdb *redis.Client, s3 *lib.S3Client, jwtSecret string, devMode bool) *Service {
@@ -168,6 +191,7 @@ func (s *Service) upsertByPhone(ctx context.Context, phone string) (*AuthResult,
 		if err != nil {
 			return nil, err
 		}
+		s.grantWelcome(ctx, user.ID)
 	}
 	token, err := s.signToken(user)
 	if err != nil {
@@ -299,6 +323,7 @@ func (s *Service) upsertByAppleID(ctx context.Context, appleID string) (*AuthRes
 		if err != nil {
 			return nil, err
 		}
+		s.grantWelcome(ctx, user.ID)
 	}
 	token, err := s.signToken(user)
 	if err != nil {
@@ -355,6 +380,7 @@ func (s *Service) upsertByGoogleID(ctx context.Context, googleID string) (*AuthR
 		if err != nil {
 			return nil, err
 		}
+		s.grantWelcome(ctx, user.ID)
 	}
 	token, err := s.signToken(user)
 	if err != nil {

@@ -11,14 +11,21 @@ import (
 func setupRevealScenario(t *testing.T) (seasonID string, userIDs []string, tokens []string, questionIDs []string) {
 	t.Helper()
 
+	// Five members: the detector is only sold from eligibility.MinDetectorMembers up,
+	// because below that a voter list is "everyone except you".
 	uid1, tok1 := createTestUser(t, "reveal_u1_"+t.Name())
 	uid2, tok2 := createTestUser(t, "reveal_u2_"+t.Name())
 	uid3, tok3 := createTestUser(t, "reveal_u3_"+t.Name())
+	uid4, tok4 := createTestUser(t, "reveal_u4_"+t.Name())
+	uid5, tok5 := createTestUser(t, "reveal_u5_"+t.Name())
 
 	group := createTestGroup(t, tok1, "Reveal Group "+t.Name(), []string{"FUNNY"})
 	groupID := group["id"].(string)
-	joinGroup(t, tok2, group["invite_code"].(string))
-	joinGroup(t, tok3, group["invite_code"].(string))
+	inviteCode := group["invite_code"].(string)
+	joinGroup(t, tok2, inviteCode)
+	joinGroup(t, tok3, inviteCode)
+	joinGroup(t, tok4, inviteCode)
+	joinGroup(t, tok5, inviteCode)
 
 	seasonID = createRevealedSeason(t, groupID)
 	questionIDs = addSeasonQuestions(t, seasonID, 3)
@@ -28,7 +35,8 @@ func setupRevealScenario(t *testing.T) (seasonID string, userIDs []string, token
 	createSeasonResults(t, seasonID, uid2, questionIDs)
 	createSeasonResults(t, seasonID, uid3, questionIDs)
 
-	return seasonID, []string{uid1, uid2, uid3}, []string{tok1, tok2, tok3}, questionIDs
+	return seasonID, []string{uid1, uid2, uid3, uid4, uid5},
+		[]string{tok1, tok2, tok3, tok4, tok5}, questionIDs
 }
 
 func TestReveal_GetReveal(t *testing.T) {

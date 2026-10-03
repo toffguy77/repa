@@ -43,7 +43,14 @@ type StatsDto struct {
 	SeasonsPlayed      int32              `json:"seasons_played"`
 	VotingStreak       int32              `json:"voting_streak"`
 	MaxVotingStreak    int32              `json:"max_voting_streak"`
-	GuessAccuracy      float64            `json:"guess_accuracy"`
+	// GuessAccuracy is how often this member's votes matched the result the group arrived at.
+	//
+	// A pointer, and present only on the viewer's own profile. Each question's winner is published
+	// (reveal summary, group chronicle), so another member's figure at either extreme pins their
+	// individual votes on those questions — and because the figure is a rolling average weighted by
+	// SeasonsPlayed, reading the same profile two weeks running solves for that week's match count.
+	// Omitted rather than zeroed: 0 is indistinguishable from a member who genuinely matched nothing.
+	GuessAccuracy *float64 `json:"guess_accuracy,omitempty"`
 	TotalVotesCast     int32              `json:"total_votes_cast"`
 	TotalVotesReceived int32              `json:"total_votes_received"`
 	TopAttributeAllTime *TopAttributeDto  `json:"top_attribute_all_time"`
@@ -164,9 +171,16 @@ func (s *Service) GetProfile(ctx context.Context, groupID, userID, requesterID s
 		statsDto.SeasonsPlayed = stats.SeasonsPlayed
 		statsDto.VotingStreak = stats.VotingStreak
 		statsDto.MaxVotingStreak = stats.MaxVotingStreak
-		statsDto.GuessAccuracy = math.Round(stats.GuessAccuracy*10) / 10
 		statsDto.TotalVotesCast = stats.TotalVotesCast
 		statsDto.TotalVotesReceived = stats.TotalVotesReceived
+
+		// Only on one's own profile — see StatsDto.GuessAccuracy. Decided here rather than in the
+		// handler so a future caller of this service does not get the figure by default: that is the
+		// wrong direction for a privacy decision to fail in.
+		if requesterID == userID {
+			accuracy := math.Round(stats.GuessAccuracy*10) / 10
+			statsDto.GuessAccuracy = &accuracy
+		}
 	}
 
 	legend := generateLegend(user.Username, statsDto, achieveDtos)

@@ -38,6 +38,15 @@ func (m *mockQuerier) CreateCrystalLog(_ context.Context, arg db.CreateCrystalLo
 	if m.failOnCreate {
 		return db.CrystalLog{}, sql.ErrConnDone
 	}
+	// Mirror the UNIQUE constraint on external_id, which is what makes a grant idempotent.
+	if arg.ExternalID.Valid {
+		for _, existing := range m.createdLogs {
+			if existing.ExternalID.Valid && existing.ExternalID.String == arg.ExternalID.String {
+				return db.CrystalLog{}, errors.New(
+					`pq: duplicate key value violates unique constraint "crystal_logs_external_id_key"`)
+			}
+		}
+	}
 	m.createdLogs = append(m.createdLogs, arg)
 	if m.balance == nil {
 		m.balance = make(map[string]int32)
@@ -52,14 +61,29 @@ func (m *mockQuerier) CreateCrystalLog(_ context.Context, arg db.CreateCrystalLo
 }
 
 func (m *mockQuerier) GetUserCrystalLogs(_ context.Context, arg db.GetUserCrystalLogsParams) ([]db.CrystalLog, error) {
-	if m.crystalLogs == nil {
-		return nil, nil
+	if logs, ok := m.crystalLogs[arg.UserID]; ok {
+		return logs, nil
 	}
-	logs, ok := m.crystalLogs[arg.UserID]
-	if !ok {
-		return nil, nil
+
+	// Fall back to what CreateCrystalLog recorded, newest first, so a test can write through the
+	// service and then read its own history.
+	var out []db.CrystalLog
+	for i := len(m.createdLogs) - 1; i >= 0; i-- {
+		l := m.createdLogs[i]
+		if l.UserID != arg.UserID {
+			continue
+		}
+		out = append(out, db.CrystalLog{
+			ID:          l.ID,
+			UserID:      l.UserID,
+			Delta:       l.Delta,
+			Balance:     l.Balance,
+			Type:        l.Type,
+			Description: l.Description,
+			ExternalID:  l.ExternalID,
+		})
 	}
-	return logs, nil
+	return out, nil
 }
 
 // ---------- Existing tests (kept) ----------
@@ -794,7 +818,7 @@ type mockPGError struct {
 	state string
 }
 
-func (e *mockPGError) Error() string   { return "pg error" }
+func (e *mockPGError) Error() string    { return "pg error" }
 func (e *mockPGError) SQLState() string { return e.state }
 
 func TestIsDuplicateKeyError_PGInterface_23505(t *testing.T) {

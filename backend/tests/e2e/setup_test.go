@@ -27,10 +27,12 @@ import (
 	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
 	"github.com/testcontainers/testcontainers-go/wait"
 
+	"github.com/repa-app/repa/internal/config"
 	db "github.com/repa-app/repa/internal/db/sqlc"
 	"github.com/repa-app/repa/internal/handler"
 	adminhandler "github.com/repa-app/repa/internal/handler/admin"
 	authhandler "github.com/repa-app/repa/internal/handler/auth"
+	chroniclehandler "github.com/repa-app/repa/internal/handler/chronicle"
 	crystalshandler "github.com/repa-app/repa/internal/handler/crystals"
 	groupshandler "github.com/repa-app/repa/internal/handler/groups"
 	profilehandler "github.com/repa-app/repa/internal/handler/profile"
@@ -38,39 +40,51 @@ import (
 	questionshandler "github.com/repa-app/repa/internal/handler/questions"
 	reactionshandler "github.com/repa-app/repa/internal/handler/reactions"
 	revealhandler "github.com/repa-app/repa/internal/handler/reveal"
+	safetyhandler "github.com/repa-app/repa/internal/handler/safety"
+	telegramhandler "github.com/repa-app/repa/internal/handler/telegram"
 	votinghandler "github.com/repa-app/repa/internal/handler/voting"
 	appmw "github.com/repa-app/repa/internal/middleware"
 	authsvc "github.com/repa-app/repa/internal/service/auth"
+	chroniclesvc "github.com/repa-app/repa/internal/service/chronicle"
 	crystalssvc "github.com/repa-app/repa/internal/service/crystals"
 	groupssvc "github.com/repa-app/repa/internal/service/groups"
 	profilesvc "github.com/repa-app/repa/internal/service/profile"
+	pushsvc "github.com/repa-app/repa/internal/service/push"
 	questionssvc "github.com/repa-app/repa/internal/service/questions"
 	reactionssvc "github.com/repa-app/repa/internal/service/reactions"
 	revealsvc "github.com/repa-app/repa/internal/service/reveal"
+	safetysvc "github.com/repa-app/repa/internal/service/safety"
+	telegramsvc "github.com/repa-app/repa/internal/service/telegram"
 	votingsvc "github.com/repa-app/repa/internal/service/voting"
-	"github.com/repa-app/repa/internal/config"
 )
 
 const (
 	testJWTSecret     = "e2e-test-secret-key-32chars-long!"
-	testAdminUsername  = "admin"
-	testAdminPassword  = "admin-test-pass"
+	testAdminUsername = "admin"
+	testAdminPassword = "admin-test-pass"
 )
 
 // Suite holds all shared test infrastructure.
 type Suite struct {
-	ctx       context.Context
-	pool      *pgxpool.Pool
-	sqlDB     *sql.DB
-	rdb       *redis.Client
-	queries   *db.Queries
-	echo      *echo.Echo
-	server    *httptest.Server
-	pgC       testcontainers.Container
-	redisC    testcontainers.Container
+	ctx     context.Context
+	pool    *pgxpool.Pool
+	sqlDB   *sql.DB
+	rdb     *redis.Client
+	queries *db.Queries
+	echo    *echo.Echo
+	server  *httptest.Server
+	pgC     testcontainers.Container
+	redisC  testcontainers.Container
 }
 
 var suite *Suite
+
+// Set during setupSuite so tests can drive the pipeline the worker normally drives.
+var (
+	suiteRevealService *revealsvc.Service
+	suiteGroupsService *groupssvc.Service
+	suitePushService   *pushsvc.Service
+)
 
 func TestMain(m *testing.M) {
 	ctx := context.Background()
@@ -163,15 +177,15 @@ func setupSuite(ctx context.Context) (*Suite, error) {
 	server := httptest.NewServer(e)
 
 	return &Suite{
-		ctx:    ctx,
-		pool:   pool,
-		sqlDB:  sqlDB,
-		rdb:    rdb,
+		ctx:     ctx,
+		pool:    pool,
+		sqlDB:   sqlDB,
+		rdb:     rdb,
 		queries: queries,
-		echo:   e,
-		server: server,
-		pgC:    pgContainer,
-		redisC: redisContainer,
+		echo:    e,
+		server:  server,
+		pgC:     pgContainer,
+		redisC:  redisContainer,
 	}, nil
 }
 
@@ -198,10 +212,19 @@ func (s *Suite) teardown(ctx context.Context) {
 
 func applyMigrations(ctx context.Context, sqlDB *sql.DB) error {
 	migrationsDir := findMigrationsDir()
+	// Keep in step with internal/db/migrations — a missing file shows up as a confusing
+	// INTERNAL error from the first handler that touches the new column.
 	files := []string{
 		"001_init.up.sql",
 		"002_groups_categories.up.sql",
 		"003_production_fixes.up.sql",
+		"004_season_kickoff.up.sql",
+		"005_invite_code_short.up.sql",
+		"006_share_attribution.up.sql",
+		"007_referrals.up.sql",
+		"008_detector_hints.up.sql",
+		"009_member_safety.up.sql",
+		"010_question_tone.up.sql",
 	}
 	for _, f := range files {
 		data, err := os.ReadFile(filepath.Join(migrationsDir, f))
@@ -234,11 +257,15 @@ func seedSystemQuestions(ctx context.Context, sqlDB *sql.DB) error {
 	categories := []string{"HOT", "FUNNY", "SECRETS", "SKILLS", "ROMANCE", "STUDY"}
 	for i, cat := range categories {
 		for j := 0; j < 3; j++ {
+			text := fmt.Sprintf("System question %d for %s", j+1, cat)
+			// Tone is set here rather than left to migration 010: the migration runs before this
+			// seed, so it has nothing to classify. Using the production classifier means the test
+			// bank's tones are the ones the real bank would get — HOT and SECRETS edgy, SKILLS warm,
+			// the rest neutral — which is what makes the kind-only tests meaningful.
+			tone := string(questionssvc.ClassifyTone(text, db.QuestionCategory(cat)))
 			_, err := sqlDB.ExecContext(ctx,
-				`INSERT INTO questions (id, text, category, source, status) VALUES ($1, $2, $3, 'SYSTEM', 'ACTIVE')`,
-				uuid.New().String(),
-				fmt.Sprintf("System question %d for %s", j+1, cat),
-				cat,
+				`INSERT INTO questions (id, text, category, source, status, tone) VALUES ($1, $2, $3, 'SYSTEM', 'ACTIVE', $4)`,
+				uuid.New().String(), text, cat, tone,
 			)
 			if err != nil {
 				return fmt.Errorf("seed question %d-%d: %w", i, j, err)
@@ -279,11 +306,21 @@ func buildEchoServer(queries *db.Queries, sqlDB *sql.DB, rdb *redis.Client) *ech
 	revealService := revealsvc.NewService(queries, sqlDB)
 	revealHandler := revealhandler.NewHandler(revealService, nil) // no cards service in e2e
 
+	// Completing a voting session is what brings a kickoff Reveal forward (see
+	// docs/features/voting.md). No asynq client in e2e, so no kickoff push is enqueued.
+	votingService.WithKickoff(revealService, nil)
+
 	profileService := profilesvc.NewService(queries)
 	profileHandler := profilehandler.NewHandler(profileService)
 
+	chronicleHandler := chroniclehandler.NewHandler(chroniclesvc.NewService(queries))
+
 	crystalsService := crystalssvc.NewService(queries, sqlDB, rdb, nil) // no yukassa
 	crystalsHandler := crystalshandler.NewHandler(crystalsService)
+
+	// Free crystal grants: welcome on registration, referral on a completed session.
+	authService.WithWelcomeGrant(crystalsService)
+	votingService.WithReferralGrants(crystalsService)
 
 	reactionsService := reactionssvc.NewService(queries, nil) // no asynq
 	reactionsHandler := reactionshandler.NewHandler(reactionsService)
@@ -293,8 +330,24 @@ func buildEchoServer(queries *db.Queries, sqlDB *sql.DB, rdb *redis.Client) *ech
 
 	pushHandler := pushhandler.NewHandler(queries)
 
+	// Telegram with a nil bot client: SendMessage is a no-op without one, which is enough to
+	// exercise webhook routing and the database side effects. /connect is not driven through the
+	// webhook here because it requires the bot to be a chat administrator.
+	safetyService := safetysvc.NewService(queries, sqlDB)
+	safetyHandler := safetyhandler.NewHandler(safetyService)
+	groupsHandler.WithSafety(safetyService)
+
+	telegramService := telegramsvc.NewService(queries, nil, "https://repa.app")
+	telegramHandler := telegramhandler.NewHandler(telegramService, "")
+
+	suiteRevealService = revealService
+	suiteGroupsService = groupsService
+	// Exposed so the signal debounce can be exercised against a real Redis.
+	suitePushService = pushsvc.NewService(queries, rdb, nil)
+
 	// Health endpoint
 	api := e.Group("/api/v1")
+	api.POST("/telegram/webhook", telegramHandler.Webhook)
 	api.GET("/health", func(c echo.Context) error {
 		dbStatus := "ok"
 		if err := sqlDB.PingContext(c.Request().Context()); err != nil {
@@ -333,6 +386,10 @@ func buildEchoServer(queries *db.Queries, sqlDB *sql.DB, rdb *redis.Client) *ech
 	protected.POST("/groups/join/:inviteCode", groupsHandler.JoinGroup)
 	protected.GET("/groups/:id", groupsHandler.GetGroup)
 	protected.DELETE("/groups/:id/leave", groupsHandler.LeaveGroup)
+	protected.DELETE("/groups/:id/members/:userId", safetyHandler.RemoveMember)
+	protected.POST("/members/:userId/block", safetyHandler.BlockMember)
+	protected.DELETE("/members/:userId/block", safetyHandler.UnblockMember)
+	protected.POST("/members/:userId/report", safetyHandler.ReportMember)
 	protected.PATCH("/groups/:id", groupsHandler.UpdateGroup)
 	protected.POST("/groups/:id/invite-link", groupsHandler.RegenerateInviteLink)
 
@@ -343,14 +400,19 @@ func buildEchoServer(queries *db.Queries, sqlDB *sql.DB, rdb *redis.Client) *ech
 	protected.GET("/seasons/:seasonId/reveal", revealHandler.GetReveal)
 	protected.GET("/seasons/:seasonId/members-cards", revealHandler.GetMembersCards)
 	protected.POST("/seasons/:seasonId/reveal/open-hidden", revealHandler.OpenHidden)
+	protected.GET("/seasons/:seasonId/anticipation", revealHandler.GetAnticipation)
 	protected.GET("/seasons/:seasonId/detector", revealHandler.GetDetector)
 	protected.POST("/seasons/:seasonId/detector", revealHandler.BuyDetector)
+	protected.POST("/seasons/:seasonId/detector/hint", revealHandler.BuyDetectorHint)
+	protected.POST("/seasons/:seasonId/shares", revealHandler.RecordShare)
 
 	protected.GET("/crystals/balance", crystalsHandler.GetBalance)
 	protected.GET("/crystals/packages", crystalsHandler.GetPackages)
+	protected.GET("/crystals/history", crystalsHandler.GetHistory)
 	api.POST("/crystals/purchase/webhook", crystalsHandler.Webhook)
 
 	protected.GET("/groups/:id/members/:userId/profile", profileHandler.GetProfile)
+	protected.GET("/groups/:id/chronicle", chronicleHandler.Get)
 
 	protected.POST("/push/register", pushHandler.RegisterToken)
 
@@ -369,6 +431,7 @@ func buildEchoServer(queries *db.Queries, sqlDB *sql.DB, rdb *redis.Client) *ech
 	adminH := adminhandler.NewHandler(queries, testAdminUsername, testAdminPassword)
 	admin := api.Group("/admin", adminH.BasicAuth)
 	admin.GET("/reports", adminH.ListReports)
+	admin.GET("/user-reports", adminH.ListUserReports)
 	admin.PATCH("/reports/:id", adminH.ResolveReport)
 	admin.GET("/stats", adminH.GetStats)
 
@@ -492,11 +555,20 @@ func createTestUserWithBirthYear(t *testing.T, username string, birthYear int) (
 }
 
 // createTestGroup creates a group via the API and returns group data.
+//
+// kind_only is sent explicitly as false: test users are created without a birth year, and an unknown
+// age defaults the setting to on — which would refuse any group whose categories are all edgy. Tests
+// about tone pass their own value; every other test wants an ordinary group.
 func createTestGroup(t *testing.T, token string, name string, categories []string) map[string]any {
+	return createTestGroupWithKindOnly(t, token, name, categories, false)
+}
+
+func createTestGroupWithKindOnly(t *testing.T, token, name string, categories []string, kindOnly bool) map[string]any {
 	t.Helper()
 	resp := doRequest(t, "POST", "/api/v1/groups", map[string]any{
 		"name":       shortName(name),
 		"categories": categories,
+		"kind_only":  kindOnly,
 	}, token)
 	require.Equal(t, http.StatusCreated, resp.StatusCode, "create group failed: %s", string(resp.RawBody))
 	data := resp.Body["data"].(map[string]any)
