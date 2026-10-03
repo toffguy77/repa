@@ -1,0 +1,53 @@
+schema: spec-driven
+
+context: |
+  Repa (Репа) — mobile app (Flutter iOS+Android) + Go backend. Users join private
+  groups and anonymously vote on each other weekly by fun questions. Friday 20:00 MSK
+  is "Reveal" — each user gets a reputation card. Audience: Russian students 14–22.
+
+  Monorepo: backend/ (Go) and mobile/ (Flutter).
+
+  Backend: Go 1.22+, Echo v4, PostgreSQL 16 (sqlc for queries — internal/db/sqlc is
+  AUTO-GENERATED, never edit; run `make sqlc`), golang-migrate (internal/db/migrations),
+  Redis 7 + asynq for job queues and cron, zerolog, JWT (golang-jwt/v5), validator/v10.
+  Layering per feature: internal/handler/{feature} (HTTP + validation) →
+  internal/service/{feature} (business logic) → sqlc queries. Workers in
+  internal/worker/tasks. External clients in internal/lib.
+
+  Mobile: Flutter 3.x / Dart 3, Riverpod 2 only (no setState for business logic),
+  go_router, Dio + retrofit, Freezed + json_serializable for all models, flutter_animate.
+  Feature-first: lib/features/{feature}/{data,domain,presentation}. Shared in lib/core.
+  UI strings are hardcoded Russian (no l10n in MVP). Accent color #7C3AED.
+
+  Conventions:
+  - API responses: { "data": {...} } or { "error": { "code", "message" } }. Base /api/v1.
+  - Anonymity is critical: votes.voter_id exists for the detector, but API responses
+    NEVER tie voter_id to a specific vote/question/answer.
+  - Crystal balance = SUM(delta) from crystal_logs; there is no balance column.
+  - Reveal: Friday 17:00 UTC. Quorum >=50% voted (>=40% for groups <8), 3 retries
+    2h apart, then forced reveal.
+  - Groups 5–50 members (upper bound enforced, lower bound currently NOT enforced),
+    max 10 groups per user.
+  - Push: max 3/day per user, quiet hours 23:00–09:00 MSK.
+  - Product source of truth: docs/repa_prd.md, docs/specs/master_context.md.
+    Per-feature docs live in docs/features/*.md and MUST be updated in the same
+    change that alters behavior.
+  - Dev DB is a remote Yandex Cloud Managed PostgreSQL (database repa-db-dev only).
+    Credentials in secrets/pg_credentials.env and backend/.env. Apply migrations with
+    psql -f using the connection string from secrets, then run `make sqlc`.
+  - Secrets live in secrets/ (gitignored). Never commit secrets.
+
+  Product goal driving the current batch of changes: the app is feature-complete
+  (T01–T26) but the viral loop is broken — time-to-first-value is 6–11 days, shared
+  cards carry no link back, invite codes are UUIDs, and there is no free crystal
+  economy. Changes should follow mechanics proven by tbh, Gas, and Slay while
+  preserving the weekly Reveal ritual and anonymity guarantees.
+
+rules:
+  proposal:
+    - Reference concrete files and line numbers when describing current behavior
+    - Always include a "Non-goals" section
+  tasks:
+    - Group tasks by layer (migration, sqlc, service, handler, worker, mobile, docs)
+    - Include a task to update the relevant docs/features/*.md file
+    - Include a task to run `make sqlc` whenever queries or migrations change
