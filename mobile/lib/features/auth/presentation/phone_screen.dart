@@ -2,9 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mask_text_input_formatter/mask_text_input_formatter.dart';
-import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_text_styles.dart';
 import 'auth_notifier.dart';
+import '../../../core/theme/app_tokens.dart';
 
 class PhoneScreen extends ConsumerStatefulWidget {
   const PhoneScreen({super.key});
@@ -53,18 +52,18 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 60),
-              Text('Вход в Репу', style: AppTextStyles.headline1),
+              Text('Вход в Репу', style: context.ts.heading1),
               const SizedBox(height: 8),
               Text(
                 'Введи номер телефона, чтобы получить код',
-                style: AppTextStyles.bodySecondary,
+                style: context.ts.bodySecondary,
               ),
               const SizedBox(height: 32),
               TextField(
                 controller: _controller,
                 inputFormatters: [_formatter],
                 keyboardType: TextInputType.phone,
-                style: AppTextStyles.body,
+                style: context.ts.body,
                 decoration: const InputDecoration(
                   hintText: '+7 (___) ___-__-__',
                 ),
@@ -72,18 +71,18 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
               ),
               if (state.error != null) ...[
                 const SizedBox(height: 8),
-                Text(state.error!, style: TextStyle(color: AppColors.error)),
+                Text(state.error!, style: TextStyle(color: context.t.color.danger)),
               ],
               const SizedBox(height: 24),
               ElevatedButton(
                 onPressed: _isValid && !state.loading ? _submit : null,
                 child: state.loading
-                    ? const SizedBox(
+                    ? SizedBox(
                         height: 20,
                         width: 20,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: context.t.color.onAccentFill,
                         ),
                       )
                     : const Text('Получить код'),
@@ -104,7 +103,7 @@ class _SocialButtons extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text('или', style: AppTextStyles.caption),
+        Text('или', style: context.ts.caption),
         const SizedBox(height: 16),
         OutlinedButton.icon(
           onPressed: null, // stub

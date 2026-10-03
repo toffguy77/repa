@@ -3,10 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_text_styles.dart';
 import '../../groups/presentation/groups_notifier.dart';
 import 'telegram_notifier.dart';
+import '../../../core/theme/app_tokens.dart';
 
 class ConnectInstructionSheet extends ConsumerStatefulWidget {
   final String groupId;
@@ -107,9 +106,9 @@ class _ConnectInstructionSheetState
     final expired = _remaining == Duration.zero;
 
     return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      decoration: BoxDecoration(
+        color: context.t.elevation.level2.surface,
+        borderRadius: AppTokens.radius.sheet,
       ),
       padding: EdgeInsets.only(
         left: 24,
@@ -127,12 +126,12 @@ class _ConnectInstructionSheetState
               height: 4,
               decoration: BoxDecoration(
                 color: Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(2),
+                borderRadius: BorderRadius.circular(AppTokens.radius.xs),
               ),
             ),
           ),
           const SizedBox(height: 20),
-          Text('Как подключить', style: AppTextStyles.headline2),
+          Text('Как подключить', style: context.ts.heading2),
           const SizedBox(height: 16),
           _buildStep('1', 'Добавьте @repaapp_bot в ваш Telegram-чат'),
           const SizedBox(height: 12),
@@ -146,16 +145,16 @@ class _ConnectInstructionSheetState
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.primaryLight),
+              color: context.t.color.surface,
+              borderRadius: BorderRadius.circular(AppTokens.radius.md),
+              border: Border.all(color: context.t.color.accentFill.withValues(alpha: 0.18)),
             ),
             child: Row(
               children: [
                 Expanded(
                   child: Text(
                     '/connect ${code.connectCode}',
-                    style: AppTextStyles.body.copyWith(
+                    style: context.ts.body.copyWith(
                       fontWeight: FontWeight.w600,
                       fontFamily: 'monospace',
                     ),
@@ -164,15 +163,15 @@ class _ConnectInstructionSheetState
                 GestureDetector(
                   onTap: () => _copyCode('/connect ${code.connectCode}'),
                   child: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 200),
+                    duration: context.motion(MotionClass.surface),
                     child: _copied
-                        ? const Icon(Icons.check,
+                        ? Icon(Icons.check,
                             key: ValueKey('check'),
-                            color: AppColors.success,
+                            color: context.t.color.success,
                             size: 22)
-                        : const Icon(Icons.copy,
+                        : Icon(Icons.copy,
                             key: ValueKey('copy'),
-                            color: AppColors.primary,
+                            color: context.t.color.accent,
                             size: 22),
                   ),
                 ),
@@ -188,8 +187,8 @@ class _ConnectInstructionSheetState
               expired
                   ? 'Код истёк'
                   : 'Код действителен: ${_formatDuration(_remaining)}',
-              style: AppTextStyles.caption.copyWith(
-                color: expired ? AppColors.error : AppColors.textSecondary,
+              style: context.ts.caption.copyWith(
+                color: expired ? context.t.color.danger : context.t.color.textSecondary,
               ),
             ),
           ),
@@ -205,10 +204,10 @@ class _ConnectInstructionSheetState
                   icon: const Icon(Icons.open_in_new, size: 18),
                   label: const Text('Telegram'),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.primary,
-                    side: const BorderSide(color: AppColors.primary),
+                    foregroundColor: context.t.color.accent,
+                    side: BorderSide(color: context.t.color.accent),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(AppTokens.radius.md),
                     ),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
@@ -219,20 +218,20 @@ class _ConnectInstructionSheetState
                 child: ElevatedButton(
                   onPressed: (state.loading || expired) ? null : _verify,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
+                    backgroundColor: context.t.color.accent,
+                    foregroundColor: context.t.color.onAccentFill,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(AppTokens.radius.md),
                     ),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
                   child: state.loading
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 20,
                           height: 20,
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
-                            color: Colors.white,
+                            color: context.t.color.onAccentFill,
                           ),
                         )
                       : const Text('Проверить'),
@@ -245,7 +244,7 @@ class _ConnectInstructionSheetState
             const SizedBox(height: 12),
             Text(
               state.error!,
-              style: AppTextStyles.caption.copyWith(color: AppColors.error),
+              style: context.ts.caption.copyWith(color: context.t.color.danger),
               textAlign: TextAlign.center,
             ),
           ],
@@ -262,14 +261,14 @@ class _ConnectInstructionSheetState
           width: 24,
           height: 24,
           decoration: BoxDecoration(
-            color: AppColors.primaryLight,
+            color: context.t.color.accentFill.withValues(alpha: 0.18),
             shape: BoxShape.circle,
           ),
           child: Center(
             child: Text(
               number,
-              style: AppTextStyles.caption.copyWith(
-                color: AppColors.primary,
+              style: context.ts.caption.copyWith(
+                color: context.t.color.accent,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -279,7 +278,7 @@ class _ConnectInstructionSheetState
         Expanded(
           child: Padding(
             padding: const EdgeInsets.only(top: 2),
-            child: Text(text, style: AppTextStyles.body),
+            child: Text(text, style: context.ts.body),
           ),
         ),
       ],

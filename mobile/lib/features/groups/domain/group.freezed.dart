@@ -27,6 +27,11 @@ mixin _$Group {
   @JsonKey(name: 'invite_code')
   String get inviteCode => throw _privateConstructorUsedError;
   List<String> get categories => throw _privateConstructorUsedError;
+
+  /// Whether the group restricts itself to warm and neutral questions. Defaults to false so an
+  /// older response without the field is read as an ordinary group rather than crashing.
+  @JsonKey(name: 'kind_only')
+  bool get kindOnly => throw _privateConstructorUsedError;
   @JsonKey(name: 'telegram_username')
   String? get telegramUsername => throw _privateConstructorUsedError;
   @JsonKey(name: 'created_at')
@@ -48,6 +53,7 @@ abstract class $GroupCopyWith<$Res> {
       @JsonKey(name: 'admin_id') String adminId,
       @JsonKey(name: 'invite_code') String inviteCode,
       List<String> categories,
+      @JsonKey(name: 'kind_only') bool kindOnly,
       @JsonKey(name: 'telegram_username') String? telegramUsername,
       @JsonKey(name: 'created_at') String createdAt});
 }
@@ -70,6 +76,7 @@ class _$GroupCopyWithImpl<$Res, $Val extends Group>
     Object? adminId = null,
     Object? inviteCode = null,
     Object? categories = null,
+    Object? kindOnly = null,
     Object? telegramUsername = freezed,
     Object? createdAt = null,
   }) {
@@ -94,6 +101,10 @@ class _$GroupCopyWithImpl<$Res, $Val extends Group>
           ? _value.categories
           : categories // ignore: cast_nullable_to_non_nullable
               as List<String>,
+      kindOnly: null == kindOnly
+          ? _value.kindOnly
+          : kindOnly // ignore: cast_nullable_to_non_nullable
+              as bool,
       telegramUsername: freezed == telegramUsername
           ? _value.telegramUsername
           : telegramUsername // ignore: cast_nullable_to_non_nullable
@@ -119,6 +130,7 @@ abstract class _$$GroupImplCopyWith<$Res> implements $GroupCopyWith<$Res> {
       @JsonKey(name: 'admin_id') String adminId,
       @JsonKey(name: 'invite_code') String inviteCode,
       List<String> categories,
+      @JsonKey(name: 'kind_only') bool kindOnly,
       @JsonKey(name: 'telegram_username') String? telegramUsername,
       @JsonKey(name: 'created_at') String createdAt});
 }
@@ -139,6 +151,7 @@ class __$$GroupImplCopyWithImpl<$Res>
     Object? adminId = null,
     Object? inviteCode = null,
     Object? categories = null,
+    Object? kindOnly = null,
     Object? telegramUsername = freezed,
     Object? createdAt = null,
   }) {
@@ -163,6 +176,10 @@ class __$$GroupImplCopyWithImpl<$Res>
           ? _value._categories
           : categories // ignore: cast_nullable_to_non_nullable
               as List<String>,
+      kindOnly: null == kindOnly
+          ? _value.kindOnly
+          : kindOnly // ignore: cast_nullable_to_non_nullable
+              as bool,
       telegramUsername: freezed == telegramUsername
           ? _value.telegramUsername
           : telegramUsername // ignore: cast_nullable_to_non_nullable
@@ -184,6 +201,7 @@ class _$GroupImpl implements _Group {
       @JsonKey(name: 'admin_id') required this.adminId,
       @JsonKey(name: 'invite_code') required this.inviteCode,
       required final List<String> categories,
+      @JsonKey(name: 'kind_only') this.kindOnly = false,
       @JsonKey(name: 'telegram_username') this.telegramUsername,
       @JsonKey(name: 'created_at') required this.createdAt})
       : _categories = categories;
@@ -209,6 +227,11 @@ class _$GroupImpl implements _Group {
     return EqualUnmodifiableListView(_categories);
   }
 
+  /// Whether the group restricts itself to warm and neutral questions. Defaults to false so an
+  /// older response without the field is read as an ordinary group rather than crashing.
+  @override
+  @JsonKey(name: 'kind_only')
+  final bool kindOnly;
   @override
   @JsonKey(name: 'telegram_username')
   final String? telegramUsername;
@@ -218,7 +241,7 @@ class _$GroupImpl implements _Group {
 
   @override
   String toString() {
-    return 'Group(id: $id, name: $name, adminId: $adminId, inviteCode: $inviteCode, categories: $categories, telegramUsername: $telegramUsername, createdAt: $createdAt)';
+    return 'Group(id: $id, name: $name, adminId: $adminId, inviteCode: $inviteCode, categories: $categories, kindOnly: $kindOnly, telegramUsername: $telegramUsername, createdAt: $createdAt)';
   }
 
   @override
@@ -233,6 +256,8 @@ class _$GroupImpl implements _Group {
                 other.inviteCode == inviteCode) &&
             const DeepCollectionEquality()
                 .equals(other._categories, _categories) &&
+            (identical(other.kindOnly, kindOnly) ||
+                other.kindOnly == kindOnly) &&
             (identical(other.telegramUsername, telegramUsername) ||
                 other.telegramUsername == telegramUsername) &&
             (identical(other.createdAt, createdAt) ||
@@ -248,6 +273,7 @@ class _$GroupImpl implements _Group {
       adminId,
       inviteCode,
       const DeepCollectionEquality().hash(_categories),
+      kindOnly,
       telegramUsername,
       createdAt);
 
@@ -272,6 +298,7 @@ abstract class _Group implements Group {
           @JsonKey(name: 'admin_id') required final String adminId,
           @JsonKey(name: 'invite_code') required final String inviteCode,
           required final List<String> categories,
+          @JsonKey(name: 'kind_only') final bool kindOnly,
           @JsonKey(name: 'telegram_username') final String? telegramUsername,
           @JsonKey(name: 'created_at') required final String createdAt}) =
       _$GroupImpl;
@@ -290,6 +317,12 @@ abstract class _Group implements Group {
   String get inviteCode;
   @override
   List<String> get categories;
+  @override
+
+  /// Whether the group restricts itself to warm and neutral questions. Defaults to false so an
+  /// older response without the field is read as an ordinary group rather than crashing.
+  @JsonKey(name: 'kind_only')
+  bool get kindOnly;
   @override
   @JsonKey(name: 'telegram_username')
   String? get telegramUsername;
@@ -318,6 +351,12 @@ mixin _$ActiveSeason {
   int get totalCount => throw _privateConstructorUsedError;
   @JsonKey(name: 'user_voted')
   bool get userVoted => throw _privateConstructorUsedError;
+  @JsonKey(name: 'reveal_state', unknownEnumValue: SeasonRevealState.scheduled)
+  SeasonRevealState get revealState => throw _privateConstructorUsedError;
+  @JsonKey(name: 'members_needed')
+  int get membersNeeded => throw _privateConstructorUsedError;
+  @JsonKey(name: 'voters_needed')
+  int get votersNeeded => throw _privateConstructorUsedError;
 
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
   @JsonKey(ignore: true)
@@ -337,7 +376,12 @@ abstract class $ActiveSeasonCopyWith<$Res> {
       @JsonKey(name: 'reveal_at') String revealAt,
       @JsonKey(name: 'voted_count') int votedCount,
       @JsonKey(name: 'total_count') int totalCount,
-      @JsonKey(name: 'user_voted') bool userVoted});
+      @JsonKey(name: 'user_voted') bool userVoted,
+      @JsonKey(
+          name: 'reveal_state', unknownEnumValue: SeasonRevealState.scheduled)
+      SeasonRevealState revealState,
+      @JsonKey(name: 'members_needed') int membersNeeded,
+      @JsonKey(name: 'voters_needed') int votersNeeded});
 }
 
 /// @nodoc
@@ -359,6 +403,9 @@ class _$ActiveSeasonCopyWithImpl<$Res, $Val extends ActiveSeason>
     Object? votedCount = null,
     Object? totalCount = null,
     Object? userVoted = null,
+    Object? revealState = null,
+    Object? membersNeeded = null,
+    Object? votersNeeded = null,
   }) {
     return _then(_value.copyWith(
       id: null == id
@@ -385,6 +432,18 @@ class _$ActiveSeasonCopyWithImpl<$Res, $Val extends ActiveSeason>
           ? _value.userVoted
           : userVoted // ignore: cast_nullable_to_non_nullable
               as bool,
+      revealState: null == revealState
+          ? _value.revealState
+          : revealState // ignore: cast_nullable_to_non_nullable
+              as SeasonRevealState,
+      membersNeeded: null == membersNeeded
+          ? _value.membersNeeded
+          : membersNeeded // ignore: cast_nullable_to_non_nullable
+              as int,
+      votersNeeded: null == votersNeeded
+          ? _value.votersNeeded
+          : votersNeeded // ignore: cast_nullable_to_non_nullable
+              as int,
     ) as $Val);
   }
 }
@@ -403,7 +462,12 @@ abstract class _$$ActiveSeasonImplCopyWith<$Res>
       @JsonKey(name: 'reveal_at') String revealAt,
       @JsonKey(name: 'voted_count') int votedCount,
       @JsonKey(name: 'total_count') int totalCount,
-      @JsonKey(name: 'user_voted') bool userVoted});
+      @JsonKey(name: 'user_voted') bool userVoted,
+      @JsonKey(
+          name: 'reveal_state', unknownEnumValue: SeasonRevealState.scheduled)
+      SeasonRevealState revealState,
+      @JsonKey(name: 'members_needed') int membersNeeded,
+      @JsonKey(name: 'voters_needed') int votersNeeded});
 }
 
 /// @nodoc
@@ -423,6 +487,9 @@ class __$$ActiveSeasonImplCopyWithImpl<$Res>
     Object? votedCount = null,
     Object? totalCount = null,
     Object? userVoted = null,
+    Object? revealState = null,
+    Object? membersNeeded = null,
+    Object? votersNeeded = null,
   }) {
     return _then(_$ActiveSeasonImpl(
       id: null == id
@@ -449,6 +516,18 @@ class __$$ActiveSeasonImplCopyWithImpl<$Res>
           ? _value.userVoted
           : userVoted // ignore: cast_nullable_to_non_nullable
               as bool,
+      revealState: null == revealState
+          ? _value.revealState
+          : revealState // ignore: cast_nullable_to_non_nullable
+              as SeasonRevealState,
+      membersNeeded: null == membersNeeded
+          ? _value.membersNeeded
+          : membersNeeded // ignore: cast_nullable_to_non_nullable
+              as int,
+      votersNeeded: null == votersNeeded
+          ? _value.votersNeeded
+          : votersNeeded // ignore: cast_nullable_to_non_nullable
+              as int,
     ));
   }
 }
@@ -462,7 +541,12 @@ class _$ActiveSeasonImpl implements _ActiveSeason {
       @JsonKey(name: 'reveal_at') required this.revealAt,
       @JsonKey(name: 'voted_count') required this.votedCount,
       @JsonKey(name: 'total_count') required this.totalCount,
-      @JsonKey(name: 'user_voted') required this.userVoted});
+      @JsonKey(name: 'user_voted') required this.userVoted,
+      @JsonKey(
+          name: 'reveal_state', unknownEnumValue: SeasonRevealState.scheduled)
+      this.revealState = SeasonRevealState.scheduled,
+      @JsonKey(name: 'members_needed') this.membersNeeded = 0,
+      @JsonKey(name: 'voters_needed') this.votersNeeded = 0});
 
   factory _$ActiveSeasonImpl.fromJson(Map<String, dynamic> json) =>
       _$$ActiveSeasonImplFromJson(json);
@@ -483,10 +567,19 @@ class _$ActiveSeasonImpl implements _ActiveSeason {
   @override
   @JsonKey(name: 'user_voted')
   final bool userVoted;
+  @override
+  @JsonKey(name: 'reveal_state', unknownEnumValue: SeasonRevealState.scheduled)
+  final SeasonRevealState revealState;
+  @override
+  @JsonKey(name: 'members_needed')
+  final int membersNeeded;
+  @override
+  @JsonKey(name: 'voters_needed')
+  final int votersNeeded;
 
   @override
   String toString() {
-    return 'ActiveSeason(id: $id, status: $status, revealAt: $revealAt, votedCount: $votedCount, totalCount: $totalCount, userVoted: $userVoted)';
+    return 'ActiveSeason(id: $id, status: $status, revealAt: $revealAt, votedCount: $votedCount, totalCount: $totalCount, userVoted: $userVoted, revealState: $revealState, membersNeeded: $membersNeeded, votersNeeded: $votersNeeded)';
   }
 
   @override
@@ -503,13 +596,19 @@ class _$ActiveSeasonImpl implements _ActiveSeason {
             (identical(other.totalCount, totalCount) ||
                 other.totalCount == totalCount) &&
             (identical(other.userVoted, userVoted) ||
-                other.userVoted == userVoted));
+                other.userVoted == userVoted) &&
+            (identical(other.revealState, revealState) ||
+                other.revealState == revealState) &&
+            (identical(other.membersNeeded, membersNeeded) ||
+                other.membersNeeded == membersNeeded) &&
+            (identical(other.votersNeeded, votersNeeded) ||
+                other.votersNeeded == votersNeeded));
   }
 
   @JsonKey(ignore: true)
   @override
-  int get hashCode => Object.hash(
-      runtimeType, id, status, revealAt, votedCount, totalCount, userVoted);
+  int get hashCode => Object.hash(runtimeType, id, status, revealAt, votedCount,
+      totalCount, userVoted, revealState, membersNeeded, votersNeeded);
 
   @JsonKey(ignore: true)
   @override
@@ -527,13 +626,18 @@ class _$ActiveSeasonImpl implements _ActiveSeason {
 
 abstract class _ActiveSeason implements ActiveSeason {
   const factory _ActiveSeason(
-          {required final String id,
-          required final String status,
-          @JsonKey(name: 'reveal_at') required final String revealAt,
-          @JsonKey(name: 'voted_count') required final int votedCount,
-          @JsonKey(name: 'total_count') required final int totalCount,
-          @JsonKey(name: 'user_voted') required final bool userVoted}) =
-      _$ActiveSeasonImpl;
+      {required final String id,
+      required final String status,
+      @JsonKey(name: 'reveal_at') required final String revealAt,
+      @JsonKey(name: 'voted_count') required final int votedCount,
+      @JsonKey(name: 'total_count') required final int totalCount,
+      @JsonKey(name: 'user_voted') required final bool userVoted,
+      @JsonKey(
+          name: 'reveal_state', unknownEnumValue: SeasonRevealState.scheduled)
+      final SeasonRevealState revealState,
+      @JsonKey(name: 'members_needed') final int membersNeeded,
+      @JsonKey(name: 'voters_needed')
+      final int votersNeeded}) = _$ActiveSeasonImpl;
 
   factory _ActiveSeason.fromJson(Map<String, dynamic> json) =
       _$ActiveSeasonImpl.fromJson;
@@ -555,8 +659,203 @@ abstract class _ActiveSeason implements ActiveSeason {
   @JsonKey(name: 'user_voted')
   bool get userVoted;
   @override
+  @JsonKey(name: 'reveal_state', unknownEnumValue: SeasonRevealState.scheduled)
+  SeasonRevealState get revealState;
+  @override
+  @JsonKey(name: 'members_needed')
+  int get membersNeeded;
+  @override
+  @JsonKey(name: 'voters_needed')
+  int get votersNeeded;
+  @override
   @JsonKey(ignore: true)
   _$$ActiveSeasonImplCopyWith<_$ActiveSeasonImpl> get copyWith =>
+      throw _privateConstructorUsedError;
+}
+
+GrowthThreshold _$GrowthThresholdFromJson(Map<String, dynamic> json) {
+  return _GrowthThreshold.fromJson(json);
+}
+
+/// @nodoc
+mixin _$GrowthThreshold {
+  int get size => throw _privateConstructorUsedError;
+  int get needed => throw _privateConstructorUsedError;
+  @JsonKey(unknownEnumValue: GrowthUnlock.unknown)
+  GrowthUnlock get unlocks => throw _privateConstructorUsedError;
+
+  Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
+  @JsonKey(ignore: true)
+  $GrowthThresholdCopyWith<GrowthThreshold> get copyWith =>
+      throw _privateConstructorUsedError;
+}
+
+/// @nodoc
+abstract class $GrowthThresholdCopyWith<$Res> {
+  factory $GrowthThresholdCopyWith(
+          GrowthThreshold value, $Res Function(GrowthThreshold) then) =
+      _$GrowthThresholdCopyWithImpl<$Res, GrowthThreshold>;
+  @useResult
+  $Res call(
+      {int size,
+      int needed,
+      @JsonKey(unknownEnumValue: GrowthUnlock.unknown) GrowthUnlock unlocks});
+}
+
+/// @nodoc
+class _$GrowthThresholdCopyWithImpl<$Res, $Val extends GrowthThreshold>
+    implements $GrowthThresholdCopyWith<$Res> {
+  _$GrowthThresholdCopyWithImpl(this._value, this._then);
+
+  // ignore: unused_field
+  final $Val _value;
+  // ignore: unused_field
+  final $Res Function($Val) _then;
+
+  @pragma('vm:prefer-inline')
+  @override
+  $Res call({
+    Object? size = null,
+    Object? needed = null,
+    Object? unlocks = null,
+  }) {
+    return _then(_value.copyWith(
+      size: null == size
+          ? _value.size
+          : size // ignore: cast_nullable_to_non_nullable
+              as int,
+      needed: null == needed
+          ? _value.needed
+          : needed // ignore: cast_nullable_to_non_nullable
+              as int,
+      unlocks: null == unlocks
+          ? _value.unlocks
+          : unlocks // ignore: cast_nullable_to_non_nullable
+              as GrowthUnlock,
+    ) as $Val);
+  }
+}
+
+/// @nodoc
+abstract class _$$GrowthThresholdImplCopyWith<$Res>
+    implements $GrowthThresholdCopyWith<$Res> {
+  factory _$$GrowthThresholdImplCopyWith(_$GrowthThresholdImpl value,
+          $Res Function(_$GrowthThresholdImpl) then) =
+      __$$GrowthThresholdImplCopyWithImpl<$Res>;
+  @override
+  @useResult
+  $Res call(
+      {int size,
+      int needed,
+      @JsonKey(unknownEnumValue: GrowthUnlock.unknown) GrowthUnlock unlocks});
+}
+
+/// @nodoc
+class __$$GrowthThresholdImplCopyWithImpl<$Res>
+    extends _$GrowthThresholdCopyWithImpl<$Res, _$GrowthThresholdImpl>
+    implements _$$GrowthThresholdImplCopyWith<$Res> {
+  __$$GrowthThresholdImplCopyWithImpl(
+      _$GrowthThresholdImpl _value, $Res Function(_$GrowthThresholdImpl) _then)
+      : super(_value, _then);
+
+  @pragma('vm:prefer-inline')
+  @override
+  $Res call({
+    Object? size = null,
+    Object? needed = null,
+    Object? unlocks = null,
+  }) {
+    return _then(_$GrowthThresholdImpl(
+      size: null == size
+          ? _value.size
+          : size // ignore: cast_nullable_to_non_nullable
+              as int,
+      needed: null == needed
+          ? _value.needed
+          : needed // ignore: cast_nullable_to_non_nullable
+              as int,
+      unlocks: null == unlocks
+          ? _value.unlocks
+          : unlocks // ignore: cast_nullable_to_non_nullable
+              as GrowthUnlock,
+    ));
+  }
+}
+
+/// @nodoc
+@JsonSerializable()
+class _$GrowthThresholdImpl implements _GrowthThreshold {
+  const _$GrowthThresholdImpl(
+      {required this.size,
+      required this.needed,
+      @JsonKey(unknownEnumValue: GrowthUnlock.unknown)
+      this.unlocks = GrowthUnlock.unknown});
+
+  factory _$GrowthThresholdImpl.fromJson(Map<String, dynamic> json) =>
+      _$$GrowthThresholdImplFromJson(json);
+
+  @override
+  final int size;
+  @override
+  final int needed;
+  @override
+  @JsonKey(unknownEnumValue: GrowthUnlock.unknown)
+  final GrowthUnlock unlocks;
+
+  @override
+  String toString() {
+    return 'GrowthThreshold(size: $size, needed: $needed, unlocks: $unlocks)';
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is _$GrowthThresholdImpl &&
+            (identical(other.size, size) || other.size == size) &&
+            (identical(other.needed, needed) || other.needed == needed) &&
+            (identical(other.unlocks, unlocks) || other.unlocks == unlocks));
+  }
+
+  @JsonKey(ignore: true)
+  @override
+  int get hashCode => Object.hash(runtimeType, size, needed, unlocks);
+
+  @JsonKey(ignore: true)
+  @override
+  @pragma('vm:prefer-inline')
+  _$$GrowthThresholdImplCopyWith<_$GrowthThresholdImpl> get copyWith =>
+      __$$GrowthThresholdImplCopyWithImpl<_$GrowthThresholdImpl>(
+          this, _$identity);
+
+  @override
+  Map<String, dynamic> toJson() {
+    return _$$GrowthThresholdImplToJson(
+      this,
+    );
+  }
+}
+
+abstract class _GrowthThreshold implements GrowthThreshold {
+  const factory _GrowthThreshold(
+      {required final int size,
+      required final int needed,
+      @JsonKey(unknownEnumValue: GrowthUnlock.unknown)
+      final GrowthUnlock unlocks}) = _$GrowthThresholdImpl;
+
+  factory _GrowthThreshold.fromJson(Map<String, dynamic> json) =
+      _$GrowthThresholdImpl.fromJson;
+
+  @override
+  int get size;
+  @override
+  int get needed;
+  @override
+  @JsonKey(unknownEnumValue: GrowthUnlock.unknown)
+  GrowthUnlock get unlocks;
+  @override
+  @JsonKey(ignore: true)
+  _$$GrowthThresholdImplCopyWith<_$GrowthThresholdImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }
 
@@ -1075,6 +1374,18 @@ mixin _$GroupDetail {
   @JsonKey(name: 'active_season')
   ActiveSeason? get activeSeason => throw _privateConstructorUsedError;
 
+  /// How many members this viewer can actually be rated by — membership minus anyone blocked in
+  /// either direction. The anonymity warning is judged against this, because a group of five with
+  /// three blocks behaves like a group of two. Falls back to 0, which callers read as "unknown"
+  /// and substitute the raw member count for.
+  @JsonKey(name: 'effective_member_count')
+  int get effectiveMemberCount => throw _privateConstructorUsedError;
+
+  /// The next group-size threshold, or null once the group has crossed them all. Counted by the
+  /// server against [effectiveMemberCount], so it agrees with the anonymity warning.
+  @JsonKey(name: 'next_threshold')
+  GrowthThreshold? get nextThreshold => throw _privateConstructorUsedError;
+
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
   @JsonKey(ignore: true)
   $GroupDetailCopyWith<GroupDetail> get copyWith =>
@@ -1090,10 +1401,13 @@ abstract class $GroupDetailCopyWith<$Res> {
   $Res call(
       {Group group,
       List<Member> members,
-      @JsonKey(name: 'active_season') ActiveSeason? activeSeason});
+      @JsonKey(name: 'active_season') ActiveSeason? activeSeason,
+      @JsonKey(name: 'effective_member_count') int effectiveMemberCount,
+      @JsonKey(name: 'next_threshold') GrowthThreshold? nextThreshold});
 
   $GroupCopyWith<$Res> get group;
   $ActiveSeasonCopyWith<$Res>? get activeSeason;
+  $GrowthThresholdCopyWith<$Res>? get nextThreshold;
 }
 
 /// @nodoc
@@ -1112,6 +1426,8 @@ class _$GroupDetailCopyWithImpl<$Res, $Val extends GroupDetail>
     Object? group = null,
     Object? members = null,
     Object? activeSeason = freezed,
+    Object? effectiveMemberCount = null,
+    Object? nextThreshold = freezed,
   }) {
     return _then(_value.copyWith(
       group: null == group
@@ -1126,6 +1442,14 @@ class _$GroupDetailCopyWithImpl<$Res, $Val extends GroupDetail>
           ? _value.activeSeason
           : activeSeason // ignore: cast_nullable_to_non_nullable
               as ActiveSeason?,
+      effectiveMemberCount: null == effectiveMemberCount
+          ? _value.effectiveMemberCount
+          : effectiveMemberCount // ignore: cast_nullable_to_non_nullable
+              as int,
+      nextThreshold: freezed == nextThreshold
+          ? _value.nextThreshold
+          : nextThreshold // ignore: cast_nullable_to_non_nullable
+              as GrowthThreshold?,
     ) as $Val);
   }
 
@@ -1148,6 +1472,18 @@ class _$GroupDetailCopyWithImpl<$Res, $Val extends GroupDetail>
       return _then(_value.copyWith(activeSeason: value) as $Val);
     });
   }
+
+  @override
+  @pragma('vm:prefer-inline')
+  $GrowthThresholdCopyWith<$Res>? get nextThreshold {
+    if (_value.nextThreshold == null) {
+      return null;
+    }
+
+    return $GrowthThresholdCopyWith<$Res>(_value.nextThreshold!, (value) {
+      return _then(_value.copyWith(nextThreshold: value) as $Val);
+    });
+  }
 }
 
 /// @nodoc
@@ -1161,12 +1497,16 @@ abstract class _$$GroupDetailImplCopyWith<$Res>
   $Res call(
       {Group group,
       List<Member> members,
-      @JsonKey(name: 'active_season') ActiveSeason? activeSeason});
+      @JsonKey(name: 'active_season') ActiveSeason? activeSeason,
+      @JsonKey(name: 'effective_member_count') int effectiveMemberCount,
+      @JsonKey(name: 'next_threshold') GrowthThreshold? nextThreshold});
 
   @override
   $GroupCopyWith<$Res> get group;
   @override
   $ActiveSeasonCopyWith<$Res>? get activeSeason;
+  @override
+  $GrowthThresholdCopyWith<$Res>? get nextThreshold;
 }
 
 /// @nodoc
@@ -1183,6 +1523,8 @@ class __$$GroupDetailImplCopyWithImpl<$Res>
     Object? group = null,
     Object? members = null,
     Object? activeSeason = freezed,
+    Object? effectiveMemberCount = null,
+    Object? nextThreshold = freezed,
   }) {
     return _then(_$GroupDetailImpl(
       group: null == group
@@ -1197,6 +1539,14 @@ class __$$GroupDetailImplCopyWithImpl<$Res>
           ? _value.activeSeason
           : activeSeason // ignore: cast_nullable_to_non_nullable
               as ActiveSeason?,
+      effectiveMemberCount: null == effectiveMemberCount
+          ? _value.effectiveMemberCount
+          : effectiveMemberCount // ignore: cast_nullable_to_non_nullable
+              as int,
+      nextThreshold: freezed == nextThreshold
+          ? _value.nextThreshold
+          : nextThreshold // ignore: cast_nullable_to_non_nullable
+              as GrowthThreshold?,
     ));
   }
 }
@@ -1207,7 +1557,9 @@ class _$GroupDetailImpl implements _GroupDetail {
   const _$GroupDetailImpl(
       {required this.group,
       required final List<Member> members,
-      @JsonKey(name: 'active_season') this.activeSeason})
+      @JsonKey(name: 'active_season') this.activeSeason,
+      @JsonKey(name: 'effective_member_count') this.effectiveMemberCount = 0,
+      @JsonKey(name: 'next_threshold') this.nextThreshold})
       : _members = members;
 
   factory _$GroupDetailImpl.fromJson(Map<String, dynamic> json) =>
@@ -1227,9 +1579,23 @@ class _$GroupDetailImpl implements _GroupDetail {
   @JsonKey(name: 'active_season')
   final ActiveSeason? activeSeason;
 
+  /// How many members this viewer can actually be rated by — membership minus anyone blocked in
+  /// either direction. The anonymity warning is judged against this, because a group of five with
+  /// three blocks behaves like a group of two. Falls back to 0, which callers read as "unknown"
+  /// and substitute the raw member count for.
+  @override
+  @JsonKey(name: 'effective_member_count')
+  final int effectiveMemberCount;
+
+  /// The next group-size threshold, or null once the group has crossed them all. Counted by the
+  /// server against [effectiveMemberCount], so it agrees with the anonymity warning.
+  @override
+  @JsonKey(name: 'next_threshold')
+  final GrowthThreshold? nextThreshold;
+
   @override
   String toString() {
-    return 'GroupDetail(group: $group, members: $members, activeSeason: $activeSeason)';
+    return 'GroupDetail(group: $group, members: $members, activeSeason: $activeSeason, effectiveMemberCount: $effectiveMemberCount, nextThreshold: $nextThreshold)';
   }
 
   @override
@@ -1240,13 +1606,22 @@ class _$GroupDetailImpl implements _GroupDetail {
             (identical(other.group, group) || other.group == group) &&
             const DeepCollectionEquality().equals(other._members, _members) &&
             (identical(other.activeSeason, activeSeason) ||
-                other.activeSeason == activeSeason));
+                other.activeSeason == activeSeason) &&
+            (identical(other.effectiveMemberCount, effectiveMemberCount) ||
+                other.effectiveMemberCount == effectiveMemberCount) &&
+            (identical(other.nextThreshold, nextThreshold) ||
+                other.nextThreshold == nextThreshold));
   }
 
   @JsonKey(ignore: true)
   @override
-  int get hashCode => Object.hash(runtimeType, group,
-      const DeepCollectionEquality().hash(_members), activeSeason);
+  int get hashCode => Object.hash(
+      runtimeType,
+      group,
+      const DeepCollectionEquality().hash(_members),
+      activeSeason,
+      effectiveMemberCount,
+      nextThreshold);
 
   @JsonKey(ignore: true)
   @override
@@ -1264,10 +1639,12 @@ class _$GroupDetailImpl implements _GroupDetail {
 
 abstract class _GroupDetail implements GroupDetail {
   const factory _GroupDetail(
-          {required final Group group,
-          required final List<Member> members,
-          @JsonKey(name: 'active_season') final ActiveSeason? activeSeason}) =
-      _$GroupDetailImpl;
+      {required final Group group,
+      required final List<Member> members,
+      @JsonKey(name: 'active_season') final ActiveSeason? activeSeason,
+      @JsonKey(name: 'effective_member_count') final int effectiveMemberCount,
+      @JsonKey(name: 'next_threshold')
+      final GrowthThreshold? nextThreshold}) = _$GroupDetailImpl;
 
   factory _GroupDetail.fromJson(Map<String, dynamic> json) =
       _$GroupDetailImpl.fromJson;
@@ -1279,6 +1656,20 @@ abstract class _GroupDetail implements GroupDetail {
   @override
   @JsonKey(name: 'active_season')
   ActiveSeason? get activeSeason;
+  @override
+
+  /// How many members this viewer can actually be rated by — membership minus anyone blocked in
+  /// either direction. The anonymity warning is judged against this, because a group of five with
+  /// three blocks behaves like a group of two. Falls back to 0, which callers read as "unknown"
+  /// and substitute the raw member count for.
+  @JsonKey(name: 'effective_member_count')
+  int get effectiveMemberCount;
+  @override
+
+  /// The next group-size threshold, or null once the group has crossed them all. Counted by the
+  /// server against [effectiveMemberCount], so it agrees with the anonymity warning.
+  @JsonKey(name: 'next_threshold')
+  GrowthThreshold? get nextThreshold;
   @override
   @JsonKey(ignore: true)
   _$$GroupDetailImplCopyWith<_$GroupDetailImpl> get copyWith =>

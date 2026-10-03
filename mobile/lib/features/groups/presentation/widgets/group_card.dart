@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_text_styles.dart';
 import '../../domain/group.dart';
+import '../../../../core/theme/app_tokens.dart';
 
 class GroupCard extends StatelessWidget {
   final GroupListItem group;
@@ -22,13 +21,13 @@ class GroupCard extends StatelessWidget {
     }
   }
 
-  Color _statusColor(ActiveSeason? season) {
-    if (season == null) return AppColors.textSecondary;
+  Color _statusColor(BuildContext context, ActiveSeason? season) {
+    if (season == null) return context.t.color.textSecondary;
     if (season.status == 'VOTING' && !season.userVoted) {
-      return AppColors.primary;
+      return context.t.color.accent;
     }
-    if (season.status == 'REVEALED') return AppColors.success;
-    return AppColors.textSecondary;
+    if (season.status == 'REVEALED') return context.t.color.success;
+    return context.t.color.textSecondary;
   }
 
   @override
@@ -42,16 +41,14 @@ class GroupCard extends StatelessWidget {
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 2),
-            ),
-          ],
+        color: context.t.elevation.level1.surface,
+        borderRadius: AppTokens.radius.card,
+        border: Border.all(
+          color: context.t.elevation.level1.outline,
+          width: AppTokens.border.hairline,
         ),
+        boxShadow: context.t.elevation.level1.shadows,
+      ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -60,41 +57,41 @@ class GroupCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     group.name,
-                    style: AppTextStyles.headline2.copyWith(fontSize: 18),
+                    style: context.ts.heading2.copyWith(fontSize: 18),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 Text(
                   '${group.memberCount} чел.',
-                  style: AppTextStyles.caption,
+                  style: context.ts.caption,
                 ),
               ],
             ),
             const SizedBox(height: 8),
             if (season != null && season.status == 'VOTING') ...[
               ClipRRect(
-                borderRadius: BorderRadius.circular(4),
+                borderRadius: BorderRadius.circular(AppTokens.radius.xs),
                 child: LinearProgressIndicator(
                   value: season.totalCount > 0
                       ? season.votedCount / season.totalCount
                       : 0,
-                  backgroundColor: AppColors.surface,
-                  color: AppColors.primary,
+                  backgroundColor: context.t.color.surface,
+                  color: context.t.color.accent,
                   minHeight: 6,
                 ),
               ),
               const SizedBox(height: 6),
               Text(
                 '${season.votedCount} из ${season.totalCount} проголосовали',
-                style: AppTextStyles.caption,
+                style: context.ts.caption,
               ),
             ],
             const SizedBox(height: 4),
             Text(
               _statusText(season),
-              style: AppTextStyles.body.copyWith(
-                color: _statusColor(season),
+              style: context.ts.body.copyWith(
+                color: _statusColor(context, season),
                 fontWeight: FontWeight.w600,
                 fontSize: 14,
               ),
@@ -108,8 +105,8 @@ class GroupCard extends StatelessWidget {
       card = card
           .animate(onPlay: (c) => c.repeat(reverse: true))
           .shimmer(
-            duration: 2000.ms,
-            color: AppColors.primary.withValues(alpha: 0.08),
+            duration: context.motion(MotionClass.emphasis),
+            color: context.t.color.accent.withValues(alpha: 0.08),
           );
     }
 

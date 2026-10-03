@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/theme/app_tokens.dart';
 
 class AttributeBar extends StatelessWidget {
   final String questionText;
@@ -25,7 +24,7 @@ class AttributeBar extends StatelessWidget {
             Expanded(
               child: Text(
                 questionText,
-                style: AppTextStyles.body.copyWith(
+                style: context.ts.body.copyWith(
                   fontWeight: FontWeight.w500,
                 ),
                 maxLines: 1,
@@ -35,25 +34,25 @@ class AttributeBar extends StatelessWidget {
             const SizedBox(width: 8),
             Text(
               '${percentage.toStringAsFixed(0)}%',
-              style: AppTextStyles.body.copyWith(
+              style: context.ts.body.copyWith(
                 fontWeight: FontWeight.w700,
-                color: AppColors.primary,
+                color: context.t.color.accent,
               ),
             ),
           ],
         ),
         const SizedBox(height: 6),
         ClipRRect(
-          borderRadius: BorderRadius.circular(6),
+          borderRadius: BorderRadius.circular(AppTokens.radius.xs),
           child: TweenAnimationBuilder<double>(
             tween: Tween(begin: 0, end: percentage / 100),
-            duration: Duration(milliseconds: 600 + index * 200),
+            duration: context.motion(MotionClass.emphasis) + AppTokens.motion.stagger(index * 2),
             curve: Curves.easeOutCubic,
             builder: (context, value, _) {
               return LinearProgressIndicator(
                 value: value,
-                backgroundColor: AppColors.surface,
-                color: AppColors.primary,
+                backgroundColor: context.t.color.surface,
+                color: context.t.color.accent,
                 minHeight: 10,
               );
             },
@@ -62,7 +61,7 @@ class AttributeBar extends StatelessWidget {
       ],
     )
         .animate()
-        .fadeIn(duration: 400.ms, delay: Duration(milliseconds: index * 150))
-        .slideX(begin: 0.1, duration: 300.ms);
+        .fadeIn(duration: context.motion(MotionClass.emphasis), delay: Duration(milliseconds: index * 150))
+        .slideX(begin: 0.1, duration: context.motion(MotionClass.surface));
   }
 }

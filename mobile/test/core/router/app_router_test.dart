@@ -8,6 +8,7 @@ import 'package:repa/core/api/api_client.dart';
 import 'package:repa/core/providers/api_provider.dart';
 import 'package:repa/core/providers/auth_provider.dart';
 import 'package:repa/core/router/app_router.dart';
+import 'package:repa/core/theme/app_theme.dart';
 
 class MockFlutterSecureStorage extends Mock implements FlutterSecureStorage {}
 
@@ -33,7 +34,7 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: MaterialApp.router(routerConfig: router),
+        child: MaterialApp.router(theme: AppTheme.dark, routerConfig: router),
       ),
     );
     await tester.pumpAndSettle();

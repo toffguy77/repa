@@ -41,7 +41,11 @@ class _RepaAppState extends ConsumerState<RepaApp> {
 
     return MaterialApp.router(
       title: 'Repa',
+      // Dark-first: dark is also what ThemeMode.system resolves to when the platform
+      // expresses no preference, because `theme` is only consulted for light.
       theme: AppTheme.light,
+      darkTheme: AppTheme.dark,
+      themeMode: ThemeMode.system,
       routerConfig: router,
       debugShowCheckedModeBanner: false,
       builder: (context, child) => OfflineBanner(child: child!),

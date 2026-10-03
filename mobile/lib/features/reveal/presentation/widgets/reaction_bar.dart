@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_animate/flutter_animate.dart';
-import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_tokens.dart';
 
 const reactionEmojis = ['😂', '🔥', '💀', '👀', '🫡'];
 
@@ -35,15 +34,15 @@ class ReactionBar extends StatelessWidget {
               onReact(emoji);
             },
             child: AnimatedContainer(
-              duration: 200.ms,
+              duration: context.motion(MotionClass.surface),
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
                 color: isSelected
-                    ? AppColors.primaryLight
+                    ? context.t.color.accentFill.withValues(alpha: 0.18)
                     : Colors.grey.shade100,
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(AppTokens.radius.lg),
                 border: isSelected
-                    ? Border.all(color: AppColors.primary, width: 1.5)
+                    ? Border.all(color: context.t.color.accent, width: 1.5)
                     : null,
               ),
               child: Row(
@@ -58,8 +57,8 @@ class ReactionBar extends StatelessWidget {
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
                         color: isSelected
-                            ? AppColors.primary
-                            : AppColors.textSecondary,
+                            ? context.t.color.accent
+                            : context.t.color.textSecondary,
                       ),
                     ),
                   ],

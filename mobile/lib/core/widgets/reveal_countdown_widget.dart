@@ -1,8 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../theme/app_colors.dart';
-import '../theme/app_text_styles.dart';
+import '../theme/app_tokens.dart';
 
 const _weekdays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
 
@@ -74,20 +73,27 @@ class _RevealCountdownWidgetState extends State<RevealCountdownWidget> {
   Widget build(BuildContext context) {
     final isUrgent = _remaining.inHours < 1 && _remaining > Duration.zero;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+    final t = context.t;
+    // Inside the final hour the countdown switches to the danger role — the one moment the
+    // product wants to feel urgent.
+    final foreground = isUrgent ? t.color.danger : t.color.accent;
+
+    return DecoratedBox(
       decoration: BoxDecoration(
-        color: isUrgent
-            ? AppColors.error.withValues(alpha: 0.1)
-            : AppColors.primaryLight,
-        borderRadius: BorderRadius.circular(10),
+        color: foreground.withValues(alpha: 0.12),
+        borderRadius: AppTokens.radius.control,
       ),
-      child: Text(
-        '${_formatRevealDay()} \u00b7 ${_formatRemaining()}',
-        style: AppTextStyles.caption.copyWith(
-          fontSize: 12,
-          color: isUrgent ? AppColors.error : AppColors.primary,
-          fontWeight: FontWeight.w600,
+      child: Padding(
+        padding: EdgeInsets.symmetric(
+          horizontal: AppTokens.space.sm,
+          vertical: AppTokens.space.xs,
+        ),
+        child: Text(
+          '${_formatRevealDay()} \u00b7 ${_formatRemaining()}',
+          style: AppTokens.text.numeric.copyWith(
+            fontSize: 12,
+            color: foreground,
+          ),
         ),
       ),
     );

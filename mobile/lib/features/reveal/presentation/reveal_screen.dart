@@ -8,9 +8,9 @@ import 'package:go_router/go_router.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../../core/providers/auth_provider.dart';
-import '../../../core/theme/app_colors.dart';
 import '../../crystals/presentation/crystals_notifier.dart';
-import '../../../core/theme/app_text_styles.dart';
+import '../../../core/widgets/reveal_countdown_widget.dart';
+import '../../groups/domain/group.dart';
 import '../../groups/presentation/groups_notifier.dart';
 import '../../telegram/presentation/telegram_notifier.dart';
 import '../domain/reveal.dart';
@@ -19,6 +19,11 @@ import 'reveal_notifier.dart';
 import 'widgets/achievement_popup.dart';
 import 'widgets/detector_sheet.dart';
 import 'widgets/reputation_card.dart';
+import '../../../core/theme/app_tokens.dart';
+import '../../../core/theme/brand_colors.dart';
+import '../../../core/widgets/kit/kit.dart';
+import '../domain/share_link.dart';
+import 'widgets/anticipation_panel.dart';
 
 class RevealScreen extends ConsumerStatefulWidget {
   final String groupId;
@@ -85,6 +90,8 @@ class _RevealScreenState extends ConsumerState<RevealScreen> {
             crystalBalance: balance,
             onBuy: () =>
                 ref.read(revealProvider(_args).notifier).buyDetector(),
+            onBuyHint: () =>
+                ref.read(revealProvider(_args).notifier).buyDetectorHint(),
             onGoToShop: () => context.push('/shop'),
           );
         },
@@ -92,26 +99,52 @@ class _RevealScreenState extends ConsumerState<RevealScreen> {
     );
   }
 
+  /// The group's invite code, so a shared card carries a way back into the product.
+  String? get _inviteCode =>
+      ref.read(groupDetailProvider(widget.groupId)).detail?.group.inviteCode;
+
+  /// Reports a share for the funnel. Never surfaced: the share has already happened in the OS
+  /// share sheet by the time this runs, so an error here would describe a failure the user did
+  /// not have.
+  void _reportShare(ShareChannel channel) {
+    ref
+        .read(revealRepositoryProvider)
+        .recordShare(widget.seasonId, channel.wireValue)
+        .catchError((Object e) {
+      debugPrint('failed to record share: $e');
+    });
+  }
+
   Future<void> _shareCard() async {
     final state = ref.read(revealProvider(_args));
     final imageUrl = state.data?.myCard.cardImageUrl ?? state.cardImageUrl;
+    final code = _inviteCode;
+
+    // Without a code there is nothing to invite anyone to; the card still shares, just as a
+    // picture rather than an invitation.
+    final text = code == null
+        ? 'Моя репа 🍆 repa.app'
+        : buildShareText(
+            inviteCode: code,
+            channel: ShareChannel.card,
+            referrerId: ref.read(authProvider).user?.id,
+          );
 
     if (imageUrl != null) {
       try {
-        // Download PNG to temp file for native share
         final dir = await getTemporaryDirectory();
         final file = File('${dir.path}/repa_card_${widget.seasonId}.png');
         await Dio().download(imageUrl, file.path);
-        await Share.shareXFiles(
-          [XFile(file.path)],
-          text: 'Моя репа repa.app',
-        );
+        await Share.shareXFiles([XFile(file.path)], text: text);
+        _reportShare(ShareChannel.card);
         return;
       } catch (_) {
-        // Fallback to text share
+        // Fall through to a text-only share.
       }
     }
-    Share.share('Смотри мою репу! repa.app');
+
+    await Share.share(text);
+    _reportShare(ShareChannel.card);
   }
 
   Future<void> _shareToTelegram() async {
@@ -120,6 +153,7 @@ class _RevealScreenState extends ConsumerState<RevealScreen> {
       await ref
           .read(shareToTelegramProvider)
           .shareToTelegram(widget.seasonId);
+      _reportShare(ShareChannel.telegram);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Карточка опубликована в чате')),
@@ -153,8 +187,9 @@ class _RevealScreenState extends ConsumerState<RevealScreen> {
     });
 
     return Scaffold(
+      // The opening animation is an always-dark brand moment, matching the shared card.
       backgroundColor: state.phase == RevealPhase.opening
-          ? const Color(0xFF1a0d2e)
+          ? AppColorTokens.dark.canvas
           : null,
       appBar: state.phase == RevealPhase.opening
           ? null
@@ -196,6 +231,13 @@ class _RevealScreenState extends ConsumerState<RevealScreen> {
   }
 
   Widget _buildWaiting() {
+    final revealState = ref.watch(revealProvider(_args));
+    // The group's active season knows *why* the Reveal has not happened — waiting for
+    // members, waiting for voters, postponed, or simply not Friday yet. Showing the same
+    // explanation here is what keeps the Tuesday/Thursday pushes honest.
+    final season =
+        ref.watch(groupDetailProvider(widget.groupId)).detail?.activeSeason;
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -205,16 +247,27 @@ class _RevealScreenState extends ConsumerState<RevealScreen> {
             const Text('\u{1F346}', style: TextStyle(fontSize: 64)),
             const SizedBox(height: 24),
             Text(
-              'Результаты ещё не готовы',
-              style: AppTextStyles.headline2,
+              season?.revealHeadline ?? 'Результаты ещё не готовы',
+              style: context.ts.heading2,
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 12),
             Text(
-              'Голосование завершится в пятницу в 20:00',
-              style: AppTextStyles.bodySecondary,
+              season?.revealExplanation ??
+                  'Голосование завершится в пятницу в 20:00',
+              style: context.ts.bodySecondary,
               textAlign: TextAlign.center,
             ),
+            // The anticipation panel carries its own countdown, so the standalone one is only for
+            // the case where there is nothing else to say.
+            if (revealState.anticipation != null) ...[
+              SizedBox(height: AppTokens.space.xl),
+              AnticipationPanel(state: revealState.anticipation),
+            ] else if (season != null &&
+                season.revealState == SeasonRevealState.scheduled) ...[
+              const SizedBox(height: 24),
+              RevealCountdownWidget(revealAt: season.revealAt),
+            ],
           ],
         ),
       ),
@@ -233,33 +286,16 @@ class _RevealScreenState extends ConsumerState<RevealScreen> {
                 .scale(
                   begin: const Offset(1, 1),
                   end: const Offset(1.15, 1.15),
-                  duration: 800.ms,
+                  duration: context.motion(MotionClass.emphasis),
                 ),
             const SizedBox(height: 32),
             Text(
               'Твоя репа готова!',
-              style: AppTextStyles.headline1,
+              style: context.ts.heading1,
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 32),
-            SizedBox(
-              width: double.infinity,
-              height: 56,
-              child: ElevatedButton(
-                onPressed: _startOpening,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                ),
-                child: const Text(
-                  'Открыть репу',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-                ),
-              ),
-            ),
+            AppButton(label: 'Открыть репу', onPressed: _startOpening),
           ],
         ),
       ),
@@ -276,10 +312,10 @@ class _RevealScreenState extends ConsumerState<RevealScreen> {
               .scale(
                 begin: const Offset(0.8, 0.8),
                 end: const Offset(1.3, 1.3),
-                duration: 600.ms,
+                duration: context.motion(MotionClass.emphasis),
               )
               .then()
-              .fadeOut(duration: 500.ms, delay: 1500.ms),
+              .fadeOut(duration: context.motion(MotionClass.emphasis), delay: AppTokens.motion.stagger(25)),
         ],
       ),
     );
@@ -307,10 +343,10 @@ class _RevealScreenState extends ConsumerState<RevealScreen> {
               .slideY(
                 begin: 1,
                 end: 0,
-                duration: 600.ms,
+                duration: context.motion(MotionClass.emphasis),
                 curve: Curves.easeOutCubic,
               )
-              .fadeIn(duration: 400.ms),
+              .fadeIn(duration: context.motion(MotionClass.emphasis)),
 
           const SizedBox(height: 24),
 
@@ -320,21 +356,11 @@ class _RevealScreenState extends ConsumerState<RevealScreen> {
           const SizedBox(height: 24),
 
           // Members cards button
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton.icon(
-              onPressed: _openMembersCards,
-              icon: const Icon(Icons.people_outline),
-              label: const Text('Карточки участников'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.primary,
-                side: const BorderSide(color: AppColors.primary),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-              ),
-            ),
+          AppButton(
+            label: 'Карточки участников',
+            icon: Icons.people_outline,
+            variant: AppButtonVariant.secondary,
+            onPressed: _openMembersCards,
           ),
           const SizedBox(height: 32),
         ],
@@ -352,7 +378,7 @@ class _RevealScreenState extends ConsumerState<RevealScreen> {
           width: 80,
           height: 80,
           decoration: BoxDecoration(
-            color: AppColors.primaryLight,
+            color: context.t.color.accentFill.withValues(alpha: 0.18),
             shape: BoxShape.circle,
           ),
           child: Center(
@@ -365,8 +391,8 @@ class _RevealScreenState extends ConsumerState<RevealScreen> {
         const SizedBox(height: 12),
         Text(
           data.myCard.reputationTitle,
-          style: AppTextStyles.headline2.copyWith(
-            color: AppColors.primary,
+          style: context.ts.heading2.copyWith(
+            color: context.t.color.accent,
           ),
         ),
       ],
@@ -383,34 +409,19 @@ class _RevealScreenState extends ConsumerState<RevealScreen> {
         Row(
           children: [
             Expanded(
-              child: ElevatedButton.icon(
+              child: AppButton(
+                label: 'Поделиться',
+                icon: Icons.share,
                 onPressed: _shareCard,
-                icon: const Icon(Icons.share, size: 20),
-                label: const Text('Поделиться'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
               ),
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: OutlinedButton.icon(
+              child: AppButton(
+                label: 'Детектор',
+                icon: Icons.search,
+                variant: AppButtonVariant.secondary,
                 onPressed: _showDetector,
-                icon: const Text('\u{1F50D}'),
-                label: const Text('Детектор'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.primary,
-                  side: const BorderSide(color: AppColors.primary),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
               ),
             ),
           ],
@@ -424,10 +435,10 @@ class _RevealScreenState extends ConsumerState<RevealScreen> {
               icon: const Icon(Icons.telegram, size: 20),
               label: const Text('Отправить в Telegram-чат'),
               style: OutlinedButton.styleFrom(
-                foregroundColor: const Color(0xFF2AABEE),
-                side: const BorderSide(color: Color(0xFF2AABEE)),
+                foregroundColor: BrandColors.telegram,
+                side: const BorderSide(color: BrandColors.telegram),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(AppTokens.radius.md),
                 ),
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),

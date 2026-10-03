@@ -2,9 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_text_styles.dart';
 import 'auth_notifier.dart';
+import '../../../core/theme/app_tokens.dart';
 
 const _avatarEmojis = [
   '\u{1F60E}', '\u{1F47B}', '\u{1F525}', '\u{1F680}', '\u{1F308}',
@@ -79,16 +78,16 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 60),
-              Text('Расскажи о себе', style: AppTextStyles.headline1),
+              Text('Расскажи о себе', style: context.ts.heading1),
               const SizedBox(height: 8),
               Text(
                 'Заполни профиль, чтобы друзья тебя узнали',
-                style: AppTextStyles.bodySecondary,
+                style: context.ts.bodySecondary,
               ),
               const SizedBox(height: 32),
 
               // Avatar emoji picker
-              Text('Выбери аватар', style: AppTextStyles.body),
+              Text('Выбери аватар', style: context.ts.body),
               const SizedBox(height: 12),
               Wrap(
                 spacing: 8,
@@ -102,10 +101,10 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                       height: 48,
                       decoration: BoxDecoration(
                         color:
-                            selected ? AppColors.primaryLight : AppColors.surface,
-                        borderRadius: BorderRadius.circular(12),
+                            selected ? context.t.color.accentFill.withValues(alpha: 0.18) : context.t.color.surface,
+                        borderRadius: BorderRadius.circular(AppTokens.radius.md),
                         border: selected
-                            ? Border.all(color: AppColors.primary, width: 2)
+                            ? Border.all(color: context.t.color.accent, width: 2)
                             : null,
                       ),
                       child: Center(
@@ -118,11 +117,11 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
               const SizedBox(height: 24),
 
               // Username
-              Text('Имя пользователя', style: AppTextStyles.body),
+              Text('Имя пользователя', style: context.ts.body),
               const SizedBox(height: 8),
               TextField(
                 controller: _usernameController,
-                style: AppTextStyles.body,
+                style: context.ts.body,
                 decoration: InputDecoration(
                   hintText: 'Минимум 3 символа',
                   suffixIcon: _usernameSuffix(state),
@@ -136,18 +135,18 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
                 const SizedBox(height: 4),
                 Text(
                   'Имя занято',
-                  style: TextStyle(color: AppColors.error, fontSize: 13),
+                  style: TextStyle(color: context.t.color.danger, fontSize: 13),
                 ),
               ],
               const SizedBox(height: 24),
 
               // Birth year
-              Text('Год рождения', style: AppTextStyles.body),
+              Text('Год рождения', style: context.ts.body),
               const SizedBox(height: 8),
               TextField(
                 controller: _birthYearController,
                 keyboardType: TextInputType.number,
-                style: AppTextStyles.body,
+                style: context.ts.body,
                 inputFormatters: [
                   FilteringTextInputFormatter.digitsOnly,
                   LengthLimitingTextInputFormatter(4),
@@ -158,24 +157,24 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
               const SizedBox(height: 8),
               Text(
                 'Нужен для подбора контента по возрасту',
-                style: AppTextStyles.caption,
+                style: context.ts.caption,
               ),
 
               if (state.error != null) ...[
                 const SizedBox(height: 16),
-                Text(state.error!, style: TextStyle(color: AppColors.error)),
+                Text(state.error!, style: TextStyle(color: context.t.color.danger)),
               ],
               const SizedBox(height: 32),
 
               ElevatedButton(
                 onPressed: _isValid && !state.loading ? _submit : null,
                 child: state.loading
-                    ? const SizedBox(
+                    ? SizedBox(
                         height: 20,
                         width: 20,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: context.t.color.onAccentFill,
                         ),
                       )
                     : const Text('Готово'),
@@ -200,10 +199,10 @@ class _ProfileSetupScreenState extends ConsumerState<ProfileSetupScreen> {
       );
     }
     if (state.usernameAvailable == true) {
-      return const Icon(Icons.check_circle, color: AppColors.success);
+      return Icon(Icons.check_circle, color: context.t.color.success);
     }
     if (state.usernameAvailable == false) {
-      return const Icon(Icons.cancel, color: AppColors.error);
+      return Icon(Icons.cancel, color: context.t.color.danger);
     }
     return null;
   }

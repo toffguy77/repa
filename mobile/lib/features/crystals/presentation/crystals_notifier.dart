@@ -11,6 +11,7 @@ import '../domain/crystals.dart';
 class CrystalsState {
   final int balance;
   final List<CrystalPackage> packages;
+  final List<CrystalHistoryEntry> history;
   final bool loading;
   final bool purchasing;
   final String? pendingPaymentId;
@@ -20,6 +21,7 @@ class CrystalsState {
   const CrystalsState({
     this.balance = 0,
     this.packages = const [],
+    this.history = const [],
     this.loading = true,
     this.purchasing = false,
     this.pendingPaymentId,
@@ -30,6 +32,7 @@ class CrystalsState {
   CrystalsState copyWith({
     int? balance,
     List<CrystalPackage>? packages,
+    List<CrystalHistoryEntry>? history,
     bool? loading,
     bool? purchasing,
     String? pendingPaymentId,
@@ -41,6 +44,7 @@ class CrystalsState {
   }) {
     return CrystalsState(
       balance: balance ?? this.balance,
+      history: history ?? this.history,
       packages: packages ?? this.packages,
       loading: loading ?? this.loading,
       purchasing: purchasing ?? this.purchasing,
@@ -66,10 +70,14 @@ class CrystalsNotifier extends StateNotifier<CrystalsState> {
       final results = await Future.wait([
         _repo.getBalance(),
         _repo.getPackages(),
+        // History explains a balance that grew without a payment. A failure here must not take
+        // the shop down with it, so it degrades to an empty list.
+        _repo.getHistory().catchError((Object _) => <CrystalHistoryEntry>[]),
       ]);
       state = state.copyWith(
         balance: results[0] as int,
         packages: results[1] as List<CrystalPackage>,
+        history: results[2] as List<CrystalHistoryEntry>,
         loading: false,
       );
     } on AppException catch (e) {

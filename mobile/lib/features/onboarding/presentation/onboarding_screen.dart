@@ -4,9 +4,13 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/providers/auth_provider.dart';
-import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_tokens.dart';
 
-const _bgColor = Color(0xFF1A0533);
+/// Onboarding is intentionally always dark — it is the product's first impression and
+/// matches the shared reputation card. It therefore names the dark palette directly rather
+/// than following the active theme. See docs/features/design-system.md.
+const _palette = AppColorTokens.dark;
+final _bgColor = _palette.canvas;
 
 class OnboardingScreen extends ConsumerStatefulWidget {
   const OnboardingScreen({super.key});
@@ -51,7 +55,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     if (_currentPage < _slides.length - 1) {
       HapticFeedback.lightImpact();
       _controller.nextPage(
-        duration: const Duration(milliseconds: 400),
+        duration: context.motion(MotionClass.emphasis),
         curve: Curves.easeOutCubic,
       );
     } else {
@@ -82,7 +86,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   child: Text(
                     'Пропустить',
                     style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.6),
+                      color: _palette.textSecondary,
                       fontSize: 16,
                     ),
                   ),
@@ -108,15 +112,15 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 children: List.generate(
                   _slides.length,
                   (i) => AnimatedContainer(
-                    duration: const Duration(milliseconds: 300),
+                    duration: context.motion(MotionClass.surface),
                     margin: const EdgeInsets.symmetric(horizontal: 4),
                     width: _currentPage == i ? 24 : 8,
                     height: 8,
                     decoration: BoxDecoration(
                       color: _currentPage == i
-                          ? Colors.white
-                          : Colors.white.withValues(alpha: 0.3),
-                      borderRadius: BorderRadius.circular(4),
+                          ? _palette.accent
+                          : _palette.border,
+                      borderRadius: BorderRadius.circular(AppTokens.radius.xs),
                     ),
                   ),
                 ),
@@ -132,10 +136,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 child: ElevatedButton(
                   onPressed: _next,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
+                    backgroundColor: context.t.color.accent,
+                    foregroundColor: _palette.onAccentFill,
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: BorderRadius.circular(AppTokens.radius.lg),
                     ),
                     textStyle: const TextStyle(
                       fontSize: 18,
@@ -186,19 +190,14 @@ class _SlideWidget extends StatelessWidget {
             style: const TextStyle(fontSize: 96),
           )
               .animate()
-              .fadeIn(duration: 400.ms)
+              .fadeIn(duration: context.motion(MotionClass.emphasis))
               .scale(begin: const Offset(0.5, 0.5), end: const Offset(1, 1)),
           const SizedBox(height: 32),
           Text(
             data.title,
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 24,
-              fontWeight: FontWeight.bold,
-              height: 1.3,
-            ),
-          ).animate().fadeIn(delay: 100.ms, duration: 400.ms).slideY(
+            style: AppTokens.text.heading1.copyWith(color: _palette.textPrimary),
+          ).animate().fadeIn(delay: AppTokens.motion.stagger(2), duration: context.motion(MotionClass.emphasis)).slideY(
                 begin: 0.2,
                 end: 0,
                 curve: Curves.easeOut,
@@ -208,11 +207,11 @@ class _SlideWidget extends StatelessWidget {
             data.subtitle,
             textAlign: TextAlign.center,
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.7),
+              color: _palette.textSecondary,
               fontSize: 16,
               height: 1.5,
             ),
-          ).animate().fadeIn(delay: 200.ms, duration: 400.ms).slideY(
+          ).animate().fadeIn(delay: AppTokens.motion.stagger(3), duration: context.motion(MotionClass.emphasis)).slideY(
                 begin: 0.2,
                 end: 0,
                 curve: Curves.easeOut,

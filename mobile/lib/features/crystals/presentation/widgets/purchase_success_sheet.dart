@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import '../../../../core/theme/app_tokens.dart';
 
-import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_text_styles.dart';
 
 class PurchaseSuccessSheet extends StatelessWidget {
   final int amount;
@@ -23,9 +22,9 @@ class PurchaseSuccessSheet extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.all(24),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: BoxDecoration(
+        color: context.t.elevation.level2.surface,
+        borderRadius: AppTokens.radius.sheet,
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -34,8 +33,8 @@ class PurchaseSuccessSheet extends StatelessWidget {
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(2),
+              color: context.t.color.surface,
+              borderRadius: BorderRadius.circular(AppTokens.radius.xs),
             ),
           ),
           const SizedBox(height: 24),
@@ -44,23 +43,23 @@ class PurchaseSuccessSheet extends StatelessWidget {
               .scale(
                 begin: const Offset(0.3, 0.3),
                 end: const Offset(1.0, 1.0),
-                duration: 400.ms,
+                duration: context.motion(MotionClass.emphasis),
                 curve: Curves.elasticOut,
               )
-              .fadeIn(duration: 200.ms),
+              .fadeIn(duration: context.motion(MotionClass.surface)),
           const SizedBox(height: 16),
           Text(
             '+$amount кристаллов',
-            style: AppTextStyles.headline1.copyWith(color: AppColors.primary),
+            style: context.ts.heading1.copyWith(color: context.t.color.accent),
           )
               .animate()
-              .fadeIn(delay: 200.ms, duration: 300.ms)
+              .fadeIn(delay: AppTokens.motion.stagger(3), duration: context.motion(MotionClass.surface))
               .slideY(begin: 0.2),
           const SizedBox(height: 8),
           Text(
             'Баланс: $newBalance',
-            style: AppTextStyles.bodySecondary,
-          ).animate().fadeIn(delay: 400.ms, duration: 300.ms),
+            style: context.ts.bodySecondary,
+          ).animate().fadeIn(delay: AppTokens.motion.stagger(7), duration: context.motion(MotionClass.surface)),
           const SizedBox(height: 32),
           SizedBox(
             width: double.infinity,
