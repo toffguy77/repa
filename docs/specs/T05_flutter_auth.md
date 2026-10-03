@@ -70,6 +70,12 @@ mobile/lib/
 
 ## Что реализовать
 
+> **Устарело.** `app_colors.dart` и `app_text_styles.dart` удалены в change
+> `youth-design-system`: цвет и типографика теперь берутся из токенов
+> (`core/theme/app_tokens.dart`), доступных через `context.t` / `context.ts`.
+> Актуальная палитра и правила — в `docs/features/design-system.md`.
+> Код ниже сохранён как запись о том, что было сделано на этапе T05.
+
 ### core/theme/app_colors.dart
 ```dart
 class AppColors {

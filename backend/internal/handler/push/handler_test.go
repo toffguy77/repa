@@ -358,12 +358,12 @@ func TestGetQuestionCandidates_Success(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 
 	// GetRandomSystemQuestions
-	mock.ExpectQuery("SELECT id, text, category, source, group_id, author_id, status, created_at FROM questions").
+	mock.ExpectQuery("SELECT .+ FROM questions").
 		WithArgs(int32(3)).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "text", "category", "source", "group_id", "author_id", "status", "created_at"}).
-			AddRow("q-1", "Who is the funniest?", "FUNNY", "SYSTEM", nil, nil, "ACTIVE", time.Now()).
-			AddRow("q-2", "Who is the smartest?", "SKILLS", "SYSTEM", nil, nil, "ACTIVE", time.Now()).
-			AddRow("q-3", "Who is the hottest?", "HOT", "SYSTEM", nil, nil, "ACTIVE", time.Now()))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "text", "category", "source", "group_id", "author_id", "status", "created_at", "tone"}).
+			AddRow("q-1", "Who is the funniest?", "FUNNY", "SYSTEM", nil, nil, "ACTIVE", time.Now(), "NEUTRAL").
+			AddRow("q-2", "Who is the smartest?", "SKILLS", "SYSTEM", nil, nil, "ACTIVE", time.Now(), "NEUTRAL").
+			AddRow("q-3", "Who is the hottest?", "HOT", "SYSTEM", nil, nil, "ACTIVE", time.Now(), "NEUTRAL"))
 
 	if err := h.GetQuestionCandidates(c); err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -462,10 +462,10 @@ func TestVoteQuestion_Success(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(0)))
 
 	// GetQuestionByID
-	mock.ExpectQuery("SELECT id, text, category, source, group_id, author_id, status, created_at FROM questions WHERE id").
+	mock.ExpectQuery("SELECT .+ FROM questions WHERE id").
 		WithArgs("q-1").
-		WillReturnRows(sqlmock.NewRows([]string{"id", "text", "category", "source", "group_id", "author_id", "status", "created_at"}).
-			AddRow("q-1", "Who is the funniest?", "FUNNY", "SYSTEM", nil, nil, "ACTIVE", time.Now()))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "text", "category", "source", "group_id", "author_id", "status", "created_at", "tone"}).
+			AddRow("q-1", "Who is the funniest?", "FUNNY", "SYSTEM", nil, nil, "ACTIVE", time.Now(), "NEUTRAL"))
 
 	// CreateNextSeasonVote
 	mock.ExpectQuery("INSERT INTO next_season_votes").
@@ -619,9 +619,9 @@ func TestVoteQuestion_QuestionNotFound(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(0)))
 
 	// GetQuestionByID — not found (no rows)
-	mock.ExpectQuery("SELECT id, text, category, source, group_id, author_id, status, created_at FROM questions WHERE id").
+	mock.ExpectQuery("SELECT .+ FROM questions WHERE id").
 		WithArgs("q-nonexistent").
-		WillReturnRows(sqlmock.NewRows([]string{"id", "text", "category", "source", "group_id", "author_id", "status", "created_at"}))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "text", "category", "source", "group_id", "author_id", "status", "created_at", "tone"}))
 
 	if err := h.VoteQuestion(c); err != nil {
 		t.Fatalf("unexpected error: %v", err)

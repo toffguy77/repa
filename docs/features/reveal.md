@@ -31,9 +31,56 @@ Unlock hidden attributes for 5 crystals.
 - **Error 403:** `NOT_MEMBER`
 - **Behavior:** Deducts 5 crystals atomically (transaction), creates crystal_log with type `SPEND_ATTRIBUTES`, returns all attributes (top + hidden) with updated balance.
 
+## Detector ladder
+
+The detector was one purchase that answered the question completely — and a question, once
+answered, stops being worth paying for. Gas monetised the same curiosity for roughly ten times as
+much by *not* answering it. The detector is now three rungs:
+
+| Rung | Price | Reveals |
+|---|---|---|
+| Count | **free** | "N человек проголосовали про тебя" — names nobody |
+| Hint | 3 💎 | One voter's avatar and the **first character** of their name |
+| Full list | 10 💎 | Every voter, by name (unchanged) |
+
+- The count is free because its job is to *create* the question. Charging for the question is how a
+  single-purchase detector ends up selling only the answer.
+- The hint sits **below** the 5-crystal referral grant on purpose: a player who invited one friend
+  can afford a rung without a bank card.
+- **Hints are drawn without replacement.** `detector_hints` records which voter each hint revealed
+  (`UNIQUE(user_id, season_id, revealed_user_id)`), so paying twice reveals two different people.
+  Recording what was revealed — rather than counting hints and deriving an order — also keeps the
+  next hint unguessable: any stable ordering would have to come from the voter ids themselves.
+- Selection is **random** among the unrevealed. A fixed order would let a player infer the rule, and
+  ordering by anything meaningful (join date, vote time) would leak a second fact beyond identity.
+- The hint DTO has **no username field at all**, so no code path can leak a full name through a hint
+  and no future change to a shared shape can add one. `first_letter` is the first *rune*: usernames
+  can begin with a digit or a Cyrillic letter.
+- The group-size floor applies to **every paid rung** — a hint drawn from two or three possible
+  voters identifies someone as surely as a list does. The free count stays visible at any size.
+- No rung ever binds a voter to a question or an answer. That rule is unchanged.
+
+### `POST /api/v1/seasons/:seasonId/detector/hint`
+Buys one partial reveal.
+- **Success 200:** the full detector payload, with one more entry in `hints`
+- **Error 402:** `INSUFFICIENT_FUNDS`
+- **Error 403:** `GROUP_TOO_SMALL`, `NOT_MEMBER`
+- **Error 409:** `NOTHING_TO_REVEAL` — every voter is revealed, nobody voted, or the full list is
+  already owned
+- **Error 400:** `SEASON_NOT_REVEALED`
+- **Behavior:** the voter is picked *before* the crystals are spent, and the spend and the hint
+  record happen in one transaction — so a refusal never costs crystals and a crash between the two
+  cannot charge for nothing.
+
 ### `GET /api/v1/seasons/:seasonId/detector`
 Get detector status for the current user.
-- **Success 200:** `{ "data": { "purchased": bool, "voters": [VoterProfile], "crystal_balance": number } }`
+- **Success 200:** `{ "data": { "purchased": bool, "voters": [VoterProfile], "available": bool, "crystal_balance": number, "voter_count": number, "hints": [DetectorHint], "hint_cost": number, "full_cost": number, "hint_available": bool } }`
+- `DetectorHint` is `{ first_letter, avatar_emoji, avatar_url }` — there is no `username` field.
+- The ladder fields are **additive**: a client that only reads `purchased` and `voters` keeps
+  working, which is why this is not a separate endpoint — the Reveal screen already fetches the
+  detector, and a second round trip on the screen that most needs to feel instant is not worth the
+  tidier shape.
+- `available` is false while the group has fewer than `MinDetectorMembers` (5) members, so the app can disable the button instead of letting a member discover the limit by spending.
 - **Error 400:** `SEASON_NOT_REVEALED`
 - **Error 403:** `NOT_MEMBER`
 - **Behavior:** If purchased, returns voter profiles (IDs only, no question/answer binding). If not purchased, returns empty voters list.
@@ -42,6 +89,7 @@ Get detector status for the current user.
 Buy a detector for 10 crystals.
 - **Success 200:** `{ "data": { "purchased": true, "voters": [VoterProfile], "crystal_balance": number } }`
 - **Error 402:** `INSUFFICIENT_FUNDS` — balance < 10 crystals
+- **Error 403:** `GROUP_TOO_SMALL` — group has fewer than `MinDetectorMembers` (5) members. Checked before any crystal deduction, so the balance is unchanged and no detector record is created.
 - **Error 409:** `ALREADY_PURCHASED` — detector already bought for this season
 - **Error 400:** `SEASON_NOT_REVEALED`
 - **Error 403:** `NOT_MEMBER`
@@ -69,6 +117,10 @@ Get the current user's card image URL for a season.
 }
 
 // AttributeDto
+// Ordered by percentage with tone breaking near-ties inside a 5-point band
+// (cardorder.BandPoints) — see docs/features/cards.md -> Attribute ordering.
+// `rank` is assigned after that ordering, so it describes the card as shown.
+// Tone itself is not exposed: it decides order, it is not a fact about the member.
 {
   "question_id": "uuid",
   "question_text": "string",
@@ -98,6 +150,8 @@ Get the current user's card image URL for a season.
 ### Tables
 
 - **season_results** — id, season_id (FK seasons), target_id (FK users), question_id (FK questions), vote_count, total_voters, percentage. Stores aggregated vote counts per (target, question) pair.
+  `GetSeasonResultsByUser` joins `questions.tone` so the card's order can use it; tone is not stored on
+  the result, since it belongs to the question.
 - **crystal_logs** — id, user_id (FK users), delta (integer), type (crystal_log_type enum), ref_id, created_at. Balance = `SUM(delta)`.
 - **detectors** — id, user_id (FK users), season_id (FK seasons), group_id (FK groups), created_at. Tracks detector purchases per user per season.
 
@@ -114,10 +168,112 @@ Get the current user's card image URL for a season.
 - `CreateDetector` — insert detector record
 - `GetVoterProfilesBySeason` — voter user profiles for detector result (without question/answer binding)
 
+## Mobile Screens
+
+### RevealScreen waiting state
+
+When the season has not revealed, the screen reads the group's active season
+(`groupDetailProvider`) and shows that season's `revealHeadline` / `revealExplanation` —
+"Нужно больше людей", "Нужно больше голосов", "Репа перенесена", or the Friday promise —
+instead of a generic "Результаты ещё не готовы". A live `RevealCountdownWidget` is shown
+only when `reveal_state` is `SCHEDULED`; counting down to a time that cannot produce a
+Reveal is what made the Tuesday/Thursday pushes feel like a lie.
+
+### DetectorSheet
+
+`DetectorResult.available` (false below 5 members) disables the purchase action and
+replaces it with an explanation. The flag defaults to `true` when absent, so an older
+backend keeps working. Unavailability takes precedence over an insufficient balance:
+telling a member to buy crystals they cannot spend here would be worse than useless.
+
+
+## Anticipation
+
+The push schedule used to promise things the app could not show: Tuesday's «Кто-то уже ответил на
+вопросы про тебя 👀» landed on a progress bar, and Thursday's category teaser had no screen at all.
+A push that promises intrigue and delivers nothing does not merely fail to retain — it teaches people
+to ignore the next one, which costs the pushes that do work. (PRD RET-04/05, RET-09/10.)
+
+### `GET /api/v1/seasons/:seasonId/anticipation`
+- **Success 200:** `{ "data": { "voters_about_me": number, "teaser_emoji": string, "reveal_at": string } }`
+- **Error 400:** `SEASON_ALREADY_REVEALED` — the member has their card; a partial signal next to a
+  full result is noise
+- **Error 403:** `NOT_MEMBER`
+- **Error 404:** `NOT_FOUND`
+
+### What it may and may not contain
+
+The payload is designed to be **incapable** of leaking rather than merely not leaking today: it has
+no identity field and no attribute field, so no future addition to a shared DTO can turn it into a
+leak. A unit test asserts the exact key set.
+
+- `voters_about_me` counts **distinct voters**, not votes, and excludes the member's own votes —
+  answering about others must not inflate your own count.
+- `teaser_emoji` is the **emoji itself**, not a category code the client could map back to a name. The
+  mapping lives in Go beside the category enum, so a client cannot render a category it was not told
+  about.
+- Available before the member has voted themselves: the count is not a reward for participating.
+
+### The Thursday rule
+
+The teaser is included only from **Thursday** onward in MSK, gated server-side. Gating on the client
+would make the teaser a client-version property and would ship the leading category to every device
+from Monday. Thursday is the PRD's choice and the right one: a teaser on Monday has four days to
+become boring, while a teaser on Thursday has one night.
+
+The leading category is resolved by a grouped query over the member's received votes, with ties
+broken on the category's own ordering — arbitrary but **stable**, because a random tiebreak would make
+the emoji flicker between two values on consecutive loads and read as a bug.
+
+### The immediate signal
+
+When someone answers a question about a member, a `push:vote-signal` task is enqueued for that
+member — never for the voter. It says that the number went up and nothing else: no voter name, no
+attribute. The *what* stays sealed until Friday, which is the whole point of the week in between.
+
+Debounced to **once per recipient per MSK day** (`signal-sent:{userID}:{date}` in Redis, the same
+mechanism as the daily push cap). Without a bound, a 20-person group produces 19 notifications in an
+evening and the app gets muted. Debounce rather than batch: a digest ("3 people answered") tells you
+how fast interest is arriving, which is more than the product wants to give away before Friday.
+
+The enqueue is a side effect of recording a vote and can never fail the vote.
+
+### AnticipationPanel (mobile)
+
+The reveal screen's waiting phase renders the count as an `AppStat`, the teaser emoji when present,
+and a live countdown — on top of the pending-Reveal explanation. Zero votes says so in words rather
+than showing an empty panel. The `reveal-waiting` push now routes to this screen rather than to the
+group, which is what makes the mid-week pushes true.
+
+
 ## Business Rules
 
+- **Blocks hide cards.** `GET /members-cards` omits members blocked in either direction; the viewer's
+  own card is never hidden. The detector's group-size floor is judged against **effective** size
+  (membership minus blocks involving the viewer), because a group of five with three blocks behaves like
+  a group of two. See `docs/features/groups.md` → Member safety.
+- **Participation floors (absolute):** a season never reveals with fewer than
+  `MinRevealMembers` (3) members or fewer than `MinRevealVoters` (3) members who completed
+  voting. These floors sit *above* the quorum percentage — the forced-reveal path bypasses
+  the percentage, never the floors. Below them a card would be empty or trivially
+  deanonymising.
 - **Quorum:** >= 50% of group members must have completed voting for groups >= 8 members; >= 40% for smaller groups.
-- **Retry on quorum miss:** up to 3 attempts, 2 hours apart. After 3rd attempt, reveal proceeds regardless (forced).
+- **Retry on quorum miss:** up to 3 attempts, 2 hours apart. After the 3rd attempt the
+  reveal proceeds regardless of the percentage — but only if the participation floors are met.
+- **Postponement:** when the floors are unmet after the retries, the season is *postponed*
+  rather than revealed: `reveal_at` moves to the next Friday 20:00 MSK, `ends_at` to that
+  week's Sunday, `postpone_count` increments, and the status stays `VOTING`. Votes already
+  cast remain valid. No card images, achievements, or Telegram posts are produced. Members
+  get a `push:reveal-postponed` notification naming how many more people need to vote.
+- **Eligibility predicate:** `reveal.Eligibility(ctx, seasonID)` is the single source of
+  truth, consumed by the reveal worker (gate), the voting service (kickoff scheduling) and
+  the groups handler (`reveal_state` shown in the app). It reports member count, completed
+  voters, `members_needed`, `voters_needed`, quorum status, floor status, and eligibility.
+- **Kickoff seasons:** a `KICKOFF` season (a new group's first — see
+  `docs/features/groups.md`) is scheduled to reveal `KickoffRevealDelay` (1 hour) after the
+  group first becomes eligible, instead of waiting for a Friday. After a kickoff reveals,
+  the worker enqueues `season:create-for-group` so the group's weekly cycle starts
+  immediately rather than waiting until Sunday.
 - **Top attributes:** top 3 by percentage are always visible. Remaining are hidden (blurred in UI).
 - **Hidden unlock cost:** 5 crystals per season per user.
 - **Reputation title:** generated from the category of the top attribute:
@@ -204,3 +360,14 @@ mobile/lib/features/reveal/
 - OpenHidden -> crystal_logs table (transactional deduct + log)
 - Detector -> detectors table + crystal_logs (transactional deduct + create)
 - Downstream: achievements (T11, implemented), push notifications (T17), reactions (T18, see [reactions.md](reactions.md))
+
+### DetectorSheet (mobile)
+
+The sheet renders the ladder:
+
+- The free count is always on screen as an `AppStat`, before anything is bought.
+- Revealed hints appear as rows showing the avatar and `М•••` — one character, never a name.
+- The hint action disappears once `hint_available` is false (every voter revealed, or the list
+  owned).
+- An insufficient balance relabels a rung rather than hiding it, and routes to the shop.
+- A small group shows the count and a single disabled action explaining the 5-member floor.

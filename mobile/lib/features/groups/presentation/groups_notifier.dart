@@ -3,6 +3,7 @@ import '../../../core/api/api_client.dart';
 import '../../../core/providers/api_provider.dart';
 import '../data/groups_repository.dart';
 import '../domain/group.dart';
+import '../../reveal/domain/share_link.dart';
 
 final groupsRepositoryProvider = Provider<GroupsRepository>((ref) {
   final api = ref.watch(apiServiceProvider);
@@ -71,6 +72,7 @@ class CreateGroupNotifier extends StateNotifier<CreateGroupState> {
     required String name,
     required List<String> categories,
     String? telegramUsername,
+    bool? kindOnly,
   }) async {
     state = const CreateGroupState(loading: true);
     try {
@@ -78,6 +80,7 @@ class CreateGroupNotifier extends StateNotifier<CreateGroupState> {
         name: name,
         categories: categories,
         telegramUsername: telegramUsername,
+        kindOnly: kindOnly,
       );
       state = const CreateGroupState();
       return result;
@@ -144,11 +147,21 @@ class JoinGroupNotifier extends StateNotifier<JoinGroupState> {
     }
   }
 
-  Future<Group?> join(String input) async {
+  /// [source] attributes the join. Defaults to the typed-code path, which is what the join
+  /// screen is; a deep link passes the source its marker implies.
+  Future<Group?> join(
+    String input, {
+    JoinSource source = JoinSource.code,
+    String? referrerId,
+  }) async {
     final code = _extractCode(input);
     state = JoinGroupState(loading: true, preview: state.preview);
     try {
-      final group = await _repo.joinGroup(code);
+      final group = await _repo.joinGroup(
+        code,
+        source: source.wireValue,
+        referrerId: referrerId,
+      );
       state = const JoinGroupState();
       return group;
     } on AppException catch (e) {
@@ -190,9 +203,11 @@ class GroupDetailNotifier extends StateNotifier<GroupDetailState> {
     }
   }
 
-  Future<bool> leave() async {
+  /// [permanent] records that the departure is irreversible — an invite will not bring the member
+  /// back. Ordinary leaving stays reversible on purpose.
+  Future<bool> leave({bool permanent = false}) async {
     try {
-      await _repo.leaveGroup(groupId);
+      await _repo.leaveGroup(groupId, permanent: permanent);
       return true;
     } on AppException {
       return false;
@@ -204,6 +219,18 @@ class GroupDetailNotifier extends StateNotifier<GroupDetailState> {
       return await _repo.regenerateInviteLink(groupId);
     } on AppException {
       return null;
+    }
+  }
+
+  /// Flips the kind-only setting. Returns the server's message on refusal — the one case the member
+  /// can act on is a category set that leaves nothing kind to ask, and they can only fix it if told.
+  Future<String?> setKindOnly(bool kindOnly) async {
+    try {
+      await _repo.setKindOnly(groupId, kindOnly);
+      await load();
+      return null;
+    } on AppException catch (e) {
+      return e.message;
     }
   }
 }

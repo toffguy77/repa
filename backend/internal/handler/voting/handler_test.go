@@ -318,18 +318,18 @@ func TestMapServiceError_ResponseBody(t *testing.T) {
 // --- Mock Querier for voting service (implements db.Querier) ---
 
 type mockVotingQuerier struct {
-	db.Querier // embed to satisfy interface; unused methods will panic
-	getSeasonByIDFn           func(ctx context.Context, id string) (db.Season, error)
-	isGroupMemberFn           func(ctx context.Context, arg db.IsGroupMemberParams) (int64, error)
-	getSeasonQuestionsFn      func(ctx context.Context, seasonID string) ([]db.Question, error)
+	db.Querier                 // embed to satisfy interface; unused methods will panic
+	getSeasonByIDFn            func(ctx context.Context, id string) (db.Season, error)
+	isGroupMemberFn            func(ctx context.Context, arg db.IsGroupMemberParams) (int64, error)
+	getSeasonQuestionsFn       func(ctx context.Context, seasonID string) ([]db.Question, error)
 	getVotesBySeasonAndVoterFn func(ctx context.Context, arg db.GetVotesBySeasonAndVoterParams) ([]db.Vote, error)
-	getGroupMembersFn         func(ctx context.Context, groupID string) ([]db.GetGroupMembersRow, error)
-	hasVoteForQuestionFn      func(ctx context.Context, arg db.HasVoteForQuestionParams) (int64, error)
-	createVoteFn              func(ctx context.Context, arg db.CreateVoteParams) (db.Vote, error)
-	countGroupMembersFn       func(ctx context.Context, groupID string) (int64, error)
-	countSeasonQuestionsFn    func(ctx context.Context, seasonID string) (int64, error)
-	countCompletedVotersFn    func(ctx context.Context, arg db.CountCompletedVotersParams) (int64, error)
-	hasUserVotedInSeasonFn    func(ctx context.Context, arg db.HasUserVotedInSeasonParams) (int64, error)
+	getGroupMembersFn          func(ctx context.Context, groupID string) ([]db.GetGroupMembersRow, error)
+	hasVoteForQuestionFn       func(ctx context.Context, arg db.HasVoteForQuestionParams) (int64, error)
+	createVoteFn               func(ctx context.Context, arg db.CreateVoteParams) (db.Vote, error)
+	countGroupMembersFn        func(ctx context.Context, groupID string) (int64, error)
+	countSeasonQuestionsFn     func(ctx context.Context, seasonID string) (int64, error)
+	countCompletedVotersFn     func(ctx context.Context, arg db.CountCompletedVotersParams) (int64, error)
+	hasUserVotedInSeasonFn     func(ctx context.Context, arg db.HasUserVotedInSeasonParams) (int64, error)
 }
 
 func (m *mockVotingQuerier) GetSeasonByID(ctx context.Context, id string) (db.Season, error) {
@@ -356,6 +356,33 @@ func (m *mockVotingQuerier) GetVotesBySeasonAndVoter(ctx context.Context, arg db
 	}
 	return []db.Vote{}, nil
 }
+
+// GetVotingTargets derives from the same fixture as GetGroupMembers, minus the voter — the real query
+// also excludes blocked members, which the service-level tests cover.
+func (m *mockVotingQuerier) GetVotingTargets(ctx context.Context, arg db.GetVotingTargetsParams) ([]db.GetVotingTargetsRow, error) {
+	members, err := m.GetGroupMembers(ctx, arg.GroupID)
+	if err != nil {
+		return nil, err
+	}
+	var out []db.GetVotingTargetsRow
+	for _, r := range members {
+		if r.ID == arg.ID {
+			continue
+		}
+		out = append(out, db.GetVotingTargetsRow{
+			ID:          r.ID,
+			Username:    r.Username,
+			AvatarEmoji: r.AvatarEmoji,
+			AvatarUrl:   r.AvatarUrl,
+		})
+	}
+	return out, nil
+}
+
+func (m *mockVotingQuerier) IsBlockedEitherWay(_ context.Context, _ db.IsBlockedEitherWayParams) (bool, error) {
+	return false, nil
+}
+
 func (m *mockVotingQuerier) GetGroupMembers(ctx context.Context, groupID string) ([]db.GetGroupMembersRow, error) {
 	if m.getGroupMembersFn != nil {
 		return m.getGroupMembersFn(ctx, groupID)

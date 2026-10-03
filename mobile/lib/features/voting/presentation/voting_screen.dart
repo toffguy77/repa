@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/error_state_widget.dart';
 import '../../../core/widgets/skeleton_loader.dart';
 import '../../voting/domain/voting.dart';
 import '../../../core/analytics/analytics_service.dart';
 import 'voting_notifier.dart';
+import '../../groups/presentation/widgets/small_group_notice.dart';
 import 'widgets/question_card.dart';
 import 'widgets/participant_card.dart';
+import '../../../core/theme/app_tokens.dart';
 
 class VotingScreen extends ConsumerStatefulWidget {
   final String groupId;
@@ -46,7 +46,7 @@ class _VotingScreenState extends ConsumerState<VotingScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(ErrorStateWidget.friendlyMessage(next.error)),
-            backgroundColor: AppColors.error,
+            backgroundColor: context.t.color.danger,
           ),
         );
         notifier.clearError();
@@ -97,7 +97,7 @@ class _VotingScreenState extends ConsumerState<VotingScreen> {
           ),
           title: Text(
             '${answeredQuestions + 1} из $totalQuestions',
-            style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
+            style: context.ts.body.copyWith(fontWeight: FontWeight.w600),
           ),
           centerTitle: true,
         ),
@@ -108,17 +108,22 @@ class _VotingScreenState extends ConsumerState<VotingScreen> {
               children: [
                 // Progress bar
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.circular(AppTokens.radius.xs),
                   child: LinearProgressIndicator(
                     value: totalQuestions > 0
                         ? (answeredQuestions) / totalQuestions
                         : 0,
-                    backgroundColor: AppColors.surface,
-                    color: AppColors.primary,
+                    backgroundColor: context.t.color.surface,
+                    color: context.t.color.accent,
                     minHeight: 6,
                   ),
                 ),
                 const SizedBox(height: 24),
+
+                // Anonymity caution before the first vote: in a tiny group the
+                // percentages give away who answered what. targets excludes the voter,
+                // so the group is one larger.
+                SmallGroupNotice(memberCount: targets.length + 1),
 
                 // Question card
                 QuestionCard(
@@ -208,7 +213,7 @@ class _VotingScreenState extends ConsumerState<VotingScreen> {
             },
             child: Text(
               'Выйти',
-              style: TextStyle(color: AppColors.error),
+              style: TextStyle(color: context.t.color.danger),
             ),
           ),
         ],

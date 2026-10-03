@@ -60,6 +60,72 @@ Returns the full profile of a group member.
 
 `GetTopAttributeAllTime` query may return `sql.ErrNoRows` if the user has no votes — this is treated as empty data (nil). Other DB errors propagate normally. Fixed in commit `a3e8377`.
 
+### "All time" and season history include CLOSED seasons
+
+`seasons.status` goes VOTING → REVEALED → CLOSED, and the last step happens when the *next* season opens
+(`groups.createSeasonForGroup`). A group therefore has at most one REVEALED season at any moment, and
+every older season that legitimately revealed is CLOSED.
+
+`GetUserSeasonHistory` and `GetTopAttributeAllTime` filtered on `status = 'REVEALED'`, so the "season
+history" and the "all-time top attribute" covered a single season — the current week — while appearing
+to work, because they returned rows. Both now match `status IN ('REVEALED', 'CLOSED')`. Any new query
+over a group's past must do the same; see `docs/features/groups.md` → **Chronicle**.
+
+### Who may read `guess_accuracy`
+
+**Only its owner.** The field is present on one's own profile and **absent** (not zero) on anyone
+else's. Two routes make another member's figure a way to work out how they voted:
+
+1. **Winners are published.** The reveal summary (`group_summary.top_per_question`) and the group
+   chronicle both name which member led each question. A member at or near 100% voted for those
+   winners; at or near 0% they voted for someone else every time. Over 3–10 questions that pins or
+   badly narrows each individual vote.
+2. **The figure is a rolling average, so it can be differenced.** It is recomputed at every reveal as
+   `new = (old*w + seasonAccuracy) / (w + 1)` with `w = min(seasons_played, 4)`, and `seasons_played`
+   is returned next to it. Reading the same profile on two consecutive weeks solves for that week's
+   accuracy, and therefore for how many of that week's questions the member matched.
+
+Absent rather than zeroed, because `0` is indistinguishable from a member who genuinely matched
+nothing — a client would render a false claim instead of nothing. The decision is made in
+`profile.GetProfile`, where the viewer and the viewed member are already both parameters, rather than
+in the handler: a privacy decision should not be something the next caller of the service opts into.
+
+`seasons_played`, `voting_streak`, `max_voting_streak`, `total_votes_cast` and `total_votes_received`
+stay visible to every member. None of them counts *matches*, so none can be combined with the published
+winners to recover a vote. Note that `seasons_played` is the weight `w` above: harmless on its own, and
+only harmless because the figure it weighted is no longer published. If the figure is ever reintroduced
+in any form, that pairing is the first thing to re-examine.
+
+The general rule, in `CLAUDE.md`: **prefer publishing an order over a measurement.** The chronicle's
+знатоки standing is the same comparison done safely — it gives a rank, which cannot be arithmetically
+reduced to a vote.
+
+### guess_accuracy and the знатоки standing
+
+`stats.guess_accuracy` is the share of this member's votes that matched the result the group arrived at,
+kept in `user_group_stats` and recomputed for every member at every reveal
+(`internal/service/achievements`). It is a **rolling average over a 5-season window**: the previous value
+is weighted by `min(seasons_played, 4)` against the new season's accuracy, so a single week moves it
+without erasing the history.
+
+The group chronicle ranks members by this same stored value rather than recomputing it — recomputing
+would produce a number that disagrees with the one shown here. Two consequences follow from the rolling
+window:
+
+- The standing is **withheld below two revealed seasons** (`chronicle.MinSeasonsForStanding`): after one
+  season the average has averaged nothing, and a ranking built on it reports luck as knowledge.
+- Every standing entry carries `seasons_played`, because an accuracy over two seasons and one over ten
+  are not comparable figures.
+
+A member with no `user_group_stats` row has not been through a reveal in that group and is **unranked**,
+not ranked at zero. See `docs/features/groups.md` → **Знатоки standing**.
+
+### Mobile
+
+`UserStats.guessAccuracy` is **nullable**, and the "Точность угадывания" tile is omitted when it is
+absent. The client renders no fallback: a "0%" would read as "never guessed right", which is a
+different and false claim about another member.
+
 ## Legend Generation
 
 Backend generates a short (max 150 chars) text description based on the user's achievements and stats. Priority order:

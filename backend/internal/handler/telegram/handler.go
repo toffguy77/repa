@@ -62,7 +62,11 @@ func (h *Handler) Webhook(c echo.Context) error {
 				h.sendError(chatID, err)
 				return c.NoContent(http.StatusOK)
 			}
-			h.sendOK(chatID, "Группа «"+groupName+"» подключена к Репе!")
+			// The connect moment is the one time the whole chat is reliably looking at the bot,
+			// so the join command is announced here rather than in a second message that would
+			// earn a mute.
+			h.sendOK(chatID, "Группа «"+groupName+"» подключена к Репе!\n\n"+
+				"Теперь любой в этом чате может написать /join и вступить.")
 			return c.NoContent(http.StatusOK)
 
 		case text == "/repa" || hasPrefix(text, "/repa@"):
@@ -74,6 +78,26 @@ func (h *Handler) Webhook(c echo.Context) error {
 			h.sendOK(chatID, msg)
 			return c.NoContent(http.StatusOK)
 
+		case text == "/join" || hasPrefix(text, "/join@"):
+			msg, err := h.svc.HandleJoinCommand(ctx, chatID)
+			if err != nil {
+				h.sendError(chatID, err)
+				return c.NoContent(http.StatusOK)
+			}
+			h.sendOK(chatID, msg)
+			return c.NoContent(http.StatusOK)
+
+		case text == "/help" || hasPrefix(text, "/help@") ||
+			text == "/start" || hasPrefix(text, "/start@"):
+			h.sendOK(chatID, h.svc.HelpText())
+			return c.NoContent(http.StatusOK)
+
+		case hasPrefix(text, "/"):
+			// An unrecognised command is answered rather than ignored: a command nobody knows
+			// exists is not a channel. Plain chat messages fall through to silence below — a bot
+			// that answers everything in a class chat gets removed from it.
+			h.sendOK(chatID, h.svc.HelpText())
+			return c.NoContent(http.StatusOK)
 		}
 	}
 
@@ -129,7 +153,12 @@ func (h *Handler) ShareToTelegram(c echo.Context) error {
 // --- Helpers ---
 
 func (h *Handler) sendOK(chatID int64, text string) {
-	// Fire and forget — webhook must return quickly
+	// Fire and forget — the webhook must return quickly. The nil check matters because this runs
+	// in a detached goroutine: a panic there takes the process down rather than failing one
+	// webhook delivery, and Telegram will simply retry a delivery.
+	if h.svc == nil {
+		return
+	}
 	go func() {
 		_ = h.svc.SendMessage(chatID, text)
 	}()
@@ -142,6 +171,11 @@ func (h *Handler) sendError(chatID int64, err error) {
 		msg = "Код не найден или истёк"
 	case errors.Is(err, telegramsvc.ErrBotNotAdmin):
 		msg = "Сделайте бота администратором чата"
+	case errors.Is(err, telegramsvc.ErrChatAlreadyConnected):
+		msg = "Этот чат уже привязан к другой группе. Сначала напишите /disconnect."
+	}
+	if h.svc == nil {
+		return
 	}
 	go func() {
 		_ = h.svc.SendMessage(chatID, msg)

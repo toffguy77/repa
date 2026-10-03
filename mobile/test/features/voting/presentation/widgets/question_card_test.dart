@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:repa/features/voting/presentation/widgets/question_card.dart';
+import 'package:repa/core/theme/app_theme.dart';
 
 void main() {
   Widget buildWidget({
@@ -8,6 +9,7 @@ void main() {
     String category = 'FUNNY',
   }) {
     return MaterialApp(
+      theme: AppTheme.dark,
       home: Scaffold(
         body: QuestionCard(text: text, category: category),
       ),

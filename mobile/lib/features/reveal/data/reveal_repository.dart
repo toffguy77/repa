@@ -41,6 +41,16 @@ class RevealRepository {
     return DetectorResult.fromJson(data);
   }
 
+  Future<AnticipationState> getAnticipation(String seasonId) async {
+    final response = await _api.getAnticipation(seasonId);
+    return AnticipationState.fromJson(response['data'] as Map<String, dynamic>);
+  }
+
+  Future<DetectorResult> buyDetectorHint(String seasonId) async {
+    final response = await _api.buyDetectorHint(seasonId);
+    return DetectorResult.fromJson(response['data'] as Map<String, dynamic>);
+  }
+
   Future<DetectorResult> buyDetector(String seasonId) async {
     final response = await _api.buyDetector(seasonId);
     final data = response['data'] as Map<String, dynamic>;
@@ -59,5 +69,11 @@ class RevealRepository {
     final response = await _api.createReaction(seasonId, targetId, emoji);
     final data = response['data'] as Map<String, dynamic>;
     return ReactionCounts.fromJson(data);
+  }
+
+  /// Reports a share. Failures are swallowed by the caller: the share has already happened in
+  /// the OS share sheet, so surfacing an error would describe a failure the user did not have.
+  Future<void> recordShare(String seasonId, String channel) async {
+    await _api.recordShare(seasonId, channel);
   }
 }

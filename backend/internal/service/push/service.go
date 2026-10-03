@@ -22,12 +22,14 @@ func init() {
 }
 
 type Service struct {
-	queries *db.Queries
+	// queries is the interface rather than *db.Queries, matching every other service here, so push
+	// behaviour can be unit tested without a database.
+	queries db.Querier
 	rdb     *redis.Client
 	fcm     *lib.FCMClient
 }
 
-func NewService(queries *db.Queries, rdb *redis.Client, fcm *lib.FCMClient) *Service {
+func NewService(queries db.Querier, rdb *redis.Client, fcm *lib.FCMClient) *Service {
 	return &Service{queries: queries, rdb: rdb, fcm: fcm}
 }
 
@@ -118,6 +120,38 @@ func (s *Service) SendToGroupMembers(ctx context.Context, groupID string, catego
 	return nil
 }
 
-func (s *Service) Queries() *db.Queries {
+func (s *Service) Queries() db.Querier {
 	return s.queries
+}
+
+// ClaimDailySignal reports whether today's "someone answered about you" signal is still unsent for
+// this user, claiming it if so.
+//
+// Without a bound, a 20-person group produces 19 notifications in an evening and the app gets muted.
+// Debounce rather than batch: a digest ("3 people answered") tells you how fast interest is arriving,
+// which is more than the product wants to give away before Friday.
+//
+// Uses the same Redis-key-expiring-at-midnight-MSK mechanism as the daily push cap, so there is one
+// idea in the codebase rather than two. Fails open: a Redis problem should cost a duplicate push, not
+// the feature.
+func (s *Service) ClaimDailySignal(ctx context.Context, userID string) bool {
+	if s.rdb == nil {
+		return true
+	}
+
+	now := time.Now().In(mskLocation)
+	key := fmt.Sprintf("signal-sent:%s:%s", userID, now.Format("2006-01-02"))
+
+	ok, err := s.rdb.SetNX(ctx, key, 1, untilMidnightMSK(now)).Result()
+	if err != nil {
+		log.Warn().Err(err).Str("user_id", userID).Msg("failed to claim daily signal; allowing")
+		return true
+	}
+	return ok
+}
+
+// untilMidnightMSK is how long a per-day key should live.
+func untilMidnightMSK(now time.Time) time.Duration {
+	midnight := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, mskLocation)
+	return midnight.Sub(now)
 }

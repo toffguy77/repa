@@ -157,6 +157,9 @@ func mapServiceError(c echo.Context, err error) error {
 		return handler.ErrorResponse(c, http.StatusForbidden, "NOT_MEMBER", "You are not a member of this group")
 	case errors.Is(err, votingsvc.ErrAlreadyVoted):
 		return handler.ErrorResponse(c, http.StatusConflict, "ALREADY_VOTED", "You already voted for this question")
+	case errors.Is(err, votingsvc.ErrTargetBlocked):
+		return handler.ErrorResponse(c, http.StatusBadRequest, "TARGET_BLOCKED",
+			"Вы заблокировали друг друга")
 	case errors.Is(err, votingsvc.ErrSelfVote):
 		return handler.ErrorResponse(c, http.StatusBadRequest, "SELF_VOTE", "You cannot vote for yourself")
 	case errors.Is(err, votingsvc.ErrTargetNotMember):

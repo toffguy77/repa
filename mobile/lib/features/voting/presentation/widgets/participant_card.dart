@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_text_styles.dart';
 import '../../../groups/presentation/widgets/member_avatar.dart';
+import '../../../../core/theme/app_tokens.dart';
 
 class ParticipantCard extends StatelessWidget {
   final String username;
@@ -35,19 +34,19 @@ class ParticipantCard extends StatelessWidget {
               onTap();
             },
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
+        duration: context.motion(MotionClass.surface),
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
         decoration: BoxDecoration(
-          color: selected ? AppColors.primaryLight : Colors.white,
-          borderRadius: BorderRadius.circular(16),
+          color: selected ? context.t.color.accentFill.withValues(alpha: 0.18) : context.t.elevation.level1.surface,
+          borderRadius: BorderRadius.circular(AppTokens.radius.lg),
           border: Border.all(
-            color: selected ? AppColors.primary : Colors.grey.shade200,
+            color: selected ? context.t.color.accent : Colors.grey.shade200,
             width: selected ? 2.5 : 1,
           ),
           boxShadow: [
             if (!selected)
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
+                color: context.t.color.scrim.withValues(alpha: 0.04),
                 blurRadius: 8,
                 offset: const Offset(0, 2),
               ),
@@ -68,13 +67,13 @@ class ParticipantCard extends StatelessWidget {
                   Container(
                     width: 22,
                     height: 22,
-                    decoration: const BoxDecoration(
-                      color: AppColors.primary,
+                    decoration: BoxDecoration(
+                      color: context.t.color.accentFill,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.check,
-                      color: Colors.white,
+                      color: context.t.color.onAccentFill,
                       size: 14,
                     ),
                   ),
@@ -83,9 +82,9 @@ class ParticipantCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               username,
-              style: AppTextStyles.caption.copyWith(
+              style: context.ts.caption.copyWith(
                 fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-                color: selected ? AppColors.primary : AppColors.textPrimary,
+                color: selected ? context.t.color.accent : context.t.color.textPrimary,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,

@@ -149,6 +149,20 @@ Map<String, dynamic> _$$MemberCardImplToJson(_$MemberCardImpl instance) =>
       'reputation_title': instance.reputationTitle,
     };
 
+_$DetectorHintImpl _$$DetectorHintImplFromJson(Map<String, dynamic> json) =>
+    _$DetectorHintImpl(
+      firstLetter: json['first_letter'] as String,
+      avatarEmoji: json['avatar_emoji'] as String?,
+      avatarUrl: json['avatar_url'] as String?,
+    );
+
+Map<String, dynamic> _$$DetectorHintImplToJson(_$DetectorHintImpl instance) =>
+    <String, dynamic>{
+      'first_letter': instance.firstLetter,
+      'avatar_emoji': instance.avatarEmoji,
+      'avatar_url': instance.avatarUrl,
+    };
+
 _$DetectorResultImpl _$$DetectorResultImplFromJson(Map<String, dynamic> json) =>
     _$DetectorResultImpl(
       purchased: json['purchased'] as bool,
@@ -156,6 +170,15 @@ _$DetectorResultImpl _$$DetectorResultImplFromJson(Map<String, dynamic> json) =>
           .map((e) => VoterProfile.fromJson(e as Map<String, dynamic>))
           .toList(),
       crystalBalance: (json['crystal_balance'] as num).toInt(),
+      available: json['available'] as bool? ?? true,
+      voterCount: (json['voter_count'] as num?)?.toInt() ?? 0,
+      hints: (json['hints'] as List<dynamic>?)
+              ?.map((e) => DetectorHint.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          const <DetectorHint>[],
+      hintCost: (json['hint_cost'] as num?)?.toInt() ?? 3,
+      fullCost: (json['full_cost'] as num?)?.toInt() ?? 10,
+      hintAvailable: json['hint_available'] as bool? ?? false,
     );
 
 Map<String, dynamic> _$$DetectorResultImplToJson(
@@ -164,6 +187,12 @@ Map<String, dynamic> _$$DetectorResultImplToJson(
       'purchased': instance.purchased,
       'voters': instance.voters,
       'crystal_balance': instance.crystalBalance,
+      'available': instance.available,
+      'voter_count': instance.voterCount,
+      'hints': instance.hints,
+      'hint_cost': instance.hintCost,
+      'full_cost': instance.fullCost,
+      'hint_available': instance.hintAvailable,
     };
 
 _$VoterProfileImpl _$$VoterProfileImplFromJson(Map<String, dynamic> json) =>
@@ -205,4 +234,20 @@ Map<String, dynamic> _$$ReactionCountsImplToJson(
     <String, dynamic>{
       'counts': instance.counts,
       'my_emoji': instance.myEmoji,
+    };
+
+_$AnticipationStateImpl _$$AnticipationStateImplFromJson(
+        Map<String, dynamic> json) =>
+    _$AnticipationStateImpl(
+      votersAboutMe: (json['voters_about_me'] as num?)?.toInt() ?? 0,
+      teaserEmoji: json['teaser_emoji'] as String? ?? '',
+      revealAt: json['reveal_at'] as String? ?? '',
+    );
+
+Map<String, dynamic> _$$AnticipationStateImplToJson(
+        _$AnticipationStateImpl instance) =>
+    <String, dynamic>{
+      'voters_about_me': instance.votersAboutMe,
+      'teaser_emoji': instance.teaserEmoji,
+      'reveal_at': instance.revealAt,
     };

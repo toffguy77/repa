@@ -37,3 +37,21 @@ class VerifyResult with _$VerifyResult {
   factory VerifyResult.fromJson(Map<String, dynamic> json) =>
       _$VerifyResultFromJson(json);
 }
+
+/// One movement in the user's crystal balance.
+///
+/// [isGrant] separates free crystals from purchases, so a balance that grew without a payment is
+/// not mysterious — see docs/features/crystals.md.
+@freezed
+class CrystalHistoryEntry with _$CrystalHistoryEntry {
+  const factory CrystalHistoryEntry({
+    required int delta,
+    required String type,
+    required String reason,
+    @JsonKey(name: 'created_at') required String createdAt,
+    @JsonKey(name: 'is_grant') @Default(false) bool isGrant,
+  }) = _CrystalHistoryEntry;
+
+  factory CrystalHistoryEntry.fromJson(Map<String, dynamic> json) =>
+      _$CrystalHistoryEntryFromJson(json);
+}

@@ -5,32 +5,81 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	db "github.com/repa-app/repa/internal/db/sqlc"
+	"github.com/repa-app/repa/internal/schedule"
 	"github.com/sqlc-dev/pqtype"
 )
 
 // mockQuerier implements only the methods used by the reveal service.
 type mockQuerier struct {
 	db.Querier
-	seasons          map[string]db.Season
-	members          map[string]map[string]bool
-	memberRows       map[string][]db.GetGroupMembersRow
-	memberCounts     map[string]int64
-	uniqueVoters     map[string]int64
-	aggregated       map[string][]db.AggregateVotesByTargetRow
-	resultsByUser    map[string][]db.GetSeasonResultsByUserRow
-	topPerQuestion   map[string][]db.GetTopResultPerQuestionRow
-	prevSeason       map[string]db.Season // groupID -> prev season
+	seasons             map[string]db.Season
+	members             map[string]map[string]bool
+	memberRows          map[string][]db.GetGroupMembersRow
+	memberCounts        map[string]int64
+	uniqueVoters        map[string]int64
+	aggregated          map[string][]db.AggregateVotesByTargetRow
+	resultsByUser       map[string][]db.GetSeasonResultsByUserRow
+	topPerQuestion      map[string][]db.GetTopResultPerQuestionRow
+	prevSeason          map[string]db.Season // groupID -> prev season
 	allResultsWithUsers map[string][]db.GetAllSeasonResultsWithUsersRow
 	balance             map[string]int32 // userID -> balance
 	createdResults      []db.CreateSeasonResultParams
-	createdCrystals  []db.CreateCrystalLogParams
-	deletedSeasons   []string
-	updatedStatuses  []db.UpdateSeasonStatusParams
-	seasonsForReveal []db.Season
+	createdCrystals     []db.CreateCrystalLogParams
+	deletedSeasons      []string
+	updatedStatuses     []db.UpdateSeasonStatusParams
+	seasonsForReveal    []db.Season
+	seasonQuestions     map[string]int64 // seasonID -> question count (default defaultSeasonQuestions)
+	postponed           []db.PostponeSeasonParams
+	kickoffScheduled    []db.ScheduleKickoffRevealParams
+	blockedIDs          map[string][]string // userID -> people blocked in either direction
+	shareEvents         []db.CreateShareEventParams
+	shareEventErr       error
+}
+
+// defaultSeasonQuestions keeps fixtures terse: tests that care about completion counts
+// set uniqueVoters, which the mock reports as the number of *completed* voters.
+const defaultSeasonQuestions = 5
+
+func (m *mockQuerier) CountSeasonQuestions(_ context.Context, seasonID string) (int64, error) {
+	if n, ok := m.seasonQuestions[seasonID]; ok {
+		return n, nil
+	}
+	return defaultSeasonQuestions, nil
+}
+
+func (m *mockQuerier) CountCompletedVoters(_ context.Context, arg db.CountCompletedVotersParams) (int64, error) {
+	return m.uniqueVoters[arg.SeasonID], nil
+}
+
+func (m *mockQuerier) PostponeSeason(_ context.Context, arg db.PostponeSeasonParams) (db.Season, error) {
+	m.postponed = append(m.postponed, arg)
+	s, ok := m.seasons[arg.ID]
+	if !ok {
+		return db.Season{}, sql.ErrNoRows
+	}
+	s.RevealAt = arg.RevealAt
+	s.EndsAt = arg.EndsAt
+	s.PostponeCount++
+	m.seasons[arg.ID] = s
+	return s, nil
+}
+
+// blockedIDs lets a test say "this viewer has blocked these people".
+func (m *mockQuerier) ListBlockedUserIDs(_ context.Context, userID string) ([]string, error) {
+	return m.blockedIDs[userID], nil
+}
+
+// CountBlockedGroupMembers is the group-scoped form the detector and the anonymity count use. The
+// fixture's block list is keyed by user rather than by group, so this counts all of it — which is what
+// these tests already assumed when the production code used the global list.
+func (m *mockQuerier) CountBlockedGroupMembers(_ context.Context, arg db.CountBlockedGroupMembersParams) (int64, error) {
+	return int64(len(m.blockedIDs[arg.BlockerID])), nil
 }
 
 func (m *mockQuerier) GetSeasonByID(_ context.Context, id string) (db.Season, error) {
@@ -133,6 +182,7 @@ func (m *mockQuerier) GetCardCache(_ context.Context, arg db.GetCardCacheParams)
 
 func newMock() *mockQuerier {
 	return &mockQuerier{
+		blockedIDs: map[string][]string{},
 		seasons: map[string]db.Season{
 			"s1": {ID: "s1", GroupID: "g1", Number: 1, Status: db.SeasonStatusVOTING},
 			"s2": {ID: "s2", GroupID: "g1", Number: 2, Status: db.SeasonStatusREVEALED},
@@ -237,7 +287,10 @@ func TestProcessReveal_QuorumNotMet_Retry(t *testing.T) {
 
 func TestProcessReveal_QuorumNotMet_ForcedAfterMaxAttempts(t *testing.T) {
 	m := newMock()
-	m.uniqueVoters["s1"] = 1
+	// Floor met (>=3 members, >=3 completed voters) but 3/10 is under the 50% quorum:
+	// the forced path bypasses the percentage, so this still reveals.
+	m.memberCounts["g1"] = 10
+	m.uniqueVoters["s1"] = 3
 	svc := NewService(m, nil)
 
 	result, err := svc.ProcessReveal(context.Background(), "s1", 3)
@@ -250,6 +303,9 @@ func TestProcessReveal_QuorumNotMet_ForcedAfterMaxAttempts(t *testing.T) {
 	}
 	if result.Retry {
 		t.Error("expected no retry")
+	}
+	if result.Postponed {
+		t.Error("expected no postponement when the participation floor is met")
 	}
 }
 
@@ -601,6 +657,56 @@ type detectorMock struct {
 	hasDetector   map[string]bool // key = userID:seasonID
 	voterProfiles map[string][]db.GetVoterProfilesBySeasonRow
 	detectors     []db.CreateDetectorParams
+
+	// Ladder state.
+	seasonVoters map[string]int64                       // seasonID -> voter count
+	hints        map[string][]db.GetDetectorHintsRow    // "userID:seasonID" -> revealed
+	unrevealed   map[string][]db.PickUnrevealedVoterRow // "userID:seasonID" -> pickable
+	createdHints []db.CreateDetectorHintParams
+}
+
+func (m *detectorMock) CountSeasonVoters(_ context.Context, seasonID string) (int64, error) {
+	return m.seasonVoters[seasonID], nil
+}
+
+func (m *detectorMock) GetDetectorHints(_ context.Context, arg db.GetDetectorHintsParams) ([]db.GetDetectorHintsRow, error) {
+	return m.hints[arg.UserID+":"+arg.SeasonID], nil
+}
+
+func (m *detectorMock) PickUnrevealedVoter(_ context.Context, arg db.PickUnrevealedVoterParams) (db.PickUnrevealedVoterRow, error) {
+	key := arg.VoterID + ":" + arg.SeasonID
+	pool := m.unrevealed[key]
+	if len(pool) == 0 {
+		return db.PickUnrevealedVoterRow{}, sql.ErrNoRows
+	}
+	return pool[0], nil
+}
+
+func (m *detectorMock) CreateDetectorHint(_ context.Context, arg db.CreateDetectorHintParams) (db.DetectorHint, error) {
+	m.createdHints = append(m.createdHints, arg)
+
+	key := arg.UserID + ":" + arg.SeasonID
+	// Move the revealed voter out of the pool and into the revealed list, mirroring the
+	// without-replacement rule the SQL enforces.
+	var kept []db.PickUnrevealedVoterRow
+	for _, v := range m.unrevealed[key] {
+		if v.ID == arg.RevealedUserID {
+			if m.hints == nil {
+				m.hints = map[string][]db.GetDetectorHintsRow{}
+			}
+			m.hints[key] = append(m.hints[key], db.GetDetectorHintsRow{
+				RevealedUserID: v.ID,
+				Username:       v.Username,
+				AvatarEmoji:    v.AvatarEmoji,
+				AvatarUrl:      v.AvatarUrl,
+			})
+			continue
+		}
+		kept = append(kept, v)
+	}
+	m.unrevealed[key] = kept
+
+	return db.DetectorHint{ID: arg.ID}, nil
 }
 
 func (m *detectorMock) HasDetector(_ context.Context, arg db.HasDetectorParams) (bool, error) {
@@ -626,6 +732,9 @@ func newDetectorMock() *detectorMock {
 		mockQuerier:   *base,
 		hasDetector:   map[string]bool{},
 		voterProfiles: map[string][]db.GetVoterProfilesBySeasonRow{},
+		seasonVoters:  map[string]int64{},
+		hints:         map[string][]db.GetDetectorHintsRow{},
+		unrevealed:    map[string][]db.PickUnrevealedVoterRow{},
 	}
 }
 
@@ -1043,7 +1152,7 @@ func TestProcessReveal_QuorumNotMet_Attempt2_StillRetries(t *testing.T) {
 
 // --- ProcessReveal: zero voters, forced after max attempts ---
 
-func TestProcessReveal_ZeroVoters_ForcedAtMaxAttempts(t *testing.T) {
+func TestProcessReveal_ZeroVoters_PostponedNotForced(t *testing.T) {
 	m := newMock()
 	m.uniqueVoters["s1"] = 0
 	svc := NewService(m, nil)
@@ -1052,8 +1161,17 @@ func TestProcessReveal_ZeroVoters_ForcedAtMaxAttempts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !result.Revealed {
-		t.Error("expected forced reveal after max attempts even with 0 voters")
+	if result.Revealed {
+		t.Error("a season with 0 completed voters must never reveal, not even on the forced path")
+	}
+	if !result.Postponed {
+		t.Error("expected the season to be postponed")
+	}
+	if len(m.updatedStatuses) != 0 {
+		t.Errorf("expected no status change, got %v", m.updatedStatuses)
+	}
+	if len(m.createdResults) != 0 {
+		t.Errorf("expected no aggregated results, got %d", len(m.createdResults))
 	}
 }
 
@@ -1067,8 +1185,9 @@ func TestProcessReveal_ZeroVoters_ZeroPercentage(t *testing.T) {
 	}
 	svc := NewService(m, nil)
 
-	_, err := svc.ProcessReveal(context.Background(), "s1", 3)
-	if err != nil {
+	// ProcessReveal would postpone here (floor unmet), so exercise aggregation directly
+	// to keep the divide-by-zero guard covered.
+	if err := svc.aggregateAndReveal(context.Background(), "s1"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1683,6 +1802,13 @@ func (m *errorQuerier) GetSeasonByID(_ context.Context, id string) (db.Season, e
 	return m.mockQuerier.GetSeasonByID(nil, id)
 }
 
+func (m *errorQuerier) CountCompletedVoters(_ context.Context, arg db.CountCompletedVotersParams) (int64, error) {
+	if m.countVotersErr != nil {
+		return 0, m.countVotersErr
+	}
+	return m.mockQuerier.CountCompletedVoters(nil, arg)
+}
+
 func (m *errorQuerier) IsGroupMember(_ context.Context, arg db.IsGroupMemberParams) (int64, error) {
 	if m.isMemberErr != nil {
 		return 0, m.isMemberErr
@@ -1753,7 +1879,7 @@ func TestProcessReveal_CountMembersError(t *testing.T) {
 func TestProcessReveal_CountVotersError(t *testing.T) {
 	base := newMock()
 	m := &errorQuerier{
-		mockQuerier:     *base,
+		mockQuerier:    *base,
 		countVotersErr: errors.New("voters error"),
 	}
 	svc := NewService(m, nil)
@@ -2144,5 +2270,724 @@ func TestComputeTrend_PrevSeasonEmptyResults(t *testing.T) {
 	trend := svc.computeTrend(context.Background(), season, "u1", results)
 	if trend != nil {
 		t.Error("expected nil trend when previous results are empty")
+	}
+}
+
+// --- Eligibility: participation floors ---
+
+func TestEligibility_Table(t *testing.T) {
+	tests := []struct {
+		name              string
+		members           int64
+		voters            int64
+		wantMembersNeeded int64
+		wantVotersNeeded  int64
+		wantFloorMet      bool
+		wantQuorumMet     bool
+		wantEligible      bool
+	}{
+		{"solo group", 1, 0, 2, 3, false, false, false},
+		{"two members both voted", 2, 2, 1, 1, false, true, false},
+		{"three members two voted", 3, 2, 0, 1, false, true, false},
+		{"three members all voted", 3, 3, 0, 0, true, true, true},
+		{"four members two voted meets 40pct but not floor", 4, 2, 0, 1, false, true, false},
+		{"six members four voted", 6, 4, 0, 0, true, true, true},
+		{"ten members three voted floor met quorum short", 10, 3, 0, 0, true, false, false},
+		{"eight members four voted 50pct boundary", 8, 4, 0, 0, true, true, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newMock()
+			m.memberCounts["g1"] = tt.members
+			m.uniqueVoters["s1"] = tt.voters
+			svc := NewService(m, nil)
+
+			e, err := svc.Eligibility(context.Background(), "s1")
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if e.MemberCount != tt.members {
+				t.Errorf("MemberCount = %d, want %d", e.MemberCount, tt.members)
+			}
+			if e.VotedCount != tt.voters {
+				t.Errorf("VotedCount = %d, want %d", e.VotedCount, tt.voters)
+			}
+			if e.MembersNeeded != tt.wantMembersNeeded {
+				t.Errorf("MembersNeeded = %d, want %d", e.MembersNeeded, tt.wantMembersNeeded)
+			}
+			if e.VotersNeeded != tt.wantVotersNeeded {
+				t.Errorf("VotersNeeded = %d, want %d", e.VotersNeeded, tt.wantVotersNeeded)
+			}
+			if e.FloorMet != tt.wantFloorMet {
+				t.Errorf("FloorMet = %v, want %v", e.FloorMet, tt.wantFloorMet)
+			}
+			if e.QuorumMet != tt.wantQuorumMet {
+				t.Errorf("QuorumMet = %v, want %v", e.QuorumMet, tt.wantQuorumMet)
+			}
+			if e.Eligible != tt.wantEligible {
+				t.Errorf("Eligible = %v, want %v", e.Eligible, tt.wantEligible)
+			}
+		})
+	}
+}
+
+// --- ProcessReveal: a solo group is never revealed, at any attempt ---
+
+func TestProcessReveal_SoloGroup_NeverRevealedAtAnyAttempt(t *testing.T) {
+	for attempt := 1; attempt <= 4; attempt++ {
+		m := newMock()
+		m.memberCounts["g1"] = 1
+		m.uniqueVoters["s1"] = 0
+		svc := NewService(m, nil)
+
+		result, err := svc.ProcessReveal(context.Background(), "s1", attempt)
+		if err != nil {
+			t.Fatalf("attempt %d: %v", attempt, err)
+		}
+		if result.Revealed {
+			t.Errorf("attempt %d: solo group must never reveal", attempt)
+		}
+		if len(m.createdResults) != 0 {
+			t.Errorf("attempt %d: no card data should be produced, got %d results", attempt, len(m.createdResults))
+		}
+	}
+}
+
+// --- ProcessReveal: 4 members / 2 voters satisfies 40% quorum but not the voter floor ---
+
+func TestProcessReveal_QuorumMetButFloorUnmet_Postponed(t *testing.T) {
+	m := newMock()
+	m.memberCounts["g1"] = 4
+	m.uniqueVoters["s1"] = 2
+	svc := NewService(m, nil)
+
+	result, err := svc.ProcessReveal(context.Background(), "s1", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if result.Revealed {
+		t.Error("expected no reveal: only 2 members completed voting")
+	}
+	if !result.Postponed {
+		t.Error("expected the season to be postponed")
+	}
+	if result.VotersNeeded != 1 {
+		t.Errorf("VotersNeeded = %d, want 1", result.VotersNeeded)
+	}
+	if len(m.postponed) != 1 {
+		t.Fatalf("expected 1 postponement, got %d", len(m.postponed))
+	}
+	if !m.postponed[0].RevealAt.After(time.Now()) {
+		t.Errorf("postponed reveal time %s should be in the future", m.postponed[0].RevealAt)
+	}
+	if m.seasons["s1"].Status != db.SeasonStatusVOTING {
+		t.Errorf("status should stay VOTING, got %s", m.seasons["s1"].Status)
+	}
+	if m.seasons["s1"].PostponeCount != 1 {
+		t.Errorf("PostponeCount = %d, want 1", m.seasons["s1"].PostponeCount)
+	}
+}
+
+// --- ProcessReveal: postponed season reveals once the floor is reached ---
+
+func TestProcessReveal_PostponedThenEligible_Reveals(t *testing.T) {
+	m := newMock()
+	m.memberCounts["g1"] = 2
+	m.uniqueVoters["s1"] = 2
+	svc := NewService(m, nil)
+
+	first, err := svc.ProcessReveal(context.Background(), "s1", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !first.Postponed {
+		t.Fatalf("expected first pass to postpone, got %+v", first)
+	}
+
+	// The group grew and a third member finished voting.
+	m.memberCounts["g1"] = 3
+	m.uniqueVoters["s1"] = 3
+
+	second, err := svc.ProcessReveal(context.Background(), "s1", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !second.Revealed {
+		t.Errorf("expected reveal once the floor was met, got %+v", second)
+	}
+}
+
+// --- ProcessReveal: result carries the group and kind the worker needs ---
+
+func TestProcessReveal_ResultCarriesGroupAndKind(t *testing.T) {
+	m := newMock()
+	s := m.seasons["s1"]
+	s.Kind = db.SeasonKindKICKOFF
+	m.seasons["s1"] = s
+	svc := NewService(m, nil)
+
+	result, err := svc.ProcessReveal(context.Background(), "s1", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.Revealed {
+		t.Fatalf("expected reveal, got %+v", result)
+	}
+	if result.GroupID != "g1" {
+		t.Errorf("GroupID = %q, want g1", result.GroupID)
+	}
+	if result.Kind != db.SeasonKindKICKOFF {
+		t.Errorf("Kind = %q, want KICKOFF", result.Kind)
+	}
+}
+
+// --- ScheduleKickoffIfEligible ---
+
+func (m *mockQuerier) ScheduleKickoffReveal(_ context.Context, arg db.ScheduleKickoffRevealParams) (db.Season, error) {
+	s, ok := m.seasons[arg.ID]
+	if !ok {
+		return db.Season{}, sql.ErrNoRows
+	}
+	// Mirror the SQL guards: kickoff, still voting, and only ever moves earlier.
+	if s.Kind != db.SeasonKindKICKOFF || s.Status != db.SeasonStatusVOTING || !s.RevealAt.After(arg.RevealAt) {
+		return db.Season{}, sql.ErrNoRows
+	}
+	s.RevealAt = arg.RevealAt
+	s.EndsAt = arg.EndsAt
+	m.seasons[arg.ID] = s
+	m.kickoffScheduled = append(m.kickoffScheduled, arg)
+	return s, nil
+}
+
+func newKickoffMock(members, voters int64) *mockQuerier {
+	m := newMock()
+	s := m.seasons["s1"]
+	s.Kind = db.SeasonKindKICKOFF
+	s.RevealAt = time.Now().Add(5 * 24 * time.Hour) // weekly fallback Friday
+	m.seasons["s1"] = s
+	m.memberCounts["g1"] = members
+	m.uniqueVoters["s1"] = voters
+	return m
+}
+
+func TestScheduleKickoffIfEligible_SchedulesOnThirdVoter(t *testing.T) {
+	m := newKickoffMock(3, 2)
+	svc := NewService(m, nil)
+
+	// Two voters: not eligible yet.
+	scheduled, err := svc.ScheduleKickoffIfEligible(context.Background(), "s1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scheduled {
+		t.Error("must not schedule with only 2 completed voters")
+	}
+
+	// Third voter finishes.
+	m.uniqueVoters["s1"] = 3
+	before := time.Now()
+	scheduled, err = svc.ScheduleKickoffIfEligible(context.Background(), "s1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !scheduled {
+		t.Fatal("expected the third completing voter to schedule the reveal")
+	}
+	if len(m.kickoffScheduled) != 1 {
+		t.Fatalf("expected 1 scheduling update, got %d", len(m.kickoffScheduled))
+	}
+
+	got := m.kickoffScheduled[0].RevealAt
+	wantMin := before.Add(schedule.KickoffRevealDelay)
+	if got.Before(wantMin) || got.After(wantMin.Add(time.Minute)) {
+		t.Errorf("reveal scheduled at %s, want ~%s (KickoffRevealDelay from now)", got, wantMin)
+	}
+}
+
+func TestScheduleKickoffIfEligible_LaterVoterDoesNotPushItBack(t *testing.T) {
+	m := newKickoffMock(5, 3)
+	svc := NewService(m, nil)
+
+	if _, err := svc.ScheduleKickoffIfEligible(context.Background(), "s1"); err != nil {
+		t.Fatal(err)
+	}
+	firstRevealAt := m.seasons["s1"].RevealAt
+
+	// A fourth member finishes later; the reveal time must not move.
+	m.uniqueVoters["s1"] = 4
+	scheduled, err := svc.ScheduleKickoffIfEligible(context.Background(), "s1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scheduled {
+		t.Error("a later voter must not reschedule the reveal")
+	}
+	if !m.seasons["s1"].RevealAt.Equal(firstRevealAt) {
+		t.Errorf("reveal time moved from %s to %s", firstRevealAt, m.seasons["s1"].RevealAt)
+	}
+	if len(m.kickoffScheduled) != 1 {
+		t.Errorf("expected exactly 1 scheduling update, got %d", len(m.kickoffScheduled))
+	}
+}
+
+func TestScheduleKickoffIfEligible_IgnoresWeeklySeasons(t *testing.T) {
+	m := newKickoffMock(5, 5)
+	s := m.seasons["s1"]
+	s.Kind = db.SeasonKindWEEKLY
+	m.seasons["s1"] = s
+	svc := NewService(m, nil)
+
+	scheduled, err := svc.ScheduleKickoffIfEligible(context.Background(), "s1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scheduled {
+		t.Error("weekly seasons keep their Friday reveal")
+	}
+	if len(m.kickoffScheduled) != 0 {
+		t.Errorf("expected no scheduling update, got %d", len(m.kickoffScheduled))
+	}
+}
+
+func TestScheduleKickoffIfEligible_IgnoresRevealedSeasons(t *testing.T) {
+	m := newKickoffMock(5, 5)
+	s := m.seasons["s1"]
+	s.Status = db.SeasonStatusREVEALED
+	m.seasons["s1"] = s
+	svc := NewService(m, nil)
+
+	scheduled, err := svc.ScheduleKickoffIfEligible(context.Background(), "s1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scheduled {
+		t.Error("an already revealed season must not be rescheduled")
+	}
+}
+
+// --- Share recording ---
+
+func (m *mockQuerier) CreateShareEvent(_ context.Context, arg db.CreateShareEventParams) (db.ShareEvent, error) {
+	if m.shareEventErr != nil {
+		return db.ShareEvent{}, m.shareEventErr
+	}
+	m.shareEvents = append(m.shareEvents, arg)
+	return db.ShareEvent{
+		ID:       arg.ID,
+		UserID:   arg.UserID,
+		SeasonID: arg.SeasonID,
+		Channel:  arg.Channel,
+	}, nil
+}
+
+func TestNormalizeShareChannel(t *testing.T) {
+	tests := map[string]string{
+		"card":       "card",
+		"telegram":   "telegram",
+		"link":       "link",
+		"code":       "code",
+		"CARD":       "card",
+		" Telegram ": "telegram",
+		// An unknown channel is recorded, not refused: the share already happened.
+		"":          "other",
+		"instagram": "other",
+		"whatever":  "other",
+	}
+	for in, want := range tests {
+		if got := NormalizeShareChannel(in); got != want {
+			t.Errorf("NormalizeShareChannel(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestRecordShare_StoresTheEvent(t *testing.T) {
+	m := newMock()
+	svc := NewService(m, nil)
+
+	if err := svc.RecordShare(context.Background(), "s2", "u1", "card"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(m.shareEvents) != 1 {
+		t.Fatalf("expected 1 share event, got %d", len(m.shareEvents))
+	}
+	ev := m.shareEvents[0]
+	if ev.SeasonID != "s2" || ev.UserID != "u1" || ev.Channel != "card" {
+		t.Errorf("unexpected event %+v", ev)
+	}
+}
+
+func TestRecordShare_RecordsEveryAction(t *testing.T) {
+	m := newMock()
+	svc := NewService(m, nil)
+
+	for i := 0; i < 2; i++ {
+		if err := svc.RecordShare(context.Background(), "s2", "u1", "card"); err != nil {
+			t.Fatalf("share %d: %v", i, err)
+		}
+	}
+
+	if len(m.shareEvents) != 2 {
+		t.Errorf("sharing twice should record twice, got %d", len(m.shareEvents))
+	}
+}
+
+func TestRecordShare_SwallowsStorageFailure(t *testing.T) {
+	m := newMock()
+	m.shareEventErr = errors.New("db down")
+	svc := NewService(m, nil)
+
+	// The user's share already happened in the OS share sheet; reporting an error here would
+	// describe a failure that did not occur.
+	if err := svc.RecordShare(context.Background(), "s2", "u1", "card"); err != nil {
+		t.Errorf("expected the failure to be swallowed, got %v", err)
+	}
+}
+
+func TestRecordShare_StillValidatesAccess(t *testing.T) {
+	m := newMock()
+	svc := NewService(m, nil)
+
+	// s1 is VOTING, not revealed — there is no card to share yet.
+	if err := svc.RecordShare(context.Background(), "s1", "u1", "card"); !errors.Is(err, ErrSeasonNotRevealed) {
+		t.Errorf("expected ErrSeasonNotRevealed, got %v", err)
+	}
+
+	// A non-member must not be able to record against someone else's season.
+	if err := svc.RecordShare(context.Background(), "s2", "stranger", "card"); !errors.Is(err, ErrNotMember) {
+		t.Errorf("expected ErrNotMember, got %v", err)
+	}
+
+	if len(m.shareEvents) != 0 {
+		t.Errorf("no event should be recorded for a refused share, got %d", len(m.shareEvents))
+	}
+}
+
+// --- Detector ladder ---
+
+func TestDetectorPrices_HintIsTheCheapRung(t *testing.T) {
+	if DetectorHintCost >= DetectorFullCost {
+		t.Errorf("a hint (%d) must cost less than the full list (%d)", DetectorHintCost, DetectorFullCost)
+	}
+	// Below the referral grant on purpose: one invited friend should buy a rung.
+	const referralGrant = 5
+	if DetectorHintCost >= referralGrant {
+		t.Errorf("a hint (%d) should be affordable from one referral grant (%d)", DetectorHintCost, referralGrant)
+	}
+}
+
+func TestFirstRune(t *testing.T) {
+	tests := map[string]string{
+		"alice": "a",
+		"Маша":  "М", // a multi-byte name must not be cut in half
+		"7even": "7",
+		"":      "",
+		"🍆bob":  "🍆",
+	}
+	for in, want := range tests {
+		if got := firstRune(in); got != want {
+			t.Errorf("firstRune(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// ladderMock returns a detector mock where userID has `voters` people who voted about them.
+func ladderMock(userID, seasonID string, voters int) *detectorMock {
+	m := newDetectorMock()
+	m.seasonVoters[seasonID] = int64(voters)
+	key := userID + ":" + seasonID
+	for i := 0; i < voters; i++ {
+		m.unrevealed[key] = append(m.unrevealed[key], db.PickUnrevealedVoterRow{
+			ID:          fmt.Sprintf("voter-%d", i),
+			Username:    fmt.Sprintf("Маша%d", i),
+			AvatarEmoji: sql.NullString{String: "\U0001F346", Valid: true},
+		})
+	}
+	return m
+}
+
+func TestGetDetector_UntouchedLadderReportsItsPrices(t *testing.T) {
+	m := ladderMock("u1", "s2", 3)
+	svc := NewService(m, nil)
+
+	result, err := svc.GetDetector(context.Background(), "s2", "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if result.VoterCount != 3 {
+		t.Errorf("VoterCount = %d, want 3 — the free rung must be visible without a purchase", result.VoterCount)
+	}
+	if result.HintCost != DetectorHintCost || result.FullCost != DetectorFullCost {
+		t.Errorf("prices = %d/%d, want %d/%d", result.HintCost, result.FullCost, DetectorHintCost, DetectorFullCost)
+	}
+	if !result.HintAvailable {
+		t.Error("a hint should be available when voters remain unrevealed")
+	}
+	if len(result.Hints) != 0 {
+		t.Errorf("expected no revealed hints yet, got %d", len(result.Hints))
+	}
+	if result.Purchased {
+		t.Error("nothing has been bought")
+	}
+}
+
+func TestBuyDetectorHint_RevealsOneVoterPartially(t *testing.T) {
+	m := ladderMock("u1", "s2", 3)
+	m.balance["u1"] = 10
+	svc := NewService(m, nil)
+
+	result, err := svc.BuyDetectorHint(context.Background(), "s2", "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(result.Hints) != 1 {
+		t.Fatalf("expected 1 revealed hint, got %d", len(result.Hints))
+	}
+	hint := result.Hints[0]
+	if hint.FirstLetter != "М" {
+		t.Errorf("FirstLetter = %q, want М", hint.FirstLetter)
+	}
+	if hint.AvatarEmoji == nil {
+		t.Error("a hint should carry the avatar")
+	}
+	// The full voter list must not come with a hint.
+	if len(result.Voters) != 0 {
+		t.Errorf("a hint must not return the full list, got %d voters", len(result.Voters))
+	}
+	if result.Purchased {
+		t.Error("a hint is not the full purchase")
+	}
+}
+
+func TestBuyDetectorHint_DoesNotRepeat(t *testing.T) {
+	m := ladderMock("u1", "s2", 3)
+	m.balance["u1"] = 20
+	svc := NewService(m, nil)
+
+	if _, err := svc.BuyDetectorHint(context.Background(), "s2", "u1"); err != nil {
+		t.Fatal(err)
+	}
+	result, err := svc.BuyDetectorHint(context.Background(), "s2", "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if len(result.Hints) != 2 {
+		t.Fatalf("expected 2 revealed hints, got %d", len(result.Hints))
+	}
+	if m.createdHints[0].RevealedUserID == m.createdHints[1].RevealedUserID {
+		t.Error("two hints revealed the same voter; hints are drawn without replacement")
+	}
+}
+
+func TestBuyDetectorHint_ExhaustsAndThenRefuses(t *testing.T) {
+	m := ladderMock("u1", "s2", 2)
+	m.balance["u1"] = 50
+	svc := NewService(m, nil)
+
+	for i := 0; i < 2; i++ {
+		if _, err := svc.BuyDetectorHint(context.Background(), "s2", "u1"); err != nil {
+			t.Fatalf("hint %d: %v", i, err)
+		}
+	}
+
+	balanceBefore := m.balance["u1"]
+	_, err := svc.BuyDetectorHint(context.Background(), "s2", "u1")
+	if !errors.Is(err, ErrNothingToReveal) {
+		t.Fatalf("expected ErrNothingToReveal, got %v", err)
+	}
+	if m.balance["u1"] != balanceBefore {
+		t.Error("a refused hint must not spend crystals")
+	}
+	if len(m.createdHints) != 2 {
+		t.Errorf("expected exactly 2 hints recorded, got %d", len(m.createdHints))
+	}
+}
+
+func TestBuyDetectorHint_NoVotersIsRefusedWithoutSpending(t *testing.T) {
+	m := ladderMock("u1", "s2", 0)
+	m.balance["u1"] = 50
+	svc := NewService(m, nil)
+
+	_, err := svc.BuyDetectorHint(context.Background(), "s2", "u1")
+	if !errors.Is(err, ErrNothingToReveal) {
+		t.Fatalf("expected ErrNothingToReveal, got %v", err)
+	}
+	if m.balance["u1"] != 50 {
+		t.Error("nothing to reveal must cost nothing")
+	}
+}
+
+func TestBuyDetectorHint_InsufficientFundsSpendsNothing(t *testing.T) {
+	m := ladderMock("u1", "s2", 3)
+	m.balance["u1"] = DetectorHintCost - 1
+	svc := NewService(m, nil)
+
+	_, err := svc.BuyDetectorHint(context.Background(), "s2", "u1")
+	if !errors.Is(err, ErrInsufficientFunds) {
+		t.Fatalf("expected ErrInsufficientFunds, got %v", err)
+	}
+	if len(m.createdHints) != 0 {
+		t.Error("no voter should be revealed when the balance is short")
+	}
+}
+
+func TestBuyDetectorHint_RefusedInSmallGroup(t *testing.T) {
+	m := ladderMock("u1", "s2", 3)
+	m.balance["u1"] = 50
+	m.memberCounts["g1"] = MinDetectorMembers - 1
+	svc := NewService(m, nil)
+
+	_, err := svc.BuyDetectorHint(context.Background(), "s2", "u1")
+	if !errors.Is(err, ErrGroupTooSmall) {
+		t.Fatalf("expected ErrGroupTooSmall, got %v", err)
+	}
+	if len(m.createdHints) != 0 {
+		t.Error("a partial reveal in a tiny group identifies someone as surely as a list")
+	}
+}
+
+func TestGetDetector_SmallGroupStillShowsTheFreeCount(t *testing.T) {
+	m := ladderMock("u1", "s2", 3)
+	m.memberCounts["g1"] = MinDetectorMembers - 1
+	svc := NewService(m, nil)
+
+	result, err := svc.GetDetector(context.Background(), "s2", "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if result.VoterCount != 3 {
+		t.Error("a count names nobody, so it stays visible at any group size")
+	}
+	if result.Available {
+		t.Error("paid rungs must be unavailable in a small group")
+	}
+	if result.HintAvailable {
+		t.Error("the hint rung must be unavailable in a small group")
+	}
+}
+
+func TestBuyDetectorHint_RefusedOnceTheFullListIsOwned(t *testing.T) {
+	m := ladderMock("u1", "s2", 3)
+	m.balance["u1"] = 50
+	m.hasDetector["u1:s2"] = true
+	svc := NewService(m, nil)
+
+	_, err := svc.BuyDetectorHint(context.Background(), "s2", "u1")
+	if !errors.Is(err, ErrNothingToReveal) {
+		t.Fatalf("expected ErrNothingToReveal, got %v", err)
+	}
+}
+
+func TestGetDetector_CompletedLadderHasNothingLeft(t *testing.T) {
+	m := ladderMock("u1", "s2", 3)
+	m.hasDetector["u1:s2"] = true
+	svc := NewService(m, nil)
+
+	result, err := svc.GetDetector(context.Background(), "s2", "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !result.Purchased {
+		t.Error("the full list is owned")
+	}
+	if result.HintAvailable {
+		t.Error("nothing is left to hint at once the list is owned")
+	}
+}
+
+func TestDetectorHint_CarriesNoAnswerOrFullName(t *testing.T) {
+	m := ladderMock("u1", "s2", 1)
+	m.balance["u1"] = 10
+	svc := NewService(m, nil)
+
+	result, err := svc.BuyDetectorHint(context.Background(), "s2", "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	raw, err := json.Marshal(result.Hints[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(raw)
+
+	// The hint type has no username field at all, so a full name cannot leak through it.
+	if strings.Contains(body, "Маша0") {
+		t.Errorf("a hint must not carry the full name: %s", body)
+	}
+	for _, forbidden := range []string{"question", "answer", "percentage", "attribute"} {
+		if strings.Contains(body, forbidden) {
+			t.Errorf("a hint must never bind a voter to an answer, found %q in %s", forbidden, body)
+		}
+	}
+}
+
+// --- Blocks hide results and shrink effective size ---
+
+func TestGetMembersCards_HidesBlockedMembersButNotMyOwnCard(t *testing.T) {
+	m := newMock()
+	m.blockedIDs["u1"] = []string{"u2"}
+	m.allResultsWithUsers["s2"] = []db.GetAllSeasonResultsWithUsersRow{
+		{TargetID: "u1", Username: "alice", QuestionText: "q", Percentage: 50},
+		{TargetID: "u2", Username: "bob", QuestionText: "q", Percentage: 50},
+		{TargetID: "u3", Username: "carol", QuestionText: "q", Percentage: 50},
+	}
+	svc := NewService(m, nil)
+
+	cards, err := svc.GetMembersCards(context.Background(), "s2", "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	seen := map[string]bool{}
+	for _, c := range cards {
+		seen[c.UserID] = true
+	}
+	if seen["u2"] {
+		t.Error("a blocked member's card must not be shown")
+	}
+	if !seen["u1"] {
+		t.Error("my own card is never hidden")
+	}
+	if !seen["u3"] {
+		t.Error("an unblocked member's card should still appear")
+	}
+}
+
+func TestDetectorFloor_CountsEffectiveSizeNotRawMembership(t *testing.T) {
+	m := newMock()
+	// Five members, but this viewer has blocked three: effectively two people can rate them.
+	m.memberCounts["g1"] = 5
+	m.blockedIDs["u1"] = []string{"u2", "u3", "u4"}
+	m.balance["u1"] = 50
+	svc := NewService(m, nil)
+
+	_, err := svc.BuyDetector(context.Background(), "s2", "u1")
+	if !errors.Is(err, ErrGroupTooSmall) {
+		t.Errorf("a group of five with three blocks behaves like a group of two: got %v", err)
+	}
+}
+
+func TestDetectorFloor_UnblockedGroupIsStillBigEnough(t *testing.T) {
+	m := newMock()
+	m.memberCounts["g1"] = 5
+	m.balance["u1"] = 50
+	svc := NewService(m, nil)
+
+	// No blocks: the raw and effective sizes agree.
+	tooSmall, err := svc.detectorTooSmall(context.Background(), "g1", "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tooSmall {
+		t.Error("five members with no blocks clears the floor")
 	}
 }

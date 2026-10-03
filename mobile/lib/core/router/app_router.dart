@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/auth_provider.dart';
+import '../theme/app_tokens.dart';
 import '../providers/api_provider.dart';
 import '../../features/auth/presentation/phone_screen.dart';
 import '../../features/auth/presentation/otp_screen.dart';
@@ -10,6 +11,7 @@ import '../../features/auth/presentation/profile_setup_screen.dart';
 import '../../features/home/home_screen.dart';
 import '../../features/groups/presentation/create_group_screen.dart';
 import '../../features/groups/presentation/join_group_screen.dart';
+import '../../features/chronicle/presentation/chronicle_screen.dart';
 import '../../features/groups/presentation/group_screen.dart';
 import '../../features/voting/presentation/voting_screen.dart';
 import '../../features/voting/presentation/voting_complete_screen.dart';
@@ -21,40 +23,49 @@ import '../../features/telegram/presentation/telegram_setup_screen.dart';
 import '../../features/onboarding/presentation/onboarding_screen.dart';
 import '../../features/question_vote/presentation/question_vote_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
+import '../../features/reveal/domain/share_link.dart';
 
 const _pendingInviteCodeKey = 'pending_invite_code';
 
 // --- Page transitions ---
 
-CustomTransitionPage<void> _slideFromRight(GoRouterState state, Widget child) {
+/// A route change is a surface transition, so all three builders take their duration and
+/// curve from that motion class rather than from per-route numbers. Reduced motion collapses
+/// the duration to zero, which leaves the page swap instant but keeps the route stack intact.
+CustomTransitionPage<void> _slide(
+  GoRouterState state,
+  Widget child,
+  Offset from,
+) {
   return CustomTransitionPage(
     key: state.pageKey,
     child: child,
+    transitionDuration: AppTokens.motion.durationOf(MotionClass.surface),
+    reverseTransitionDuration: AppTokens.motion.durationOf(MotionClass.surface),
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
-      final tween = Tween(begin: const Offset(1, 0), end: Offset.zero)
-          .chain(CurveTween(curve: Curves.easeOutCubic));
+      if (MediaQuery.disableAnimationsOf(context)) return child;
+      final tween = Tween(begin: from, end: Offset.zero).chain(
+        CurveTween(curve: context.motionCurve(MotionClass.surface)),
+      );
       return SlideTransition(position: animation.drive(tween), child: child);
     },
   );
 }
 
-CustomTransitionPage<void> _slideFromBottom(GoRouterState state, Widget child) {
-  return CustomTransitionPage(
-    key: state.pageKey,
-    child: child,
-    transitionsBuilder: (context, animation, secondaryAnimation, child) {
-      final tween = Tween(begin: const Offset(0, 1), end: Offset.zero)
-          .chain(CurveTween(curve: Curves.easeOutCubic));
-      return SlideTransition(position: animation.drive(tween), child: child);
-    },
-  );
-}
+CustomTransitionPage<void> _slideFromRight(GoRouterState state, Widget child) =>
+    _slide(state, child, const Offset(1, 0));
+
+CustomTransitionPage<void> _slideFromBottom(GoRouterState state, Widget child) =>
+    _slide(state, child, const Offset(0, 1));
 
 CustomTransitionPage<void> _fadeTransition(GoRouterState state, Widget child) {
   return CustomTransitionPage(
     key: state.pageKey,
     child: child,
+    transitionDuration: AppTokens.motion.durationOf(MotionClass.surface),
+    reverseTransitionDuration: AppTokens.motion.durationOf(MotionClass.surface),
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      if (MediaQuery.disableAnimationsOf(context)) return child;
       return FadeTransition(opacity: animation, child: child);
     },
   );
@@ -183,7 +194,22 @@ final routerProvider = Provider<GoRouter>((ref) {
         pageBuilder: (context, state) {
           final code = state.uri.queryParameters['code'] ??
               state.extra as String?;
-          return _slideFromBottom(state, JoinGroupScreen(initialCode: code));
+          // A code the user typed has no marker, so it attributes to CODE; a link's marker
+          // decides between CARD, TELEGRAM and LINK.
+          final source = code == null
+              ? JoinSource.code
+              : (state.uri.queryParameters['s'] == null
+                  ? JoinSource.link
+                  : JoinSource.fromShareChannel(
+                      shareChannelFromLink(state.uri.toString())));
+          return _slideFromBottom(
+            state,
+            JoinGroupScreen(
+              initialCode: code,
+              source: source,
+              referrerId: referrerFromLink(state.uri.toString()),
+            ),
+          );
         },
       ),
 
@@ -204,6 +230,13 @@ final routerProvider = Provider<GoRouter>((ref) {
                 state,
                 MemberProfileScreen(groupId: groupId, userId: userId),
               );
+            },
+          ),
+          GoRoute(
+            path: 'chronicle',
+            pageBuilder: (context, state) {
+              final groupId = state.pathParameters['id']!;
+              return _slideFromRight(state, ChronicleScreen(groupId: groupId));
             },
           ),
           GoRoute(
@@ -307,7 +340,11 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/join/:code',
         redirect: (context, state) {
           final code = state.pathParameters['code'] ?? '';
-          return '/groups/join?code=$code';
+          // `s` is the share channel the link was built with; carrying it through is what
+          // makes a card's contribution visible in the funnel.
+          final channel = state.uri.queryParameters['s'];
+          final suffix = channel == null ? '' : '&s=$channel';
+          return '/groups/join?code=$code$suffix';
         },
       ),
     ],

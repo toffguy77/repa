@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/theme/app_tokens.dart';
 
 class AchievementBadge extends StatelessWidget {
   final String type;
@@ -20,12 +19,12 @@ class AchievementBadge extends StatelessWidget {
       width: 100,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: unlocked ? Colors.white : AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
+        color: unlocked ? context.t.elevation.level1.surface : context.t.color.surface,
+        borderRadius: BorderRadius.circular(AppTokens.radius.md),
         boxShadow: unlocked
             ? [
                 BoxShadow(
-                  color: AppColors.primary.withValues(alpha: 0.15),
+                  color: context.t.color.accent.withValues(alpha: 0.15),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
@@ -42,10 +41,10 @@ class AchievementBadge extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             _achievementName(type),
-            style: AppTextStyles.caption.copyWith(
+            style: context.ts.caption.copyWith(
               fontSize: 11,
               fontWeight: FontWeight.w600,
-              color: unlocked ? AppColors.textPrimary : AppColors.textSecondary,
+              color: unlocked ? context.t.color.textPrimary : context.t.color.textSecondary,
             ),
             textAlign: TextAlign.center,
             maxLines: 2,
@@ -55,7 +54,7 @@ class AchievementBadge extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               earnedAt!,
-              style: AppTextStyles.caption.copyWith(fontSize: 10),
+              style: context.ts.caption.copyWith(fontSize: 10),
             ),
           ],
         ],

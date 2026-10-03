@@ -15,29 +15,33 @@ import (
 	"github.com/repa-app/repa/internal/config"
 	db "github.com/repa-app/repa/internal/db/sqlc"
 	"github.com/repa-app/repa/internal/handler"
+	adminhandler "github.com/repa-app/repa/internal/handler/admin"
 	authhandler "github.com/repa-app/repa/internal/handler/auth"
+	chroniclehandler "github.com/repa-app/repa/internal/handler/chronicle"
 	crystalshandler "github.com/repa-app/repa/internal/handler/crystals"
 	groupshandler "github.com/repa-app/repa/internal/handler/groups"
 	profilehandler "github.com/repa-app/repa/internal/handler/profile"
-	questionshandler "github.com/repa-app/repa/internal/handler/questions"
 	pushhandler "github.com/repa-app/repa/internal/handler/push"
+	questionshandler "github.com/repa-app/repa/internal/handler/questions"
 	reactionshandler "github.com/repa-app/repa/internal/handler/reactions"
 	revealhandler "github.com/repa-app/repa/internal/handler/reveal"
+	safetyhandler "github.com/repa-app/repa/internal/handler/safety"
 	telegramhandler "github.com/repa-app/repa/internal/handler/telegram"
-	adminhandler "github.com/repa-app/repa/internal/handler/admin"
 	votinghandler "github.com/repa-app/repa/internal/handler/voting"
 	"github.com/repa-app/repa/internal/lib"
 	appmw "github.com/repa-app/repa/internal/middleware"
 	achievesvc "github.com/repa-app/repa/internal/service/achievements"
 	authsvc "github.com/repa-app/repa/internal/service/auth"
 	cardssvc "github.com/repa-app/repa/internal/service/cards"
+	chroniclesvc "github.com/repa-app/repa/internal/service/chronicle"
 	crystalssvc "github.com/repa-app/repa/internal/service/crystals"
 	groupssvc "github.com/repa-app/repa/internal/service/groups"
 	profilesvc "github.com/repa-app/repa/internal/service/profile"
-	questionssvc "github.com/repa-app/repa/internal/service/questions"
 	pushsvc "github.com/repa-app/repa/internal/service/push"
+	questionssvc "github.com/repa-app/repa/internal/service/questions"
 	reactionssvc "github.com/repa-app/repa/internal/service/reactions"
 	revealsvc "github.com/repa-app/repa/internal/service/reveal"
+	safetysvc "github.com/repa-app/repa/internal/service/safety"
 	telegramsvc "github.com/repa-app/repa/internal/service/telegram"
 	votingsvc "github.com/repa-app/repa/internal/service/voting"
 	"github.com/repa-app/repa/internal/worker/tasks"
@@ -123,11 +127,23 @@ func main() {
 	votingHandler := votinghandler.NewHandler(votingService)
 
 	revealService := revealsvc.NewService(queries, sqlDB)
+	// A completed voting session is what brings a new group's kickoff Reveal forward, so
+	// the voting service needs the reveal service's eligibility predicate.
+	votingService.WithKickoff(revealService, asynqClient)
 	achieveService := achievesvc.NewService(queries)
 	cardsService := cardssvc.NewService(queries, s3Client)
 	revealHandler := revealhandler.NewHandler(revealService, cardsService)
+	safetyService := safetysvc.NewService(queries, sqlDB)
+	safetyHandler := safetyhandler.NewHandler(safetyService)
+	// Leaving permanently is a flag on the leave route, so the groups handler needs the safety
+	// service to record it.
+	groupsHandler.WithSafety(safetyService)
+
 	profileService := profilesvc.NewService(queries)
 	profileHandler := profilehandler.NewHandler(profileService)
+
+	chronicleService := chroniclesvc.NewService(queries)
+	chronicleHandler := chroniclehandler.NewHandler(chronicleService)
 
 	var yukassaClient *lib.YukassaClient
 	if cfg.YukassaShopID != "" {
@@ -135,6 +151,12 @@ func main() {
 	}
 	crystalsService := crystalssvc.NewService(queries, sqlDB, rdb, yukassaClient)
 	crystalsHandler := crystalshandler.NewHandler(crystalsService)
+
+	// Free crystal grants. Wired after the crystals service exists, so the collaborators that
+	// trigger a grant (registration, a completed session, an awarded achievement) can reach it.
+	authService.WithWelcomeGrant(crystalsService)
+	votingService.WithReferralGrants(crystalsService)
+	achieveService.WithGrants(crystalsService)
 
 	// FCM + Push
 	var fcmClient *lib.FCMClient
@@ -212,6 +234,10 @@ func main() {
 	protected.POST("/groups/join/:inviteCode", groupsHandler.JoinGroup)
 	protected.GET("/groups/:id", groupsHandler.GetGroup)
 	protected.DELETE("/groups/:id/leave", groupsHandler.LeaveGroup)
+	protected.DELETE("/groups/:id/members/:userId", safetyHandler.RemoveMember)
+	protected.POST("/members/:userId/block", safetyHandler.BlockMember)
+	protected.DELETE("/members/:userId/block", safetyHandler.UnblockMember)
+	protected.POST("/members/:userId/report", safetyHandler.ReportMember)
 	protected.PATCH("/groups/:id", groupsHandler.UpdateGroup)
 	protected.POST("/groups/:id/invite-link", groupsHandler.RegenerateInviteLink)
 
@@ -229,10 +255,14 @@ func main() {
 		appmw.RateLimit(rdb, "card", 5, time.Hour))
 	protected.GET("/seasons/:seasonId/detector", revealHandler.GetDetector)
 	protected.POST("/seasons/:seasonId/detector", revealHandler.BuyDetector)
+	protected.GET("/seasons/:seasonId/anticipation", revealHandler.GetAnticipation)
+	protected.POST("/seasons/:seasonId/detector/hint", revealHandler.BuyDetectorHint)
+	protected.POST("/seasons/:seasonId/shares", revealHandler.RecordShare)
 
 	// Crystal routes
 	protected.GET("/crystals/balance", crystalsHandler.GetBalance)
 	protected.GET("/crystals/packages", crystalsHandler.GetPackages)
+	protected.GET("/crystals/history", crystalsHandler.GetHistory)
 	protected.POST("/crystals/purchase/init", crystalsHandler.InitPurchase)
 	protected.GET("/crystals/purchase/verify/:paymentId", crystalsHandler.VerifyPurchase)
 	// Webhook — no JWT (called by YuKassa), IP-restricted
@@ -240,6 +270,7 @@ func main() {
 
 	// Profile routes
 	protected.GET("/groups/:id/members/:userId/profile", profileHandler.GetProfile)
+	protected.GET("/groups/:id/chronicle", chronicleHandler.Get)
 
 	// Push routes
 	protected.POST("/push/register", pushHandler.RegisterToken)
@@ -263,6 +294,7 @@ func main() {
 	adminHandler := adminhandler.NewHandler(queries, cfg.AdminUsername, cfg.AdminPassword)
 	admin := api.Group("/admin", adminHandler.BasicAuth)
 	admin.GET("/reports", adminHandler.ListReports)
+	admin.GET("/user-reports", adminHandler.ListUserReports)
 	admin.PATCH("/reports/:id", adminHandler.ResolveReport)
 	admin.GET("/stats", adminHandler.GetStats)
 
@@ -328,7 +360,7 @@ func healthHandler(pool *pgxpool.Pool, rdb *redis.Client) echo.HandlerFunc {
 func wellKnownApple(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{
 		"applinks": map[string]any{
-			"apps":    []string{},
+			"apps": []string{},
 			"details": []map[string]any{
 				{
 					"appID": "3GWRDGA8B7.app.repa.repa",
@@ -344,8 +376,8 @@ func wellKnownAndroid(c echo.Context) error {
 		{
 			"relation": []string{"delegate_permission/common.handle_all_urls"},
 			"target": map[string]any{
-				"namespace":              "android_app",
-				"package_name":           "app.repa.repa",
+				"namespace":    "android_app",
+				"package_name": "app.repa.repa",
 				"sha256_cert_fingerprints": []string{
 					"86:20:33:3D:E5:38:74:C5:79:72:03:41:46:39:FE:AA:B8:FC:3A:29:45:FA:BC:95:C0:0D:23:87:AC:02:87:A3",
 					"91:34:01:79:20:DD:10:5F:08:86:24:AD:71:2B:80:57:DA:5B:CD:57:45:5E:82:BE:51:F5:98:77:09:4C:E2:5C",
@@ -382,9 +414,14 @@ func startWorker(cfg *config.Config, revealSvc *revealsvc.Service, achieveSvc *a
 	mux.HandleFunc(lib.TypePushSundayPrev, pushProcessor.HandleSundayPreview)
 	mux.HandleFunc(lib.TypePushSundayStreak, pushProcessor.HandleSundayStreak)
 	mux.HandleFunc(lib.TypeReactionPush, pushProcessor.HandleReactionPush)
+	mux.HandleFunc(lib.TypePushPostponed, pushProcessor.HandleRevealPostponed)
+	mux.HandleFunc(lib.TypePushKickoff, pushProcessor.HandleKickoffScheduled)
+	mux.HandleFunc(lib.TypePushVoteSignal, pushProcessor.HandleVoteSignal)
 
 	seasonCreator := tasks.NewSeasonCreator(groupsSvc)
 	mux.HandleFunc(lib.TypeSeasonCreator, seasonCreator.HandleSeasonCreator)
+	mux.HandleFunc(lib.TypeSeasonMaintain, seasonCreator.HandleSeasonMaintain)
+	mux.HandleFunc(lib.TypeSeasonForGroup, seasonCreator.HandleSeasonForGroup)
 
 	if telegramSvc != nil {
 		telegramProcessor := tasks.NewTelegramProcessor(telegramSvc)
@@ -424,6 +461,7 @@ func startScheduler(cfg *config.Config) {
 
 	// Season creator: Sunday 18:00 UTC (21:00 MSK) — create new seasons for active groups
 	registerCron(scheduler, "0 18 * * 0", lib.TypeSeasonCreator, "critical", "season-creator (Sun 21:00 MSK)")
+	registerCron(scheduler, "7 * * * *", lib.TypeSeasonMaintain, "critical", "season-maintenance (hourly)")
 
 	// Telegram season-start: same time as weekly push (Mon 17:00 MSK)
 	registerCron(scheduler, "0 14 * * 1", lib.TypeTelegramStart, "default", "telegram-season-start (Mon 17:00 MSK)")
@@ -442,4 +480,3 @@ func registerCron(scheduler *asynq.Scheduler, cronExpr, taskType, queue, label s
 		log.Info().Msgf("registered cron: %s", label)
 	}
 }
-

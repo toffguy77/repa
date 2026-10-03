@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/theme/app_tokens.dart';
 
 const _categoryEmojis = {
   'HOT': '\u{1F525}',
@@ -30,11 +29,11 @@ class QuestionCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        color: context.t.elevation.level1.surface,
+        borderRadius: BorderRadius.circular(AppTokens.radius.lg),
         boxShadow: [
           BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.1),
+            color: context.t.color.accent.withValues(alpha: 0.1),
             blurRadius: 20,
             offset: const Offset(0, 4),
           ),
@@ -47,7 +46,7 @@ class QuestionCard extends StatelessWidget {
           const SizedBox(height: 16),
           Text(
             text,
-            style: AppTextStyles.headline2.copyWith(
+            style: context.ts.heading2.copyWith(
               fontSize: 20,
               height: 1.3,
             ),
@@ -57,7 +56,7 @@ class QuestionCard extends StatelessWidget {
       ),
     )
         .animate()
-        .slideX(begin: 0.3, duration: 300.ms, curve: Curves.easeOut)
-        .fadeIn(duration: 300.ms);
+        .slideX(begin: 0.3, duration: context.motion(MotionClass.surface), curve: Curves.easeOut)
+        .fadeIn(duration: context.motion(MotionClass.surface));
   }
 }

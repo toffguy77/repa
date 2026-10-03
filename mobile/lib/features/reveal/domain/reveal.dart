@@ -109,12 +109,40 @@ class MemberCard with _$MemberCard {
       _$MemberCardFromJson(json);
 }
 
+/// One partially revealed voter: enough to guess, not enough to know.
+///
+/// There is deliberately no username field — mirroring the backend DTO, which has no place to put
+/// a full name, so no change to a shared shape can accidentally leak one.
+@freezed
+class DetectorHint with _$DetectorHint {
+  const factory DetectorHint({
+    @JsonKey(name: 'first_letter') required String firstLetter,
+    @JsonKey(name: 'avatar_emoji') String? avatarEmoji,
+    @JsonKey(name: 'avatar_url') String? avatarUrl,
+  }) = _DetectorHint;
+
+  factory DetectorHint.fromJson(Map<String, dynamic> json) =>
+      _$DetectorHintFromJson(json);
+}
+
 @freezed
 class DetectorResult with _$DetectorResult {
   const factory DetectorResult({
     required bool purchased,
     required List<VoterProfile> voters,
     @JsonKey(name: 'crystal_balance') required int crystalBalance,
+    /// False while the group has fewer than 5 members: a voter list drawn from at most
+    /// 4 people is not anonymous, so the backend refuses the purchase (GROUP_TOO_SMALL).
+    /// Defaults to true so an older backend keeps working.
+    @Default(true) bool available,
+
+    /// The ladder. All default so an older backend keeps working: the free count is 0, no hints
+    /// are revealed, and the prices fall back to the shipped values.
+    @JsonKey(name: 'voter_count') @Default(0) int voterCount,
+    @Default(<DetectorHint>[]) List<DetectorHint> hints,
+    @JsonKey(name: 'hint_cost') @Default(3) int hintCost,
+    @JsonKey(name: 'full_cost') @Default(10) int fullCost,
+    @JsonKey(name: 'hint_available') @Default(false) bool hintAvailable,
   }) = _DetectorResult;
 
   factory DetectorResult.fromJson(Map<String, dynamic> json) =>
@@ -154,4 +182,20 @@ class ReactionCounts with _$ReactionCounts {
 
   factory ReactionCounts.fromJson(Map<String, dynamic> json) =>
       _$ReactionCountsFromJson(json);
+}
+
+/// What a member may know about votes concerning them before the Reveal.
+///
+/// Deliberately tiny: a count, an optional single emoji, and the reveal time. No identity and no
+/// attribute — mirroring the backend shape, which has no field for either.
+@freezed
+class AnticipationState with _$AnticipationState {
+  const factory AnticipationState({
+    @JsonKey(name: 'voters_about_me') @Default(0) int votersAboutMe,
+    @JsonKey(name: 'teaser_emoji') @Default('') String teaserEmoji,
+    @JsonKey(name: 'reveal_at') @Default('') String revealAt,
+  }) = _AnticipationState;
+
+  factory AnticipationState.fromJson(Map<String, dynamic> json) =>
+      _$AnticipationStateFromJson(json);
 }

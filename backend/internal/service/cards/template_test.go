@@ -166,7 +166,7 @@ func TestTitleForCategory_AllCases(t *testing.T) {
 		{"ROMANCE", "Сердцеед"},
 		{"STUDY", "Ботан года"},
 		{"", "Загадка века"},
-		{"hot", "Загадка века"},       // lowercase should not match
+		{"hot", "Загадка века"},         // lowercase should not match
 		{"NONEXISTENT", "Загадка века"}, // random string
 	}
 	for _, tc := range cases {
@@ -328,5 +328,186 @@ func TestGetCardURL_NotFound(t *testing.T) {
 	_, err := svc.GetCardURL(context.Background(), "season1", "unknown_user")
 	if err == nil {
 		t.Error("expected error for missing card cache entry")
+	}
+}
+
+// --- Shared palette ---
+
+// TestCardPalette pins the values the card mirrors from the mobile app's dark palette
+// (AppColorTokens.dark in mobile/lib/core/theme/app_tokens.dart). There is no shared build
+// step between Dart and Go, so this test catches an accidental edit on this side; the
+// pairing itself is documented in docs/features/design-system.md.
+func TestCardPalette(t *testing.T) {
+	cases := map[string]struct {
+		got, want string
+	}{
+		"canvas":        {cardPalette.Canvas, "#0b0712"},
+		"mid":           {cardPalette.Mid, "#1f1733"},
+		"deep":          {cardPalette.Deep, "#161022"},
+		"accent":        {cardPalette.Accent, "#9b6dff"},
+		"accentFill":    {cardPalette.AccentFill, "#7c3aed"},
+		"textPrimary":   {cardPalette.TextPrimary, "#f6f3ff"},
+		"textSecondary": {cardPalette.TextSecondary, "#afa3cc"},
+	}
+	for name, c := range cases {
+		if c.got != c.want {
+			t.Errorf("cardPalette.%s = %q, want %q (mirrors AppColorTokens.dark)", name, c.got, c.want)
+		}
+	}
+}
+
+func TestBuildCardHTML_UsesPaletteNotLiterals(t *testing.T) {
+	out := BuildCardHTML(CardData{
+		Username:        "alice",
+		ReputationTitle: "Хранитель Тайн",
+		GroupName:       "9Б",
+		SeasonNumber:    3,
+		TopAttributes: []CardAttribute{
+			{QuestionText: "Кто первым побежит при пожаре?", Percentage: 67},
+		},
+	})
+
+	for _, want := range []string{
+		cardPalette.Canvas,
+		cardPalette.Mid,
+		cardPalette.Deep,
+		cardPalette.Accent,
+		cardPalette.AccentFill,
+		cardPalette.TextPrimary,
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("rendered card does not contain palette value %q", want)
+		}
+	}
+
+	// The pre-redesign hardcoded values must be gone.
+	for _, stale := range []string{"#1e1033", "#2d1a4e", "#1a0d2e", "#a78bfa", "rgba(124,58,237"} {
+		if strings.Contains(out, stale) {
+			t.Errorf("rendered card still contains the pre-redesign value %q", stale)
+		}
+	}
+}
+
+func TestBuildCardHTML_StillEscapesUserContent(t *testing.T) {
+	out := BuildCardHTML(CardData{
+		Username:        `<script>alert(1)</script>`,
+		ReputationTitle: `"><img onerror=x>`,
+		GroupName:       `a&b`,
+		SeasonNumber:    1,
+		TopAttributes: []CardAttribute{
+			{QuestionText: `<b>bold</b>`, Percentage: 50},
+		},
+	})
+
+	for _, unsafe := range []string{"<script>", "<img onerror", "<b>bold</b>"} {
+		if strings.Contains(out, unsafe) {
+			t.Errorf("rendered card contains unescaped %q", unsafe)
+		}
+	}
+	if !strings.Contains(out, "&amp;") {
+		t.Error("expected the group name's ampersand to be escaped")
+	}
+}
+
+// --- Call to action ---
+
+func TestBuildCardHTML_ShowsInviteCodeAndInstruction(t *testing.T) {
+	out := BuildCardHTML(CardData{
+		Username:        "alice",
+		GroupName:       "9Б",
+		SeasonNumber:    2,
+		InviteCode:      "AB2CD3",
+		InviteQRDataURI: "data:image/png;base64,AAAA",
+	})
+
+	if !strings.Contains(out, "AB2 CD3") {
+		t.Error("card should show the invite code grouped for transcription")
+	}
+	if !strings.Contains(out, "Код группы") {
+		t.Error("card should label the code")
+	}
+	if !strings.Contains(out, "Скачай Репу и введи код") {
+		t.Error("card should tell the viewer what to do")
+	}
+	if !strings.Contains(out, `<img src="data:image/png;base64,AAAA"`) {
+		t.Error("card should embed the QR image")
+	}
+}
+
+func TestBuildCardHTML_OmitsQRWhenRenderingFailed(t *testing.T) {
+	out := BuildCardHTML(CardData{
+		Username:     "alice",
+		GroupName:    "9Б",
+		SeasonNumber: 2,
+		InviteCode:   "AB2CD3",
+		// Empty: InviteQRDataURI returns "" rather than an error when rendering fails.
+	})
+
+	// The class exists in the stylesheet either way; assert on the markup, not the CSS.
+	if strings.Contains(out, `<div class="cta-qr">`) {
+		t.Error("the QR plate markup should be omitted entirely when there is no image")
+	}
+	if strings.Contains(out, "<img src=") {
+		t.Error("no image element should be emitted without a data URI")
+	}
+	// The card must still be a usable invitation in text form.
+	if !strings.Contains(out, "AB2 CD3") {
+		t.Error("the printed code must survive a QR failure")
+	}
+	if !strings.Contains(out, "Скачай Репу и введи код") {
+		t.Error("the instruction must survive a QR failure")
+	}
+}
+
+func TestBuildCardHTML_NoInviteCodeStillRenders(t *testing.T) {
+	out := BuildCardHTML(CardData{
+		Username:     "alice",
+		GroupName:    "9Б",
+		SeasonNumber: 2,
+	})
+
+	if strings.Contains(out, "Код группы") {
+		t.Error("there is no invitation to show without a code")
+	}
+	if !strings.Contains(out, "alice") {
+		t.Error("the card itself must still render")
+	}
+}
+
+func TestFormatCardCode(t *testing.T) {
+	if got := formatCardCode("AB2CD3"); got != "AB2 CD3" {
+		t.Errorf("formatCardCode = %q, want \"AB2 CD3\"", got)
+	}
+
+	legacy := "0f1d4e6a-6b3c-4a1e-9f2e-123456789abc"
+	if got := formatCardCode(legacy); got != legacy {
+		t.Errorf("a legacy code should be shown as-is, got %q", got)
+	}
+}
+
+func TestBuildCardHTML_EscapesTheInviteCode(t *testing.T) {
+	out := BuildCardHTML(CardData{
+		Username:     "alice",
+		GroupName:    "9Б",
+		SeasonNumber: 1,
+		InviteCode:   `<script>x</script>`,
+	})
+
+	if strings.Contains(out, "<script>") {
+		t.Error("the invite code must be escaped like any other interpolated value")
+	}
+}
+
+func TestCardInviteLink_CarriesTheSharer(t *testing.T) {
+	// The card is generated per member, so its link can say who shared it — a group's code
+	// identifies the group, not the inviter.
+	uri := InviteQRDataURI("https://repa.app/join/AB2CD3?s=card&ref=member-7")
+	if uri == "" {
+		t.Fatal("expected the referrer-bearing link to render")
+	}
+
+	// A link without a referrer must still render: not every share has one.
+	if InviteQRDataURI("https://repa.app/join/AB2CD3?s=card") == "" {
+		t.Error("a link without a referrer should still render")
 	}
 }

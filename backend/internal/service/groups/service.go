@@ -5,10 +5,13 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	db "github.com/repa-app/repa/internal/db/sqlc"
+	"github.com/repa-app/repa/internal/eligibility"
+	"github.com/repa-app/repa/internal/schedule"
 	"github.com/rs/zerolog/log"
 )
 
@@ -23,13 +26,23 @@ var (
 	ErrNoCategories    = errors.New("at least one category is required")
 	ErrInvalidCategory = errors.New("invalid question category")
 	ErrRomanceBlocked  = errors.New("ROMANCE category is not available for users under 18")
+	// ErrNoKindCategories guards the combination that would otherwise produce an empty season: a
+	// kind-only group whose categories are all edgy (HOT, SECRETS). Refused rather than silently
+	// relaxed — a group with no questions cannot vote, and the setting the member chose would have
+	// been ignored.
+	ErrNoKindCategories = errors.New("the chosen categories have no questions for a kind-only group")
+	// ErrInviteCodeExhausted means the generator could not find a free code. With ~887M
+	// codes this signals a fault, not a full code space, so it fails loudly.
+	ErrInviteCodeExhausted = errors.New("could not generate a unique invite code")
+	// ErrGroupBanned means this person was removed from the group, or left it permanently.
+	ErrGroupBanned = errors.New("you cannot rejoin this group")
 )
 
 const (
-	MaxGroupsPerUser = 10
+	MaxGroupsPerUser   = 10
 	MaxMembersPerGroup = 50
-	MinGroupName     = 3
-	MaxGroupName     = 40
+	MinGroupName       = 3
+	MaxGroupName       = 40
 	MinSeasonQuestions = 5
 	MaxSeasonQuestions = 10
 )
@@ -66,6 +79,24 @@ type CreateGroupParams struct {
 	Categories       []string
 	TelegramUsername string
 	UserBirthYear    sql.NullInt32
+
+	// KindOnly restricts the group's seasons to warm and neutral questions. Nil means "use the
+	// age-based default" — an explicit value always wins, including an adult turning it on and a minor
+	// turning it off. The default is a starting point, not a restriction they cannot see or change.
+	KindOnly *bool
+}
+
+// defaultKindOnly derives the setting from the creator's age, reusing the same birth-year signal the
+// ROMANCE restriction already uses so there is one notion of "under 18" in the product.
+func defaultKindOnly(explicit *bool, birthYear sql.NullInt32) bool {
+	if explicit != nil {
+		return *explicit
+	}
+	if !birthYear.Valid {
+		// Unknown age is treated as under 18, matching how ROMANCE is handled.
+		return true
+	}
+	return time.Now().Year()-int(birthYear.Int32) < 18
 }
 
 type CreateGroupResult struct {
@@ -95,7 +126,18 @@ func (s *Service) CreateGroup(ctx context.Context, p CreateGroupParams) (*Create
 	}
 
 	groupID := uuid.New().String()
-	inviteCode := uuid.New().String()
+	kindOnly := defaultKindOnly(p.KindOnly, p.UserBirthYear)
+
+	if kindOnly {
+		if err := s.assertKindCategories(ctx, categories); err != nil {
+			return nil, err
+		}
+	}
+
+	inviteCode, err := s.freshInviteCode(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	tx, err := s.sqlDB.BeginTx(ctx, nil)
 	if err != nil {
@@ -106,12 +148,13 @@ func (s *Service) CreateGroup(ctx context.Context, p CreateGroupParams) (*Create
 	qtx := s.queries.WithTx(tx)
 
 	group, err := qtx.CreateGroup(ctx, db.CreateGroupParams{
-		ID:                    groupID,
-		Name:                  p.Name,
-		InviteCode:            inviteCode,
-		AdminID:               p.UserID,
-		TelegramChatUsername:  sql.NullString{String: p.TelegramUsername, Valid: p.TelegramUsername != ""},
-		Categories:            categoryStrings(categories),
+		ID:                   groupID,
+		Name:                 p.Name,
+		InviteCode:           inviteCode,
+		AdminID:              p.UserID,
+		TelegramChatUsername: sql.NullString{String: p.TelegramUsername, Valid: p.TelegramUsername != ""},
+		Categories:           categoryStrings(categories),
+		KindOnly:             kindOnly,
 	})
 	if err != nil {
 		return nil, err
@@ -121,12 +164,15 @@ func (s *Service) CreateGroup(ctx context.Context, p CreateGroupParams) (*Create
 		ID:      uuid.New().String(),
 		UserID:  p.UserID,
 		GroupID: groupID,
+		// The founder did not arrive through an invite; recording that explicitly keeps the
+		// funnel honest.
+		JoinSource: db.JoinSourceUNKNOWN,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	if err := s.createFirstSeasonTx(ctx, qtx, groupID, categories); err != nil {
+	if err := s.createFirstSeasonTx(ctx, qtx, groupID, categories, kindOnly); err != nil {
 		return nil, err
 	}
 
@@ -136,12 +182,12 @@ func (s *Service) CreateGroup(ctx context.Context, p CreateGroupParams) (*Create
 
 	return &CreateGroupResult{
 		Group:     group,
-		InviteURL: "https://repa.app/join/" + inviteCode,
+		InviteURL: InviteURL(inviteCode),
 	}, nil
 }
 
-func (s *Service) createFirstSeasonTx(ctx context.Context, qtx *db.Queries, groupID string, categories []db.QuestionCategory) error {
-	startsAt, revealAt, endsAt := getNextSeasonDates()
+func (s *Service) createFirstSeasonTx(ctx context.Context, qtx *db.Queries, groupID string, categories []db.QuestionCategory, kindOnly bool) error {
+	startsAt, revealAt, endsAt := schedule.KickoffSeason(time.Now())
 
 	season, err := qtx.CreateSeason(ctx, db.CreateSeasonParams{
 		ID:       uuid.New().String(),
@@ -150,15 +196,16 @@ func (s *Service) createFirstSeasonTx(ctx context.Context, qtx *db.Queries, grou
 		StartsAt: startsAt,
 		RevealAt: revealAt,
 		EndsAt:   endsAt,
+		Kind:     db.SeasonKindKICKOFF,
 	})
 	if err != nil {
 		return err
 	}
 
-	return s.selectAndAssignQuestionsTx(ctx, qtx, season.ID, groupID, categories, 1)
+	return s.selectAndAssignQuestionsTx(ctx, qtx, season.ID, groupID, categories, 1, kindOnly)
 }
 
-func (s *Service) selectAndAssignQuestionsTx(ctx context.Context, qtx *db.Queries, seasonID, groupID string, categories []db.QuestionCategory, memberCount int) error {
+func (s *Service) selectAndAssignQuestionsTx(ctx context.Context, qtx *db.Queries, seasonID, groupID string, categories []db.QuestionCategory, memberCount int, kindOnly bool) error {
 	questionCount := memberCount * 2
 	if questionCount < MinSeasonQuestions {
 		questionCount = MinSeasonQuestions
@@ -171,6 +218,8 @@ func (s *Service) selectAndAssignQuestionsTx(ctx context.Context, qtx *db.Querie
 		Column1: categories,
 		GroupID: groupID,
 		Limit:   int32(questionCount),
+		// A kind-only group never draws an edgy question.
+		Column4: kindOnly,
 	})
 	if err != nil {
 		return err
@@ -196,6 +245,9 @@ type GroupListItem struct {
 	ActiveSeason *db.Season
 	VotedCount   int64
 	UserVoted    bool
+	// RevealStatus explains what the pending Reveal is waiting for. Nil when the group
+	// has no open season.
+	RevealStatus *eligibility.Status
 }
 
 func (s *Service) ListUserGroups(ctx context.Context, userID string) ([]GroupListItem, error) {
@@ -207,16 +259,16 @@ func (s *Service) ListUserGroups(ctx context.Context, userID string) ([]GroupLis
 	items := make([]GroupListItem, 0, len(rows))
 	for _, r := range rows {
 		group := db.Group{
-			ID:                   r.ID,
-			Name:                 r.Name,
-			InviteCode:           r.InviteCode,
-			AdminID:              r.AdminID,
-			TelegramChatID:       r.TelegramChatID,
-			TelegramChatUsername: r.TelegramChatUsername,
-			TelegramConnectCode:  r.TelegramConnectCode,
+			ID:                    r.ID,
+			Name:                  r.Name,
+			InviteCode:            r.InviteCode,
+			AdminID:               r.AdminID,
+			TelegramChatID:        r.TelegramChatID,
+			TelegramChatUsername:  r.TelegramChatUsername,
+			TelegramConnectCode:   r.TelegramConnectCode,
 			TelegramConnectExpiry: r.TelegramConnectExpiry,
-			CreatedAt:            r.CreatedAt,
-			Categories:           r.Categories,
+			CreatedAt:             r.CreatedAt,
+			Categories:            r.Categories,
 		}
 		item := GroupListItem{
 			Group:       group,
@@ -225,17 +277,21 @@ func (s *Service) ListUserGroups(ctx context.Context, userID string) ([]GroupLis
 
 		if r.ActiveSeasonID.Valid {
 			season := db.Season{
-				ID:       r.ActiveSeasonID.String,
-				GroupID:  r.ID,
-				Number:   r.ActiveSeasonNumber.Int32,
-				Status:   r.ActiveSeasonStatus.SeasonStatus,
-				StartsAt: r.ActiveSeasonStartsAt.Time,
-				RevealAt: r.ActiveSeasonRevealAt.Time,
-				EndsAt:   r.ActiveSeasonEndsAt.Time,
+				ID:            r.ActiveSeasonID.String,
+				GroupID:       r.ID,
+				Number:        r.ActiveSeasonNumber.Int32,
+				Status:        r.ActiveSeasonStatus.SeasonStatus,
+				StartsAt:      r.ActiveSeasonStartsAt.Time,
+				RevealAt:      r.ActiveSeasonRevealAt.Time,
+				EndsAt:        r.ActiveSeasonEndsAt.Time,
+				Kind:          r.ActiveSeasonKind.SeasonKind,
+				PostponeCount: r.ActiveSeasonPostponeCount.Int32,
 			}
 			item.ActiveSeason = &season
 			item.VotedCount = r.VotedCount
 			item.UserVoted = r.UserVoteCount > 0
+			status := eligibility.Evaluate(r.MemberCount, r.VotedCount)
+			item.RevealStatus = &status
 		}
 
 		items = append(items, item)
@@ -245,9 +301,18 @@ func (s *Service) ListUserGroups(ctx context.Context, userID string) ([]GroupLis
 }
 
 type GroupDetail struct {
-	Group        db.Group
-	Members      []db.GetGroupMembersRow
-	ActiveSeason *db.Season
+	// RevealStatus explains what the pending Reveal is waiting for. Nil when the group
+	// has no open season.
+	RevealStatus *eligibility.Status
+
+	// EffectiveMemberCount is how many members this viewer can actually be rated by: the membership
+	// minus anyone blocked in either direction. The anonymity thresholds are judged against this,
+	// because a group of five with three blocks presents itself as safely anonymous while behaving
+	// like a group of two.
+	EffectiveMemberCount int
+	Group                db.Group
+	Members              []db.GetGroupMembersRow
+	ActiveSeason         *db.Season
 }
 
 func (s *Service) GetGroup(ctx context.Context, groupID, userID string) (*GroupDetail, error) {
@@ -280,9 +345,36 @@ func (s *Service) GetGroup(ctx context.Context, groupID, userID string) (*GroupD
 		Members: members,
 	}
 
+	detail.EffectiveMemberCount = len(members)
+	// Scoped to this group: the global block list would also subtract people this member blocked in
+	// other groups, which has nothing to do with how anonymous this group's percentages are.
+	if blocked, err := s.queries.CountBlockedGroupMembers(ctx, db.CountBlockedGroupMembersParams{
+		GroupID:   groupID,
+		BlockerID: userID,
+	}); err == nil {
+		detail.EffectiveMemberCount -= int(blocked)
+		if detail.EffectiveMemberCount < 1 {
+			detail.EffectiveMemberCount = 1 // the viewer always counts
+		}
+	}
+
 	season, err := s.queries.GetActiveSeasonByGroup(ctx, groupID)
 	if err == nil {
 		detail.ActiveSeason = &season
+
+		totalQuestions, qErr := s.queries.CountSeasonQuestions(ctx, season.ID)
+		if qErr != nil {
+			return nil, qErr
+		}
+		votedCount, vErr := s.queries.CountCompletedVoters(ctx, db.CountCompletedVotersParams{
+			SeasonID: season.ID,
+			Column2:  totalQuestions,
+		})
+		if vErr != nil {
+			return nil, vErr
+		}
+		status := eligibility.Evaluate(int64(len(members)), votedCount)
+		detail.RevealStatus = &status
 	}
 
 	return detail, nil
@@ -291,11 +383,11 @@ func (s *Service) GetGroup(ctx context.Context, groupID, userID string) (*GroupD
 type JoinPreview struct {
 	Name          string
 	MemberCount   int64
-	AdminUsername  string
+	AdminUsername string
 }
 
 func (s *Service) GetJoinPreview(ctx context.Context, inviteCode string) (*JoinPreview, error) {
-	group, err := s.queries.GetGroupByInviteCode(ctx, inviteCode)
+	group, err := s.queries.GetGroupByInviteCode(ctx, NormalizeInviteCode(inviteCode))
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrGroupNotFound
@@ -314,14 +406,34 @@ func (s *Service) GetJoinPreview(ctx context.Context, inviteCode string) (*JoinP
 	}
 
 	return &JoinPreview{
-		Name:         group.Name,
-		MemberCount:  memberCount,
+		Name:          group.Name,
+		MemberCount:   memberCount,
 		AdminUsername: adminUsername,
 	}, nil
 }
 
-func (s *Service) JoinGroup(ctx context.Context, userID, inviteCode string) (*db.Group, error) {
-	group, err := s.queries.GetGroupByInviteCode(ctx, inviteCode)
+// ParseJoinSource maps a client-supplied source to the enum.
+//
+// An unrecognised value becomes UNKNOWN rather than an error: a client sending a source the
+// server does not know is version skew, and refusing the join over a telemetry field would
+// trade an acquisition for a datum.
+func ParseJoinSource(raw string) db.JoinSource {
+	switch strings.ToUpper(strings.TrimSpace(raw)) {
+	case "LINK":
+		return db.JoinSourceLINK
+	case "CODE":
+		return db.JoinSourceCODE
+	case "CARD":
+		return db.JoinSourceCARD
+	case "TELEGRAM":
+		return db.JoinSourceTELEGRAM
+	default:
+		return db.JoinSourceUNKNOWN
+	}
+}
+
+func (s *Service) JoinGroup(ctx context.Context, userID, inviteCode string, source db.JoinSource, referrerID string) (*db.Group, error) {
+	group, err := s.queries.GetGroupByInviteCode(ctx, NormalizeInviteCode(inviteCode))
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrGroupNotFound
@@ -356,10 +468,29 @@ func (s *Service) JoinGroup(ctx context.Context, userID, inviteCode string) (*db
 		return nil, ErrGroupLimitUser
 	}
 
-	_, err = s.queries.AddGroupMember(ctx, db.AddGroupMemberParams{
-		ID:      uuid.New().String(),
-		UserID:  userID,
+	// A removal must not be reversible with a link — not even a regenerated one, because the ban is
+	// on the person and the group rather than on the code.
+	banned, err := s.queries.IsGroupBanned(ctx, db.IsGroupBannedParams{
 		GroupID: group.ID,
+		UserID:  userID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if banned {
+		return nil, ErrGroupBanned
+	}
+
+	// A referrer is dropped rather than refused when it is not a real member of this group or
+	// is the joining user: losing an acquisition over an attribution field is the worse trade.
+	invitedBy := s.validReferrer(ctx, group.ID, userID, referrerID)
+
+	_, err = s.queries.AddGroupMember(ctx, db.AddGroupMemberParams{
+		ID:         uuid.New().String(),
+		UserID:     userID,
+		GroupID:    group.ID,
+		JoinSource: source,
+		InvitedBy:  invitedBy,
 	})
 	if err != nil {
 		return nil, err
@@ -492,7 +623,12 @@ func (s *Service) RegenerateInviteLink(ctx context.Context, userID, groupID stri
 		return "", ErrNotAdmin
 	}
 
-	newCode := uuid.New().String()
+	newCode, err := s.freshInviteCode(ctx)
+	if err != nil {
+		return "", err
+	}
+	// Overwriting the column is what revokes the old code: the lookup only ever matches the
+	// current value.
 	if err := s.queries.UpdateGroupInviteCode(ctx, db.UpdateGroupInviteCodeParams{
 		ID:         groupID,
 		InviteCode: newCode,
@@ -500,7 +636,57 @@ func (s *Service) RegenerateInviteLink(ctx context.Context, userID, groupID stri
 		return "", err
 	}
 
-	return "https://repa.app/join/" + newCode, nil
+	return InviteURL(newCode), nil
+}
+
+// validReferrer returns the referrer to record, or an empty value when the claim does not hold.
+//
+// A referral reward is money, so the claim is checked rather than trusted: the referrer must be
+// an existing member of the group being joined, and must not be the joining user.
+func (s *Service) validReferrer(ctx context.Context, groupID, joiningUserID, referrerID string) sql.NullString {
+	none := sql.NullString{}
+
+	if referrerID == "" || referrerID == joiningUserID {
+		return none
+	}
+
+	isMember, err := s.queries.IsGroupMember(ctx, db.IsGroupMemberParams{
+		UserID:  referrerID,
+		GroupID: groupID,
+	})
+	if err != nil {
+		log.Warn().Err(err).Str("referrer_id", referrerID).Msg("could not verify referrer; dropping it")
+		return none
+	}
+	if isMember == 0 {
+		return none
+	}
+
+	return sql.NullString{String: referrerID, Valid: true}
+}
+
+// freshInviteCode returns a code no group currently holds.
+//
+// Uniqueness is also enforced by groups_invite_code_upper_idx, so this check is about giving
+// a clear error instead of a constraint violation — and about not handing out a code that is
+// already taken when the caller is inside a transaction that would fail later.
+func (s *Service) freshInviteCode(ctx context.Context) (string, error) {
+	for attempt := 0; attempt < maxInviteCodeAttempts; attempt++ {
+		code, err := generateInviteCode()
+		if err != nil {
+			return "", err
+		}
+
+		_, err = s.queries.GetGroupByInviteCode(ctx, code)
+		if errors.Is(err, sql.ErrNoRows) {
+			return code, nil
+		}
+		if err != nil {
+			return "", err
+		}
+		// Taken — draw again.
+	}
+	return "", ErrInviteCodeExhausted
 }
 
 // --- Helpers ---
@@ -522,35 +708,27 @@ func validateCategories(cats []string, userBirthYear sql.NullInt32) ([]db.Questi
 	return result, nil
 }
 
+// assertKindCategories refuses a kind-only group whose categories offer no non-edgy question.
+//
+// Asked of the bank rather than decided from a hardcoded list of categories: the thing that makes the
+// combination unusable is the absence of questions, and that is a property of the bank's contents.
+func (s *Service) assertKindCategories(ctx context.Context, categories []db.QuestionCategory) error {
+	n, err := s.queries.CountKindQuestionsByCategories(ctx, categories)
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNoKindCategories
+	}
+	return nil
+}
+
 func categoryStrings(cats []db.QuestionCategory) []string {
 	result := make([]string, len(cats))
 	for i, c := range cats {
 		result[i] = string(c)
 	}
 	return result
-}
-
-func getNextSeasonDates() (startsAt, revealAt, endsAt time.Time) {
-	msk := time.FixedZone("MSK", 3*60*60)
-	now := time.Now().In(msk)
-
-	// Next Monday 00:00 MSK
-	daysUntilMonday := (8 - int(now.Weekday())) % 7
-	if daysUntilMonday == 0 {
-		daysUntilMonday = 7
-	}
-	monday := time.Date(now.Year(), now.Month(), now.Day()+daysUntilMonday, 0, 0, 0, 0, msk)
-	startsAt = monday.UTC()
-
-	// Friday same week 20:00 MSK = 17:00 UTC
-	friday := monday.AddDate(0, 0, 4)
-	revealAt = time.Date(friday.Year(), friday.Month(), friday.Day(), 20, 0, 0, 0, msk).UTC()
-
-	// Sunday same week 23:59 MSK = 20:59 UTC
-	sunday := monday.AddDate(0, 0, 6)
-	endsAt = time.Date(sunday.Year(), sunday.Month(), sunday.Day(), 23, 59, 0, 0, msk).UTC()
-
-	return startsAt, revealAt, endsAt
 }
 
 // CreateNewSeasons creates a new VOTING season for all active groups (>=3 members)
@@ -575,6 +753,52 @@ func (s *Service) CreateNewSeasons(ctx context.Context) error {
 	}
 	if failed > 0 {
 		log.Warn().Int("failed", failed).Int("total", len(groups)).Msg("season creator: some groups failed")
+	}
+	return nil
+}
+
+// CreateWeeklySeasonForGroup opens a weekly season for a single group. It is the one
+// entry point shared by every creation path: the Sunday cron (CreateNewSeasons), the
+// post-kickoff follow-up, and the hourly maintenance sweep. It is a no-op when the
+// group already has an open season, so the paths cannot double-create.
+func (s *Service) CreateWeeklySeasonForGroup(ctx context.Context, groupID string) error {
+	g, err := s.queries.GetGroupByID(ctx, groupID)
+	if err != nil {
+		return err
+	}
+
+	if _, err := s.queries.GetActiveSeasonByGroup(ctx, groupID); err == nil {
+		log.Debug().Str("group_id", groupID).Msg("group already has an open season, skipping creation")
+		return nil
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+
+	return s.createSeasonForGroup(ctx, g)
+}
+
+// MaintainSeasons is the hourly safety net: it opens a weekly season for any eligible
+// group that has none and whose most recent season ended more than an hour ago. The
+// grace window keeps it clear of the Sunday cron and the post-kickoff follow-up.
+func (s *Service) MaintainSeasons(ctx context.Context) error {
+	groups, err := s.queries.GetGroupsNeedingSeasonMaintenance(ctx)
+	if err != nil {
+		return err
+	}
+
+	var failed int
+	for _, g := range groups {
+		if err := s.createSeasonForGroup(ctx, g); err != nil {
+			log.Error().Err(err).Str("group_id", g.ID).Msg("season maintenance: failed to create season")
+			failed++
+		}
+	}
+
+	if failed > 0 && failed == len(groups) {
+		return fmt.Errorf("season maintenance: all %d groups failed", failed)
+	}
+	if failed > 0 {
+		log.Warn().Int("failed", failed).Int("total", len(groups)).Msg("season maintenance: some groups failed")
 	}
 	return nil
 }
@@ -609,7 +833,7 @@ func (s *Service) createSeasonForGroup(ctx context.Context, g db.Group) error {
 	}
 	newNumber := lastNum + 1
 
-	startsAt, revealAt, endsAt := getNextSeasonDates()
+	startsAt, revealAt, endsAt := schedule.WeeklySeason(time.Now())
 
 	season, err := qtx.CreateSeason(ctx, db.CreateSeasonParams{
 		ID:       uuid.New().String(),
@@ -618,6 +842,7 @@ func (s *Service) createSeasonForGroup(ctx context.Context, g db.Group) error {
 		StartsAt: startsAt,
 		RevealAt: revealAt,
 		EndsAt:   endsAt,
+		Kind:     db.SeasonKindWEEKLY,
 	})
 	if err != nil {
 		return err
@@ -633,9 +858,41 @@ func (s *Service) createSeasonForGroup(ctx context.Context, g db.Group) error {
 		return err
 	}
 
-	if err := s.selectAndAssignQuestionsTx(ctx, qtx, season.ID, g.ID, categories, int(memberCount)); err != nil {
+	if err := s.selectAndAssignQuestionsTx(ctx, qtx, season.ID, g.ID, categories, int(memberCount), g.KindOnly); err != nil {
 		return err
 	}
 
 	return tx.Commit()
+}
+
+// SetKindOnly changes the group's question-tone setting. Admin only.
+//
+// Applies from the *next* season: rewriting an open season would change the questions out from under
+// members who already answered some of them, and their votes would reference questions no longer in it.
+func (s *Service) SetKindOnly(ctx context.Context, userID, groupID string, kindOnly bool) error {
+	group, err := s.queries.GetGroupByID(ctx, groupID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrGroupNotFound
+		}
+		return err
+	}
+	if group.AdminID != userID {
+		return ErrNotAdmin
+	}
+
+	if kindOnly {
+		cats := make([]db.QuestionCategory, 0, len(group.Categories))
+		for _, c := range group.Categories {
+			cats = append(cats, db.QuestionCategory(c))
+		}
+		if err := s.assertKindCategories(ctx, cats); err != nil {
+			return err
+		}
+	}
+
+	return s.queries.UpdateGroupKindOnly(ctx, db.UpdateGroupKindOnlyParams{
+		ID:       groupID,
+		KindOnly: kindOnly,
+	})
 }

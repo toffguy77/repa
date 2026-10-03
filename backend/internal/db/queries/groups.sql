@@ -1,12 +1,14 @@
 -- name: CreateGroup :one
-INSERT INTO groups (id, name, invite_code, admin_id, telegram_chat_username, categories)
-VALUES ($1, $2, $3, $4, $5, $6) RETURNING *;
+INSERT INTO groups (id, name, invite_code, admin_id, telegram_chat_username, categories, kind_only)
+VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *;
 
 -- name: GetGroupByID :one
 SELECT * FROM groups WHERE id = $1;
 
 -- name: GetGroupByInviteCode :one
-SELECT * FROM groups WHERE invite_code = $1;
+-- Matches case-insensitively so a code typed in any case resolves, and so legacy UUID codes
+-- keep working without a compatibility branch. Uses groups_invite_code_upper_idx.
+SELECT * FROM groups WHERE upper(invite_code) = upper($1);
 
 -- name: GetUserGroups :many
 SELECT g.* FROM groups g
@@ -21,8 +23,8 @@ SELECT COUNT(*) FROM group_members WHERE user_id = $1;
 SELECT COUNT(*) FROM group_members WHERE group_id = $1;
 
 -- name: AddGroupMember :one
-INSERT INTO group_members (id, user_id, group_id)
-VALUES ($1, $2, $3) RETURNING *;
+INSERT INTO group_members (id, user_id, group_id, join_source, invited_by)
+VALUES ($1, $2, $3, $4, $5) RETURNING *;
 
 -- name: GetGroupMembers :many
 SELECT u.id, u.username, u.avatar_emoji, u.avatar_url
@@ -97,10 +99,30 @@ SELECT g.*,
   s.starts_at as active_season_starts_at,
   s.reveal_at as active_season_reveal_at,
   s.ends_at as active_season_ends_at,
-  COALESCE((SELECT COUNT(DISTINCT v.voter_id) FROM votes v WHERE v.season_id = s.id), 0)::bigint as voted_count,
+  s.kind as active_season_kind,
+  s.postpone_count as active_season_postpone_count,
+  -- Completed voters, not "cast at least one vote": this is the number the reveal rules
+  -- and the in-app progress bar both use (see internal/eligibility).
+  COALESCE((
+    SELECT COUNT(*) FROM (
+      SELECT v.voter_id FROM votes v
+      WHERE v.season_id = s.id
+      GROUP BY v.voter_id
+      HAVING COUNT(*) >= (SELECT COUNT(*) FROM season_questions sq WHERE sq.season_id = s.id)
+    ) completed
+  ), 0)::bigint as voted_count,
   COALESCE((SELECT COUNT(*) FROM votes v WHERE v.season_id = s.id AND v.voter_id = $1), 0)::bigint as user_vote_count
 FROM groups g
 JOIN group_members gm ON gm.group_id = g.id
 LEFT JOIN seasons s ON s.group_id = g.id AND s.status = 'VOTING'
 WHERE gm.user_id = $1
 ORDER BY gm.joined_at DESC;
+
+-- name: GetMembershipByUserAndGroup :one
+SELECT * FROM group_members WHERE user_id = $1 AND group_id = $2;
+
+-- name: CountReferralsByUser :one
+SELECT COUNT(*)::bigint FROM group_members WHERE invited_by = $1;
+
+-- name: UpdateGroupKindOnly :exec
+UPDATE groups SET kind_only = $2 WHERE id = $1;
