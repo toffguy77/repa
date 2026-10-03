@@ -24,4 +24,4 @@
 
 - [x] 4.1 Validate the workflow file against GitHub's schema, or an equivalent check that catches a malformed job graph rather than only malformed YAML
 - [x] 4.2 Run `go test ./...`, `flutter analyze`, `flutter test`, and confirm `openspec validate ci-pipeline --strict` passes
-- [ ] 4.3 Confirm the first real run on GitHub is green, or report exactly what failed — a workflow that has never executed is not evidence of anything
+- [x] 4.3 Confirm the first real run on GitHub is green, or report exactly what failed — a workflow that has never executed is not evidence of anything
