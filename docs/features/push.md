@@ -33,9 +33,9 @@ All scheduled tasks run via the asynq scheduler. Times are MSK (UTC+3).
 | Day | MSK | UTC cron | Category | Content |
 | --- | --- | -------- | -------- | ------- |
 | Mon | 17:00 | `0 14 * * 1` | SEASON_START | "New season started" to all VOTING groups |
-| Tue | 19:00 | `0 16 * * 2` | REMINDER | Social proof — "someone voted" signal to voters |
+| Tue | 19:00 | `0 16 * * 2` | REMINDER | Social proof — "someone voted" signal, **only to members who actually have a non-zero count** |
 | Wed | 18:00 | `0 15 * * 3` | REMINDER | Quorum status: near-done to non-voters, at-risk to everyone |
-| Thu | 20:00 | `0 17 * * 4` | REMINDER | Leading category emoji hint to voters |
+| Thu | 20:00 | `0 17 * * 4` | REMINDER | Leading category emoji hint, **only to members who have a teaser** |
 | Fri | 19:00 | `0 16 * * 5` | REVEAL | 1h pre-reveal reminder to everyone |
 | Fri | 20:00 | triggered by reveal worker | REVEAL | Reveal ready (enqueued after reveal processing) |
 | Sun | 12:00 | `0 9 * * 0` | NEXT_SEASON | Question voting invite to all active groups |
@@ -106,3 +106,26 @@ backend/internal/worker/tasks/push.go             # All scheduled + event push t
 backend/internal/db/queries/push.sql              # FCM token queries, top-category query
 backend/internal/db/queries/push_preferences.sql  # Preference upsert + lookup
 ```
+
+## A push only promises what the app can show
+
+The Tuesday and Thursday fan-outs filter their recipients by whether the screen behind the push will
+actually contain the thing the push mentions (`withVotesAbout`). Previously both went to every member
+of every voting group, so a member with no votes about them was promised intrigue and shown a progress
+bar. That costs more than the missed send: it teaches the recipient to ignore the next notification,
+including the ones that work.
+
+The filter costs one query per candidate, bounded by group size and run twice a week off-peak.
+
+## The immediate vote signal
+
+`push:vote-signal` — enqueued when someone answers a question about a member, for that member only.
+
+- Says the number went up; carries **no** voter name and **no** attribute.
+- **Debounced to once per recipient per MSK day** via `signal-sent:{userID}:{date}`, the same
+  Redis-key-expiring-at-midnight mechanism as the daily cap. A 20-person group would otherwise produce
+  19 notifications in an evening.
+- Counts against the 3-per-day cap and respects quiet hours like any other push.
+- Routes to `reveal-waiting`, which now opens the anticipation screen rather than the group.
+
+See `docs/features/reveal.md` → Anticipation.

@@ -38,6 +38,9 @@ Get group-wide voting progress for a season.
 ### VotingScreen (`/groups/:id/vote/:seasonId`)
 Sequential question-answer flow:
 - Progress bar at top showing current question number out of total (e.g. "2 из 5" in AppBar title)
+- `SmallGroupNotice` above the question while the group has fewer than 5 members (group size
+  is `targets.length + 1`, since targets exclude the voter) — shown *before* the first vote
+  so members can decide what to answer rather than find out after the Reveal
 - QuestionCard displays question text with category emoji, keyed by question ID to trigger slide-in animation on change
 - Participant grid: 2x2 fixed grid for <= 4 targets (non-scrollable), scrollable GridView for more
 - Selection flow: tap participant → purple border highlight → API call and 400ms delay run in parallel → advance to next question
@@ -94,8 +97,39 @@ mobile/lib/features/voting/
 ## Business Rules
 
 - Voter cannot vote for themselves (enforced server-side)
+- **Blocked members are excluded from targets in both directions.** Targets come from
+  `GetVotingTargets(group_id, voter_id)` — members minus the voter minus anyone blocked either way —
+  rather than from filtering `GetGroupMembers` in Go, so the session's list and the vote endpoint cannot
+  disagree. A vote for a blocked member is refused with `TARGET_BLOCKED` (400).
+- **Votes cast before a block are kept.** Removing them would shift the target's card at the moment of
+  the block, which is both a worse result and a signal that a block happened.
+- **A kind-only group is never asked an edgy question.** A season's questions are drawn by
+  `GetRandomSystemQuestionsByCategories`, which filters on `groups.kind_only` inside the query — before
+  the `min(10, members*2)` limit, so a kind-only group gets a full season rather than a short one. See
+  `docs/features/groups.md` → **Question tone** for the setting, its age-based default, and the
+  `NO_KIND_CATEGORIES` refusal.
+- **Changing the setting does not change an open session.** Season questions are materialised in
+  `season_questions` at creation; the setting applies from the next season, so a member who already
+  answered half a session is never asked a different set.
 - Each question must have exactly one answer
 - Answers cannot be changed once submitted
 - Session can be interrupted and resumed — progress persists server-side
 - Quorum: >= 50% of members must complete voting (>= 40% for groups < 8 members)
 - voter_id is stored in the `votes` table but NEVER exposed in API responses tied to specific votes
+
+### Completing a session can schedule a kickoff Reveal
+
+When a vote completes a member's session (`answered == total`) **and** the season is a
+`KICKOFF` season (see `docs/features/groups.md`), the voting service calls
+`reveal.ScheduleKickoffIfEligible`. If that call is the one that makes the group
+reveal-eligible for the first time — at least 3 members and at least 3 completed voters —
+the season's `reveal_at` moves to one hour from now (`schedule.KickoffRevealDelay`) and a
+`push:kickoff-scheduled` notification goes to the group.
+
+- The scheduling UPDATE only fires for a `VOTING` kickoff season whose `reveal_at` is
+  later than the new time, so it is idempotent and a later voter cannot push the Reveal back.
+- The push is enqueued with a per-season asynq `TaskID`, so concurrent completions cannot
+  produce two announcements.
+- A scheduling failure is logged and swallowed: the vote is already recorded and must not
+  be rolled back by a scheduling hiccup.
+- Weekly seasons are untouched — they keep their Friday 20:00 MSK Reveal.

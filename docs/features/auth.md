@@ -203,8 +203,8 @@ mobile/lib/
 │   │   └── auth_provider.dart                       # AuthNotifier, AuthState, AuthStatus
 │   ├── router/app_router.dart                       # GoRouter with _RouterNotifier + refreshListenable
 │   └── theme/
-│       ├── app_colors.dart                          # #7C3AED purple, surface, text colors
-│       ├── app_text_styles.dart                     # headline1/2, body, caption, button
+│       ├── app_tokens.dart                          # design tokens (see design-system.md)
+│       ├── app_theme.dart                           # ThemeData for both palettes
 │       └── app_theme.dart                           # MaterialApp ThemeData
 └── features/
     ├── auth/
