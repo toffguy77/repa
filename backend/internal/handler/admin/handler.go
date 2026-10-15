@@ -3,6 +3,7 @@ package admin
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	db "github.com/repa-app/repa/internal/db/sqlc"
@@ -67,14 +68,14 @@ func (h *Handler) ListReports(c echo.Context) error {
 		}
 		items[i] = map[string]any{
 			"id":                r.ID,
-			"question_id":      r.QuestionID,
-			"question_text":    r.QuestionText,
+			"question_id":       r.QuestionID,
+			"question_text":     r.QuestionText,
 			"question_category": r.QuestionCategory,
-			"question_status":  r.QuestionStatus,
-			"reporter_id":      r.ReporterID,
+			"question_status":   r.QuestionStatus,
+			"reporter_id":       r.ReporterID,
 			"reporter_username": r.ReporterUsername,
-			"reason":           reason,
-			"created_at":       r.CreatedAt,
+			"reason":            reason,
+			"created_at":        r.CreatedAt,
 		}
 	}
 
@@ -134,6 +135,67 @@ func (h *Handler) ResolveReport(c echo.Context) error {
 	})
 }
 
+// ListUserReports surfaces person reports. A separate list from question reports rather than a merged
+// feed: they carry different columns, and merging would make both sparse.
+func (h *Handler) ListUserReports(c echo.Context) error {
+	ctx := c.Request().Context()
+
+	page, _ := strconv.Atoi(c.QueryParam("page"))
+	if page < 1 {
+		page = 1
+	}
+	limit, _ := strconv.Atoi(c.QueryParam("limit"))
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
+	offset := (page - 1) * limit
+
+	reports, err := h.queries.ListUserReports(ctx, db.ListUserReportsParams{
+		Limit:  int32(limit),
+		Offset: int32(offset),
+	})
+	if err != nil {
+		return handler.ErrorResponse(c, http.StatusInternalServerError, "INTERNAL", "Something went wrong")
+	}
+
+	total, _ := h.queries.CountUserReports(ctx)
+
+	// Flattened rather than returned raw: sqlc's sql.NullString marshals as {String, Valid}, which is
+	// not a shape an API should hand out. (The older question-report endpoint still returns raw rows;
+	// changing that is a separate, breaking change.)
+	dtos := make([]userReportDto, 0, len(reports))
+	for _, r := range reports {
+		dtos = append(dtos, userReportDto{
+			ID:               r.ID,
+			ReportedID:       r.ReportedID,
+			ReportedUsername: r.ReportedUsername,
+			ReporterID:       r.ReporterID,
+			ReporterUsername: r.ReporterUsername,
+			GroupID:          r.GroupID.String,
+			Reason:           r.Reason.String,
+			CreatedAt:        r.CreatedAt.Format(time.RFC3339),
+		})
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{
+		"data": map[string]any{
+			"reports": dtos,
+			"total":   total,
+		},
+	})
+}
+
+type userReportDto struct {
+	ID               string `json:"id"`
+	ReportedID       string `json:"reported_id"`
+	ReportedUsername string `json:"reported_username"`
+	ReporterID       string `json:"reporter_id"`
+	ReporterUsername string `json:"reporter_username"`
+	GroupID          string `json:"group_id"`
+	Reason           string `json:"reason"`
+	CreatedAt        string `json:"created_at"`
+}
+
 func (h *Handler) GetStats(c echo.Context) error {
 	ctx := c.Request().Context()
 
@@ -142,12 +204,29 @@ func (h *Handler) GetStats(c echo.Context) error {
 	groups, _ := h.queries.CountGroups(ctx)
 	revenue, _ := h.queries.SumRevenue7Days(ctx)
 
+	// The acquisition loop: shares out, attributed joins in. Reported side by side so the
+	// loop can be judged rather than guessed.
+	shares := map[string]int64{}
+	if rows, err := h.queries.CountSharesByChannel(ctx); err == nil {
+		for _, r := range rows {
+			shares[r.Channel] = r.Count
+		}
+	}
+	joins := map[string]int64{}
+	if rows, err := h.queries.CountJoinsBySource(ctx); err == nil {
+		for _, r := range rows {
+			joins[string(r.JoinSource)] = r.Count
+		}
+	}
+
 	return c.JSON(http.StatusOK, map[string]any{
 		"data": map[string]any{
-			"dau_7d":          dau,
-			"mau_30d":        mau,
-			"groups_count":   groups,
-			"revenue_7d_rub": revenue,
+			"dau_7d":            dau,
+			"mau_30d":           mau,
+			"groups_count":      groups,
+			"revenue_7d_rub":    revenue,
+			"shares_by_channel": shares,
+			"joins_by_source":   joins,
 		},
 	})
 }

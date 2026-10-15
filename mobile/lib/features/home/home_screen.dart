@@ -3,14 +3,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/providers/auth_provider.dart';
 import '../../core/providers/connectivity_provider.dart';
-import '../../core/theme/app_colors.dart';
-import '../../core/theme/app_text_styles.dart';
 import '../../core/widgets/empty_state_widget.dart';
 import '../../core/widgets/error_state_widget.dart';
 import '../../core/widgets/skeleton_loader.dart';
 import '../groups/presentation/groups_notifier.dart';
 import '../crystals/presentation/widgets/crystal_balance_widget.dart';
 import '../groups/presentation/widgets/group_card.dart';
+import '../../core/theme/app_tokens.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -43,14 +42,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       floatingActionButton: _tabIndex == 0
           ? FloatingActionButton(
               onPressed: () => context.push('/groups/create'),
-              backgroundColor: AppColors.primary,
-              child: const Icon(Icons.add, color: Colors.white),
+              backgroundColor: context.t.color.accentFill,
+              child: Icon(Icons.add, color: context.t.color.onAccentFill),
             )
           : null,
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _tabIndex,
         onTap: (i) => setState(() => _tabIndex = i),
-        selectedItemColor: AppColors.primary,
+        selectedItemColor: context.t.color.accent,
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.group),
@@ -149,7 +148,6 @@ class _GroupsTab extends ConsumerWidget {
   }
 }
 
-// TODO: implement profile tab (T14)
 class _ProfileTab extends ConsumerWidget {
   const _ProfileTab();
 
@@ -175,7 +173,7 @@ class _ProfileTab extends ConsumerWidget {
           children: [
             CircleAvatar(
               radius: 40,
-              backgroundColor: AppColors.primaryLight,
+              backgroundColor: context.t.color.accentFill.withValues(alpha: 0.18),
               backgroundImage: user?.avatarUrl != null
                   ? NetworkImage(user!.avatarUrl!)
                   : null,
@@ -189,11 +187,11 @@ class _ProfileTab extends ConsumerWidget {
             const SizedBox(height: 16),
             Text(
               user?.username ?? '',
-              style: AppTextStyles.headline2,
+              style: context.ts.heading2,
             ),
             const SizedBox(height: 4),
             Text('Скоро здесь будет полный профиль',
-                style: AppTextStyles.caption),
+                style: context.ts.caption),
           ],
         ),
       ),

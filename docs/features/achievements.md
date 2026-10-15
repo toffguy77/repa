@@ -1,5 +1,24 @@
 # Achievements
 
+
+## Crystal payouts
+
+Two achievements carry crystal grants, so the retention loop and the acquisition loop pay in the
+same currency the product sells:
+
+| Achievement | Grant |
+|---|---|
+| `STREAK_VOTER` (at each 5/10/20 milestone) | 5 💎 |
+| `RECRUITER` | 10 💎 |
+
+Every other achievement pays nothing. Paying for all of them would make the currency meaningless,
+and would reward `BLIND` (accuracy under 20%), which is a joke badge.
+
+Grants are keyed on the achievement id (`achievement:{achievementID}`), so re-running the
+achievement job cannot double-pay. A later streak milestone is a different achievement row and
+therefore pays again. See `docs/features/crystals.md` for the idempotency mechanism.
+
+
 ## Overview
 
 The achievements engine calculates and awards achievements to group members after each Reveal. It runs as an asynq worker task (`achievements:calculate`) enqueued by the reveal processor. It also updates `user_group_stats` (voting streaks, accuracy, totals) for each member.

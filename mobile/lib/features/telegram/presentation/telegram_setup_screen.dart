@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_text_styles.dart';
 import '../../groups/presentation/groups_notifier.dart';
 import 'connect_instruction_sheet.dart';
 import 'telegram_notifier.dart';
+import '../../../core/theme/app_tokens.dart';
 
 class TelegramSetupScreen extends ConsumerStatefulWidget {
   final String groupId;
@@ -73,7 +72,7 @@ class _TelegramSetupScreenState extends ConsumerState<TelegramSetupScreen> {
                     .load();
               });
             },
-            style: TextButton.styleFrom(foregroundColor: AppColors.error),
+            style: TextButton.styleFrom(foregroundColor: context.t.color.danger),
             child: const Text('Отвязать'),
           ),
         ],
@@ -116,23 +115,23 @@ class _TelegramSetupScreenState extends ConsumerState<TelegramSetupScreen> {
           width: 100,
           height: 100,
           decoration: BoxDecoration(
-            color: AppColors.primaryLight,
+            color: context.t.color.accentFill.withValues(alpha: 0.18),
             shape: BoxShape.circle,
           ),
-          child: const Center(
-            child: Icon(Icons.telegram, size: 56, color: AppColors.primary),
+          child: Center(
+            child: Icon(Icons.telegram, size: 56, color: context.t.color.accent),
           ),
         ),
         const SizedBox(height: 24),
         Text(
           'Подключите Telegram',
-          style: AppTextStyles.headline2,
+          style: context.ts.heading2,
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 12),
         Text(
           'Бот будет автоматически публиковать результаты голосования и анонсы новых сезонов в ваш Telegram-чат.',
-          style: AppTextStyles.bodySecondary,
+          style: context.ts.bodySecondary,
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 32),
@@ -145,12 +144,12 @@ class _TelegramSetupScreenState extends ConsumerState<TelegramSetupScreen> {
               _showConnectSheet();
             },
             icon: state.loading
-                ? const SizedBox(
+                ? SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(
                       strokeWidth: 2,
-                      color: Colors.white,
+                      color: context.t.color.onAccentFill,
                     ),
                   )
                 : const Icon(Icons.telegram),
@@ -158,10 +157,10 @@ class _TelegramSetupScreenState extends ConsumerState<TelegramSetupScreen> {
               state.loading ? 'Загрузка...' : 'Подключить Telegram',
             ),
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
+              backgroundColor: context.t.color.accent,
+              foregroundColor: context.t.color.onAccentFill,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(AppTokens.radius.md),
               ),
             ),
           ),
@@ -177,24 +176,24 @@ class _TelegramSetupScreenState extends ConsumerState<TelegramSetupScreen> {
         Container(
           width: 80,
           height: 80,
-          decoration: const BoxDecoration(
-            color: Color(0xFFD1FAE5),
+          decoration: BoxDecoration(
+            color: context.t.color.success.withValues(alpha: 0.14),
             shape: BoxShape.circle,
           ),
-          child: const Center(
-            child: Icon(Icons.check_circle, size: 48, color: AppColors.success),
+          child: Center(
+            child: Icon(Icons.check_circle, size: 48, color: context.t.color.success),
           ),
         ),
         const SizedBox(height: 20),
         Text(
           'Telegram подключён',
-          style: AppTextStyles.headline2,
+          style: context.ts.heading2,
         ),
         if (state.chatUsername != null) ...[
           const SizedBox(height: 8),
           Text(
             '@${state.chatUsername}',
-            style: AppTextStyles.bodySecondary,
+            style: context.ts.bodySecondary,
           ),
         ],
         const SizedBox(height: 32),
@@ -207,10 +206,10 @@ class _TelegramSetupScreenState extends ConsumerState<TelegramSetupScreen> {
               _confirmDisconnect();
             },
             style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.error,
-              side: const BorderSide(color: AppColors.error),
+              foregroundColor: context.t.color.danger,
+              side: BorderSide(color: context.t.color.danger),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(AppTokens.radius.md),
               ),
             ),
             child: state.disconnecting

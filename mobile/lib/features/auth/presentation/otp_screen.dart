@@ -2,10 +2,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pinput/pinput.dart';
-import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_text_styles.dart';
 import '../../../core/analytics/analytics_service.dart';
 import 'auth_notifier.dart';
+import '../../../core/theme/app_tokens.dart';
 
 class OtpScreen extends ConsumerStatefulWidget {
   final String phone;
@@ -79,14 +78,14 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
     final defaultPinTheme = PinTheme(
       width: 48,
       height: 56,
-      textStyle: const TextStyle(
+      textStyle: TextStyle(
         fontSize: 22,
         fontWeight: FontWeight.w600,
-        color: AppColors.textPrimary,
+        color: context.t.color.textPrimary,
       ),
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(12),
+        color: context.t.color.surface,
+        borderRadius: BorderRadius.circular(AppTokens.radius.md),
       ),
     );
 
@@ -101,11 +100,11 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 24),
-              Text('Введи код', style: AppTextStyles.headline1),
+              Text('Введи код', style: context.ts.heading1),
               const SizedBox(height: 8),
               Text(
                 'Отправили SMS на ${widget.phone}',
-                style: AppTextStyles.bodySecondary,
+                style: context.ts.bodySecondary,
               ),
               const SizedBox(height: 32),
               Center(
@@ -118,12 +117,12 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                   focusedPinTheme: defaultPinTheme.copyWith(
                     decoration: defaultPinTheme.decoration!.copyWith(
                       border:
-                          Border.all(color: AppColors.primary, width: 2),
+                          Border.all(color: context.t.color.accent, width: 2),
                     ),
                   ),
                   errorPinTheme: defaultPinTheme.copyWith(
                     decoration: defaultPinTheme.decoration!.copyWith(
-                      border: Border.all(color: AppColors.error),
+                      border: Border.all(color: context.t.color.danger),
                     ),
                   ),
                   enabled: !state.loading,
@@ -135,7 +134,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                 Center(
                   child: Text(
                     state.error!,
-                    style: TextStyle(color: AppColors.error, fontSize: 14),
+                    style: TextStyle(color: context.t.color.danger, fontSize: 14),
                   ),
                 ),
               ],
@@ -147,13 +146,13 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                   child: _secondsLeft > 0
                       ? Text(
                           'Отправить повторно через $_formattedTime',
-                          style: AppTextStyles.caption,
+                          style: context.ts.caption,
                         )
                       : TextButton(
                           onPressed: _resend,
-                          child: const Text(
+                          child: Text(
                             'Отправить код повторно',
-                            style: TextStyle(color: AppColors.primary),
+                            style: TextStyle(color: context.t.color.accent),
                           ),
                         ),
                 ),

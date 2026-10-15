@@ -260,3 +260,115 @@ Dependabot vulnerabilities resolved (reflected in current `go.mod`):
 | `go.opentelemetry.io/otel/sdk` | v1.42.0 | High | PATH hijacking |
 
 One unresolved alert remains: `disintegration/imaging` v1.6.2 TIFF crash (low severity) — no upstream fix available.
+
+
+## Dev database connection (repa-db-dev)
+
+Yandex Cloud Managed PostgreSQL. Credentials in `secrets/pg_credentials.env` (`PG_HOST` holds **two**
+comma-separated hosts), `DATABASE_URL` in `backend/.env`.
+
+Two things make a naive connection fail in ways that look like something else:
+
+- **`target_session_attrs=read-write` is required.** With two hosts and no preference the driver may land
+  on the replica, where every DDL statement fails with `cannot execute CREATE TYPE in a read-only
+  transaction`. That reads like a permissions problem and is not one.
+  `SELECT pg_is_in_recovery()` confirms which node you reached.
+- **`sslmode=verify-full` needs the Yandex CA** at `~/.postgresql/root.crt`
+  (`https://storage.yandexcloud.net/cloud-certs/CA.pem`, `chmod 0600`). Do not lower `sslmode` to get
+  past a missing certificate.
+
+If `psql` is not installed locally, run it from a container with the CA mounted read-only, passing the
+password through `PGPASSWORD` so it never reaches a command line or a log:
+
+```
+docker run --rm -i \
+  -v "$HOME/.postgresql/root.crt:/ca.crt:ro" \
+  -e PGPASSWORD=... -e PGSSLROOTCERT=/ca.crt \
+  postgres:16-alpine \
+  psql "host=$PG_HOST port=6432 user=$PG_USER dbname=repa-db-dev sslmode=verify-full target_session_attrs=read-write" \
+  -v ON_ERROR_STOP=1 --single-transaction -f /in.sql
+```
+
+Apply migrations one file at a time with `ON_ERROR_STOP=1 --single-transaction`, so a failure rolls back
+rather than leaving the database half-migrated.
+
+**Touch only `repa-db-dev`** — never the cluster, never another database.
+
+### Migration ledger
+
+golang-migrate tracks applied versions in `schema_migrations(version, dirty)` — one row, the version being
+the integer prefix of the highest applied file (so `010_question_tone` is version **10**, not `010`).
+
+Until 2026-10-02 that table **did not exist** on `repa-db-dev`: 001–003 were applied by hand before the
+post-MVP work and 004–010 by hand during it. An absent ledger reads to golang-migrate as "nothing
+applied", so `make migrate` would have started from `001_init.up.sql`, failed on `CREATE TYPE ... already
+exists`, and marked the version **dirty** — after which every later `migrate` refuses to run until a human
+intervenes. The ledger was reconciled with `force 10`; `migrate up` now reports `no change`.
+
+Use the wrapper rather than `make migrate` for this cluster:
+
+```
+backend/scripts/migrate-dev.sh version     # what the ledger says  (make migrate-dev-status)
+backend/scripts/migrate-dev.sh up          # apply anything pending (make migrate-dev)
+backend/scripts/migrate-dev.sh force 10    # reconcile: set the version, run no DDL
+```
+
+It resolves the read-write host, mounts the CA, and runs `migrate/migrate:v4.17.1` from its own container.
+Three things it exists to handle, each of which fails as something else:
+
+- **Two hosts, one driver slot.** golang-migrate uses `lib/pq`, which takes a single host in its URL, so
+  `target_session_attrs` cannot help. The script asks each host `SELECT pg_is_in_recovery()` and uses the
+  one that answers `f`. It detects rather than hardcodes because a managed cluster fails over.
+- **`migrate version` is not read-only.** It creates `schema_migrations` before reporting `no migration`.
+  "Just checking" already writes.
+- **`force N` runs no DDL.** It is the tool for *the schema is already at N by other means* — which is
+  what reconciliation is. It is **not** a fix for a failed migration: forcing a version the schema has not
+  reached makes `migrate up` skip real migrations silently. Verify the schema first.
+
+A **dirty** ledger is what a half-applied migration leaves behind. `make migrate-dev-status` names it;
+resolving it is a decision about what actually got applied, not something to automate.
+
+### Rules going forward
+
+- Applying a migration by hand means reconciling the ledger **in the same session**, or the next person
+  inherits the trap that was just removed.
+- `make migrate-dev-status` before and after any schema work.
+- `make sqlc-check` fails when `internal/db/sqlc` does not match the `.sql` files. A stale generated
+  package compiles and silently uses the wrong query shape, so nothing else catches it.
+
+
+## CI
+
+`.github/workflows/ci.yml`. Jobs, pins and local equivalents are tabulated in `CLAUDE.md` → **CI**; this
+section records where each pin comes from and why the mobile job ends the way it does.
+
+| Pin | Value | Source of truth |
+| --- | --- | --- |
+| `GO_VERSION` | 1.26.1 | `backend/go.mod` → `go 1.26.1` |
+| `FLUTTER_VERSION` | 3.47.6 | satisfies `mobile/pubspec.yaml` → `sdk: ^3.11.1` |
+| `SQLC_VERSION` | v1.31.1 | the version `internal/db/sqlc` was generated with |
+
+Pins are deliberate. A toolchain that floats to `latest` turns an unrelated upstream release into a red
+build on someone's unrelated pull request, and the first instinct is to distrust CI rather than the pin.
+Dependabot already watches the Go modules in this repo and can raise these the same way.
+
+### The mobile job's last step
+
+`flutter analyze` rewrites `mobile/analysis_options.yaml` on every invocation ("Upgrading
+analysis_options.yaml to exclude build and platform directories"). That one file is restored from the index
+as a known side effect. Then the job fails if anything **else** is modified.
+
+Measured, not assumed: with the lockfile current, `pub get` + `analyze` + `test` modify exactly one tracked
+file, `analysis_options.yaml`. With the lockfile as committed at the time of writing, `pub get` moves four
+transitive versions — which is the drift the check exists to surface. A lockfile that does not describe what
+the pinned SDK resolves defeats the purpose of having one.
+
+The step uses `if: always()`, so a failing test does not also conceal a dirty tree.
+
+### Reproducing a CI failure
+
+Each row in the `CLAUDE.md` table is the whole command. Two notes:
+
+- `make test-e2e` needs a Docker daemon; it sets `TESTCONTAINERS_RYUK_DISABLED=true`, as CI does.
+- `make sqlc-check` compares `internal/db/sqlc` against itself across a regeneration rather than against
+  git HEAD, so it gives the same answer with uncommitted work in the tree.

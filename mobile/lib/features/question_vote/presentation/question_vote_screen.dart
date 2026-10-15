@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/error_state_widget.dart';
 import '../../../core/widgets/skeleton_loader.dart';
 import 'question_vote_notifier.dart';
 import 'widgets/question_candidate_card.dart';
+import '../../../core/theme/app_tokens.dart';
 
 class QuestionVoteScreen extends ConsumerStatefulWidget {
   final String groupId;
@@ -77,12 +76,12 @@ class _QuestionVoteScreenState extends ConsumerState<QuestionVoteScreen> {
       children: [
         Text(
           'Какой вопрос добавить на следующей неделе?',
-          style: AppTextStyles.headline2,
+          style: context.ts.heading2,
         ),
         const SizedBox(height: 4),
         Text(
           'Победивший вопрос войдёт в ротацию',
-          style: AppTextStyles.bodySecondary,
+          style: context.ts.bodySecondary,
         ),
         const SizedBox(height: 24),
         ...state.candidates.asMap().entries.map(
@@ -94,8 +93,8 @@ class _QuestionVoteScreenState extends ConsumerState<QuestionVoteScreen> {
                       .read(questionVoteProvider(widget.groupId).notifier)
                       .vote(entry.value.id),
                 ).animate().fadeIn(
-                      delay: Duration(milliseconds: 100 * entry.key),
-                      duration: 300.ms,
+                      delay: AppTokens.motion.stagger(entry.key),
+                      duration: context.motion(MotionClass.surface),
                     ),
               ),
             ),
@@ -109,12 +108,12 @@ class _QuestionVoteScreenState extends ConsumerState<QuestionVoteScreen> {
       children: [
         Text(
           'Какой вопрос добавить на следующей неделе?',
-          style: AppTextStyles.headline2,
+          style: context.ts.heading2,
         ),
         const SizedBox(height: 4),
         Text(
           'Победивший вопрос войдёт в ротацию',
-          style: AppTextStyles.bodySecondary,
+          style: context.ts.bodySecondary,
         ),
         const SizedBox(height: 24),
         if (state.candidates.isNotEmpty)
@@ -137,12 +136,12 @@ class _QuestionVoteScreenState extends ConsumerState<QuestionVoteScreen> {
                 const SizedBox(height: 16),
                 Text(
                   'Готово!',
-                  style: AppTextStyles.headline2,
+                  style: context.ts.heading2,
                 ),
                 const SizedBox(height: 8),
                 Text(
                   'Узнаешь результат в понедельник',
-                  style: AppTextStyles.bodySecondary,
+                  style: context.ts.bodySecondary,
                 ),
               ],
             ),
@@ -152,8 +151,8 @@ class _QuestionVoteScreenState extends ConsumerState<QuestionVoteScreen> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: AppColors.primaryLight,
-              borderRadius: BorderRadius.circular(12),
+              color: context.t.color.accentFill.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(AppTokens.radius.md),
             ),
             child: Row(
               children: [
@@ -162,15 +161,15 @@ class _QuestionVoteScreenState extends ConsumerState<QuestionVoteScreen> {
                 Expanded(
                   child: Text(
                     'Готово! Узнаешь результат в понедельник',
-                    style: AppTextStyles.body.copyWith(
-                      color: AppColors.primary,
+                    style: context.ts.body.copyWith(
+                      color: context.t.color.accent,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
                 ),
               ],
             ),
-          ).animate().fadeIn(duration: 300.ms).slideY(
+          ).animate().fadeIn(duration: context.motion(MotionClass.surface)).slideY(
                 begin: 0.3,
                 end: 0,
                 curve: Curves.easeOut,
@@ -191,13 +190,13 @@ class _QuestionVoteScreenState extends ConsumerState<QuestionVoteScreen> {
             const SizedBox(height: 24),
             Text(
               'Голосование за вопросы',
-              style: AppTextStyles.headline2,
+              style: context.ts.heading2,
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               'Откроется в воскресенье в полдень',
-              style: AppTextStyles.bodySecondary,
+              style: context.ts.bodySecondary,
               textAlign: TextAlign.center,
             ),
           ],

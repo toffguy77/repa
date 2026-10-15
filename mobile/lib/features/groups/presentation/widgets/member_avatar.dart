@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../../../../core/theme/app_colors.dart';
+import '../../../../core/theme/app_tokens.dart';
 
 class MemberAvatar extends StatelessWidget {
   final String? avatarEmoji;
@@ -25,7 +25,7 @@ class MemberAvatar extends StatelessWidget {
           width: size,
           height: size,
           decoration: BoxDecoration(
-            color: AppColors.primaryLight,
+            color: context.t.color.accentFill.withValues(alpha: 0.18),
             shape: BoxShape.circle,
             image: avatarUrl != null
                 ? DecorationImage(
@@ -49,8 +49,8 @@ class MemberAvatar extends StatelessWidget {
             bottom: -4,
             child: Container(
               padding: const EdgeInsets.all(2),
-              decoration: const BoxDecoration(
-                color: Colors.white,
+              decoration: BoxDecoration(
+                color: context.t.elevation.level1.surface,
                 shape: BoxShape.circle,
               ),
               child: Text(

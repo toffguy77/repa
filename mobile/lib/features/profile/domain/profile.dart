@@ -35,7 +35,13 @@ class UserStats with _$UserStats {
     @JsonKey(name: 'seasons_played') required int seasonsPlayed,
     @JsonKey(name: 'voting_streak') required int votingStreak,
     @JsonKey(name: 'max_voting_streak') required int maxVotingStreak,
-    @JsonKey(name: 'guess_accuracy') required double guessAccuracy,
+    /// How often this member's votes matched the group's result.
+    ///
+    /// Nullable because the server sends it **only on one's own profile**: each question's winner is
+    /// published, so another member's figure at either extreme pins their individual votes, and the
+    /// figure is a rolling average that two consecutive readings can difference into a week's match
+    /// count. Absent is not zero — the tile is hidden rather than showing 0%.
+    @JsonKey(name: 'guess_accuracy') double? guessAccuracy,
     @JsonKey(name: 'total_votes_cast') required int totalVotesCast,
     @JsonKey(name: 'total_votes_received') required int totalVotesReceived,
     @JsonKey(name: 'top_attribute_all_time') TopAttributeDto? topAttributeAllTime,

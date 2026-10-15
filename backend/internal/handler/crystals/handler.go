@@ -3,6 +3,7 @@ package crystals
 import (
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/labstack/echo/v4"
 
@@ -30,6 +31,25 @@ func (h *Handler) GetBalance(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]any{
 		"data": map[string]any{
 			"balance": balance,
+		},
+	})
+}
+
+// GetHistory lists a user's crystal movements so a grant is explainable rather than mysterious.
+func (h *Handler) GetHistory(c echo.Context) error {
+	claims := appmw.GetCurrentUser(c)
+
+	limit, _ := strconv.Atoi(c.QueryParam("limit"))
+	offset, _ := strconv.Atoi(c.QueryParam("offset"))
+
+	entries, err := h.svc.GetHistory(c.Request().Context(), claims.UserID, int32(limit), int32(offset))
+	if err != nil {
+		return handler.ErrorResponse(c, http.StatusInternalServerError, "INTERNAL", "Something went wrong")
+	}
+
+	return c.JSON(http.StatusOK, map[string]any{
+		"data": map[string]any{
+			"entries": entries,
 		},
 	})
 }

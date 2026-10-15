@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:share_plus/share_plus.dart';
 import '../../../core/providers/auth_provider.dart';
-import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_text_styles.dart';
 import '../../../core/analytics/analytics_service.dart';
 import 'groups_notifier.dart';
+import '../../../core/theme/app_tokens.dart';
+import 'widgets/invite_share_sheet.dart';
+import '../../../core/widgets/kit/kit.dart';
 
 const _allCategories = [
   ('HOT', '\u{1F525} Горячее'),
@@ -30,6 +30,12 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
   final _telegramController = TextEditingController();
   final _selectedCategories = <String>{};
 
+  /// Null until the creator touches the switch, which is the whole point: the age-based default lives
+  /// on the server, and sending a value we guessed would override it — wrongly, whenever the app does
+  /// not know the creator's birth year. The switch below still *shows* the default so it is not a
+  /// hidden setting; it just does not transmit it.
+  bool? _kindOnlyChoice;
+
   @override
   void dispose() {
     _nameController.dispose();
@@ -47,98 +53,47 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
           name: _nameController.text.trim(),
           categories: _selectedCategories.toList(),
           telegramUsername: _telegramController.text.trim().replaceAll('@', ''),
+          kindOnly: _kindOnlyChoice,
         );
     if (result != null && mounted) {
       ref.read(analyticsProvider).logGroupCreated();
       ref.read(groupsListProvider.notifier).refresh();
-      _showInviteSheet(result.inviteUrl);
+      _showInviteSheet(result.group.inviteCode);
     }
   }
 
-  void _showInviteSheet(String inviteUrl) {
-    showModalBottomSheet(
+  void _showInviteSheet(String inviteCode) {
+    showAppSheet<void>(
       context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('\u{1F389}', style: TextStyle(fontSize: 48)),
-            const SizedBox(height: 12),
-            Text('Группа создана!', style: AppTextStyles.headline2),
-            const SizedBox(height: 8),
-            Text(
-              'Поделись ссылкой с друзьями',
-              style: AppTextStyles.bodySecondary,
-            ),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      inviteUrl,
-                      style: AppTextStyles.caption,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.copy, size: 20),
-                    onPressed: () {
-                      Clipboard.setData(ClipboardData(text: inviteUrl));
-                      ScaffoldMessenger.of(ctx).showSnackBar(
-                        const SnackBar(content: Text('Ссылка скопирована')),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  Share.share(inviteUrl);
-                },
-                icon: const Icon(Icons.share),
-                label: const Text('Поделиться'),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                context.go('/home');
-              },
-              child: const Text('Готово'),
-            ),
-          ],
-        ),
+      builder: (ctx) => InviteShareSheet(
+        inviteCode: inviteCode,
+        title: 'Группа создана!',
+        onDone: () {
+          Navigator.pop(ctx);
+          context.go('/home');
+        },
       ),
     );
   }
 
   List<(String, String)> _availableCategories(WidgetRef ref) {
-    final user = ref.read(authProvider).user;
-    final birthYear = user?.birthYear;
-    final isUnder18 = birthYear != null &&
-        (DateTime.now().year - birthYear) < 18;
-    if (isUnder18) {
+    if (_isUnder18(ref)) {
       return _allCategories.where((c) => c.$1 != 'ROMANCE').toList();
     }
     return _allCategories;
   }
+
+  /// An unknown birth year counts as under 18, the same way the ROMANCE restriction treats it and the
+  /// same way the server's default does — one notion of "under 18" across the product.
+  bool _isUnder18(WidgetRef ref) {
+    final birthYear = ref.read(authProvider).user?.birthYear;
+    if (birthYear == null) return true;
+    return DateTime.now().year - birthYear < 18;
+  }
+
+  /// What the switch shows before anyone touches it. Mirrors the server's rule so the position the
+  /// creator sees is the one that will actually apply.
+  bool _kindOnlyDisplayed(WidgetRef ref) => _kindOnlyChoice ?? _isUnder18(ref);
 
   @override
   Widget build(BuildContext context) {
@@ -150,7 +105,7 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text('Название', style: AppTextStyles.body),
+          Text('Название', style: context.ts.body),
           const SizedBox(height: 8),
           TextField(
             controller: _nameController,
@@ -162,7 +117,7 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
             onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 20),
-          Text('Категории вопросов', style: AppTextStyles.body),
+          Text('Категории вопросов', style: context.ts.body),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -172,8 +127,8 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
               return FilterChip(
                 label: Text(cat.$2),
                 selected: selected,
-                selectedColor: AppColors.primaryLight,
-                checkmarkColor: AppColors.primary,
+                selectedColor: context.t.color.accentFill.withValues(alpha: 0.18),
+                checkmarkColor: context.t.color.accent,
                 onSelected: (val) {
                   HapticFeedback.selectionClick();
                   setState(() {
@@ -188,7 +143,38 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
             }).toList(),
           ),
           const SizedBox(height: 20),
-          Text('Telegram (необязательно)', style: AppTextStyles.body),
+          AppCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text('Только добрые вопросы',
+                          style: context.ts.body),
+                    ),
+                    Switch(
+                      value: _kindOnlyDisplayed(ref),
+                      onChanged: (val) {
+                        HapticFeedback.selectionClick();
+                        setState(() => _kindOnlyChoice = val);
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                // Stated as what the group will and will not be asked, rather than as an
+                // unexplained toggle — nobody turns on a switch they cannot predict.
+                Text(
+                  'Группа будет получать только приятные и нейтральные вопросы. '
+                  'Колкие вопросы — про сплетни, зависть, «кто хуже всех» — приходить не будут.',
+                  style: context.ts.caption,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text('Telegram (необязательно)', style: context.ts.body),
           const SizedBox(height: 8),
           TextField(
             controller: _telegramController,
@@ -201,7 +187,7 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
             const SizedBox(height: 12),
             Text(
               state.error!,
-              style: AppTextStyles.caption.copyWith(color: AppColors.error),
+              style: context.ts.caption.copyWith(color: context.t.color.danger),
             ),
           ],
           const SizedBox(height: 32),
@@ -210,12 +196,12 @@ class _CreateGroupScreenState extends ConsumerState<CreateGroupScreen> {
             child: ElevatedButton(
               onPressed: _isValid && !state.loading ? _create : null,
               child: state.loading
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 24,
                       height: 24,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        color: Colors.white,
+                        color: context.t.color.onAccentFill,
                       ),
                     )
                   : const Text('Создать'),

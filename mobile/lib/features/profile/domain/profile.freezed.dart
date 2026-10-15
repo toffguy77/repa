@@ -488,8 +488,15 @@ mixin _$UserStats {
   int get votingStreak => throw _privateConstructorUsedError;
   @JsonKey(name: 'max_voting_streak')
   int get maxVotingStreak => throw _privateConstructorUsedError;
+
+  /// How often this member's votes matched the group's result.
+  ///
+  /// Nullable because the server sends it **only on one's own profile**: each question's winner is
+  /// published, so another member's figure at either extreme pins their individual votes, and the
+  /// figure is a rolling average that two consecutive readings can difference into a week's match
+  /// count. Absent is not zero — the tile is hidden rather than showing 0%.
   @JsonKey(name: 'guess_accuracy')
-  double get guessAccuracy => throw _privateConstructorUsedError;
+  double? get guessAccuracy => throw _privateConstructorUsedError;
   @JsonKey(name: 'total_votes_cast')
   int get totalVotesCast => throw _privateConstructorUsedError;
   @JsonKey(name: 'total_votes_received')
@@ -513,7 +520,7 @@ abstract class $UserStatsCopyWith<$Res> {
       {@JsonKey(name: 'seasons_played') int seasonsPlayed,
       @JsonKey(name: 'voting_streak') int votingStreak,
       @JsonKey(name: 'max_voting_streak') int maxVotingStreak,
-      @JsonKey(name: 'guess_accuracy') double guessAccuracy,
+      @JsonKey(name: 'guess_accuracy') double? guessAccuracy,
       @JsonKey(name: 'total_votes_cast') int totalVotesCast,
       @JsonKey(name: 'total_votes_received') int totalVotesReceived,
       @JsonKey(name: 'top_attribute_all_time')
@@ -538,7 +545,7 @@ class _$UserStatsCopyWithImpl<$Res, $Val extends UserStats>
     Object? seasonsPlayed = null,
     Object? votingStreak = null,
     Object? maxVotingStreak = null,
-    Object? guessAccuracy = null,
+    Object? guessAccuracy = freezed,
     Object? totalVotesCast = null,
     Object? totalVotesReceived = null,
     Object? topAttributeAllTime = freezed,
@@ -556,10 +563,10 @@ class _$UserStatsCopyWithImpl<$Res, $Val extends UserStats>
           ? _value.maxVotingStreak
           : maxVotingStreak // ignore: cast_nullable_to_non_nullable
               as int,
-      guessAccuracy: null == guessAccuracy
+      guessAccuracy: freezed == guessAccuracy
           ? _value.guessAccuracy
           : guessAccuracy // ignore: cast_nullable_to_non_nullable
-              as double,
+              as double?,
       totalVotesCast: null == totalVotesCast
           ? _value.totalVotesCast
           : totalVotesCast // ignore: cast_nullable_to_non_nullable
@@ -600,7 +607,7 @@ abstract class _$$UserStatsImplCopyWith<$Res>
       {@JsonKey(name: 'seasons_played') int seasonsPlayed,
       @JsonKey(name: 'voting_streak') int votingStreak,
       @JsonKey(name: 'max_voting_streak') int maxVotingStreak,
-      @JsonKey(name: 'guess_accuracy') double guessAccuracy,
+      @JsonKey(name: 'guess_accuracy') double? guessAccuracy,
       @JsonKey(name: 'total_votes_cast') int totalVotesCast,
       @JsonKey(name: 'total_votes_received') int totalVotesReceived,
       @JsonKey(name: 'top_attribute_all_time')
@@ -624,7 +631,7 @@ class __$$UserStatsImplCopyWithImpl<$Res>
     Object? seasonsPlayed = null,
     Object? votingStreak = null,
     Object? maxVotingStreak = null,
-    Object? guessAccuracy = null,
+    Object? guessAccuracy = freezed,
     Object? totalVotesCast = null,
     Object? totalVotesReceived = null,
     Object? topAttributeAllTime = freezed,
@@ -642,10 +649,10 @@ class __$$UserStatsImplCopyWithImpl<$Res>
           ? _value.maxVotingStreak
           : maxVotingStreak // ignore: cast_nullable_to_non_nullable
               as int,
-      guessAccuracy: null == guessAccuracy
+      guessAccuracy: freezed == guessAccuracy
           ? _value.guessAccuracy
           : guessAccuracy // ignore: cast_nullable_to_non_nullable
-              as double,
+              as double?,
       totalVotesCast: null == totalVotesCast
           ? _value.totalVotesCast
           : totalVotesCast // ignore: cast_nullable_to_non_nullable
@@ -669,7 +676,7 @@ class _$UserStatsImpl implements _UserStats {
       {@JsonKey(name: 'seasons_played') required this.seasonsPlayed,
       @JsonKey(name: 'voting_streak') required this.votingStreak,
       @JsonKey(name: 'max_voting_streak') required this.maxVotingStreak,
-      @JsonKey(name: 'guess_accuracy') required this.guessAccuracy,
+      @JsonKey(name: 'guess_accuracy') this.guessAccuracy,
       @JsonKey(name: 'total_votes_cast') required this.totalVotesCast,
       @JsonKey(name: 'total_votes_received') required this.totalVotesReceived,
       @JsonKey(name: 'top_attribute_all_time') this.topAttributeAllTime});
@@ -686,9 +693,16 @@ class _$UserStatsImpl implements _UserStats {
   @override
   @JsonKey(name: 'max_voting_streak')
   final int maxVotingStreak;
+
+  /// How often this member's votes matched the group's result.
+  ///
+  /// Nullable because the server sends it **only on one's own profile**: each question's winner is
+  /// published, so another member's figure at either extreme pins their individual votes, and the
+  /// figure is a rolling average that two consecutive readings can difference into a week's match
+  /// count. Absent is not zero — the tile is hidden rather than showing 0%.
   @override
   @JsonKey(name: 'guess_accuracy')
-  final double guessAccuracy;
+  final double? guessAccuracy;
   @override
   @JsonKey(name: 'total_votes_cast')
   final int totalVotesCast;
@@ -756,7 +770,7 @@ abstract class _UserStats implements UserStats {
       {@JsonKey(name: 'seasons_played') required final int seasonsPlayed,
       @JsonKey(name: 'voting_streak') required final int votingStreak,
       @JsonKey(name: 'max_voting_streak') required final int maxVotingStreak,
-      @JsonKey(name: 'guess_accuracy') required final double guessAccuracy,
+      @JsonKey(name: 'guess_accuracy') final double? guessAccuracy,
       @JsonKey(name: 'total_votes_cast') required final int totalVotesCast,
       @JsonKey(name: 'total_votes_received')
       required final int totalVotesReceived,
@@ -776,8 +790,15 @@ abstract class _UserStats implements UserStats {
   @JsonKey(name: 'max_voting_streak')
   int get maxVotingStreak;
   @override
+
+  /// How often this member's votes matched the group's result.
+  ///
+  /// Nullable because the server sends it **only on one's own profile**: each question's winner is
+  /// published, so another member's figure at either extreme pins their individual votes, and the
+  /// figure is a rolling average that two consecutive readings can difference into a week's match
+  /// count. Absent is not zero — the tile is hidden rather than showing 0%.
   @JsonKey(name: 'guess_accuracy')
-  double get guessAccuracy;
+  double? get guessAccuracy;
   @override
   @JsonKey(name: 'total_votes_cast')
   int get totalVotesCast;

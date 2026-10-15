@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:repa/core/widgets/error_state_widget.dart';
+import 'package:repa/core/theme/app_theme.dart';
 
 void main() {
   Widget buildWidget({String? message, VoidCallback? onRetry}) {
     return MaterialApp(
+      theme: AppTheme.dark,
       home: Scaffold(
         body: ErrorStateWidget(message: message, onRetry: onRetry),
       ),

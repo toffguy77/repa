@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
+	db "github.com/repa-app/repa/internal/db/sqlc"
 	"github.com/repa-app/repa/internal/lib"
 	revealsvc "github.com/repa-app/repa/internal/service/reveal"
 	"github.com/rs/zerolog/log"
@@ -17,12 +18,19 @@ type RevealPayload struct {
 	Attempt  int    `json:"attempt"`
 }
 
-type RevealChecker struct {
-	svc    *revealsvc.Service
-	client *asynq.Client
+// Enqueuer is the slice of *asynq.Client the reveal workers use. Depending on the
+// interface instead of the concrete client lets tests assert exactly which follow-up
+// tasks a reveal produces, which is the behaviour the spec constrains.
+type Enqueuer interface {
+	Enqueue(task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error)
 }
 
-func NewRevealChecker(svc *revealsvc.Service, client *asynq.Client) *RevealChecker {
+type RevealChecker struct {
+	svc    *revealsvc.Service
+	client Enqueuer
+}
+
+func NewRevealChecker(svc *revealsvc.Service, client Enqueuer) *RevealChecker {
 	return &RevealChecker{svc: svc, client: client}
 }
 
@@ -54,10 +62,10 @@ func (h *RevealChecker) HandleRevealChecker(ctx context.Context, t *asynq.Task) 
 
 type RevealProcessor struct {
 	svc    *revealsvc.Service
-	client *asynq.Client
+	client Enqueuer
 }
 
-func NewRevealProcessor(svc *revealsvc.Service, client *asynq.Client) *RevealProcessor {
+func NewRevealProcessor(svc *revealsvc.Service, client Enqueuer) *RevealProcessor {
 	return &RevealProcessor{svc: svc, client: client}
 }
 
@@ -92,7 +100,31 @@ func (h *RevealProcessor) HandleRevealProcess(ctx context.Context, t *asynq.Task
 		return nil
 	}
 
+	if result.Postponed {
+		// No card, no achievements, no Telegram post — the season never revealed. Tell the
+		// group what it is waiting for instead.
+		postponePayload, _ := json.Marshal(PostponePushPayload{
+			SeasonID:     p.SeasonID,
+			VotersNeeded: result.VotersNeeded,
+		})
+		postponeTask := asynq.NewTask(lib.TypePushPostponed, postponePayload)
+		if _, err := h.client.Enqueue(postponeTask, asynq.Queue("default")); err != nil {
+			log.Error().Err(err).Str("season_id", p.SeasonID).Msg("failed to enqueue postponement push")
+		}
+		return nil
+	}
+
 	if result.Revealed {
+		// A kickoff reveal can land any day of the week, so the group would otherwise sit
+		// without an open season until Sunday. Start its weekly cycle right away.
+		if result.Kind == db.SeasonKindKICKOFF && result.GroupID != "" {
+			seasonPayload, _ := json.Marshal(SeasonForGroupPayload{GroupID: result.GroupID})
+			seasonTask := asynq.NewTask(lib.TypeSeasonForGroup, seasonPayload)
+			if _, err := h.client.Enqueue(seasonTask, asynq.Queue("critical")); err != nil {
+				log.Error().Err(err).Str("group_id", result.GroupID).Msg("failed to enqueue follow-up weekly season")
+			}
+		}
+
 		// Enqueue downstream jobs (T11, T17, T19 — stubs for now)
 		achievePayload, _ := json.Marshal(map[string]string{"season_id": p.SeasonID})
 		achieveTask := asynq.NewTask(lib.TypeAchievements, achievePayload)
@@ -122,4 +154,10 @@ func (h *RevealProcessor) HandleRevealProcess(ctx context.Context, t *asynq.Task
 	}
 
 	return nil
+}
+
+// PostponePushPayload tells the push worker how many more voters a postponed season needs.
+type PostponePushPayload struct {
+	SeasonID     string `json:"season_id"`
+	VotersNeeded int64  `json:"voters_needed"`
 }

@@ -20,21 +20,24 @@ var (
 	ErrNotAdmin      = errors.New("only admin can perform this action")
 	ErrCodeNotFound  = errors.New("connect code not found or expired")
 	ErrBotNotAdmin   = errors.New("bot must be an administrator of the chat")
-	ErrNoTelegram    = errors.New("group has no linked telegram chat")
-	ErrNotMember     = errors.New("user is not a member of this group")
+	// ErrChatAlreadyConnected means the chat is linked to a different group. Reported rather than
+	// silently re-pointed, so losing a group's announcements is always a deliberate choice.
+	ErrChatAlreadyConnected = errors.New("chat is already connected to another group")
+	ErrNoTelegram           = errors.New("group has no linked telegram chat")
+	ErrNotMember            = errors.New("user is not a member of this group")
 )
 
 type Service struct {
-	queries  db.Querier
-	bot      *lib.TelegramClient
-	baseURL  string
+	queries db.Querier
+	bot     *lib.TelegramClient
+	baseURL string
 }
 
 func NewService(queries db.Querier, bot *lib.TelegramClient, baseURL string) *Service {
 	return &Service{
-		queries:  queries,
-		bot:      bot,
-		baseURL:  baseURL,
+		queries: queries,
+		bot:     bot,
+		baseURL: baseURL,
 	}
 }
 
@@ -95,6 +98,22 @@ func (s *Service) HandleConnect(ctx context.Context, chatID int64, chatUsername,
 			return "", ErrCodeNotFound
 		}
 		return "", err
+	}
+
+	// A chat already pointed at a different group must not be moved silently: every future
+	// announcement would go to the new group, invisible to the first group's members, who would
+	// simply stop hearing from the bot.
+	chatIDStr := strconv.FormatInt(chatID, 10)
+	existing, err := s.queries.GetGroupByTelegramChatID(ctx, sql.NullString{String: chatIDStr, Valid: true})
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return "", err
+	}
+	if err == nil && existing.ID != group.ID {
+		return "", ErrChatAlreadyConnected
+	}
+	if err == nil && existing.ID == group.ID {
+		// Reconnecting the same group is idempotent; a code pasted twice is not an error.
+		return group.Name, nil
 	}
 
 	// Check bot is admin in the chat
@@ -305,7 +324,14 @@ func (s *Service) ShareCard(ctx context.Context, userID, seasonID string) error 
 }
 
 // SendMessage sends a plain text message to a Telegram chat (fire-and-forget from webhook).
+//
+// A nil bot is a no-op rather than a panic: the Telegram integration is optional (the service is
+// only constructed when a token is configured), and this is called from a detached goroutine
+// where a panic would take the process down instead of failing a request.
 func (s *Service) SendMessage(chatID int64, text string) error {
+	if s.bot == nil {
+		return nil
+	}
 	return s.bot.SendMessage(context.Background(), chatID, text, nil)
 }
 
@@ -316,4 +342,49 @@ func randomAlphaNum(n int) string {
 		b[i] = charset[rand.Intn(len(charset))]
 	}
 	return string(b)
+}
+
+// HandleJoinCommand answers /join in a chat.
+//
+// This is the acquisition path Gas never had: the chat already contains the exact people who
+// should be in the group, and the bot is already in the chat. A group is worth nothing until it
+// has three members, and before this the founder's only tools were a link and a code they had to
+// distribute by hand.
+//
+// The reply names the group — a person may be in several connected chats, and a bare link does
+// not say which group it leads to — and carries the Telegram channel marker so chat-driven joins
+// are measurable next to card-driven ones.
+func (s *Service) HandleJoinCommand(ctx context.Context, chatID int64) (string, error) {
+	chatIDStr := strconv.FormatInt(chatID, 10)
+
+	group, err := s.queries.GetGroupByTelegramChatID(ctx, sql.NullString{String: chatIDStr, Valid: true})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// Deliberately reveals no group. Resolving some other group for a chat that was never
+			// connected would be a cross-chat leak; the failure worth designing against here is a
+			// bot that is too helpful.
+			return "Этот чат не привязан к группе в Репе.\n\n" +
+				"Создай группу в приложении, добавь @repaapp_bot в чат и напиши /connect <код>.", nil
+		}
+		return "", err
+	}
+
+	return fmt.Sprintf(
+		"Группа «%s» в Репе 🍆\n\nЗалетай: %s",
+		group.Name, inviteURLForTelegram(group.InviteCode),
+	), nil
+}
+
+// HelpText lists what the bot can do. A command nobody knows exists is not a channel.
+func (s *Service) HelpText() string {
+	return "Что я умею:\n\n" +
+		"/join — ссылка, чтобы вступить в группу этого чата\n" +
+		"/repa — статус текущего сезона\n" +
+		"/connect <код> — привязать этот чат к группе (код берётся в приложении)\n" +
+		"/disconnect — отвязать чат"
+}
+
+// inviteURLForTelegram builds the invite the bot hands out, marked as coming from Telegram.
+func inviteURLForTelegram(inviteCode string) string {
+	return fmt.Sprintf("https://repa.app/join/%s?s=telegram", inviteCode)
 }

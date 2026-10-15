@@ -57,11 +57,19 @@ func (p *PushProcessor) HandleTuesdaySignal(ctx context.Context, t *asynq.Task) 
 			continue
 		}
 
-		// Send to members who already voted (they know someone answered about them)
-		p.svc.SendToUsers(ctx, votedUsers, db.PushCategoryREMINDER,
+		// Only the members whose anticipation screen will actually show a non-zero count. A push
+		// that promises intrigue and delivers nothing teaches the recipient to ignore the next one,
+		// which costs the pushes that do work.
+		recipients := p.withVotesAbout(ctx, season.ID, votedUsers)
+
+		p.svc.SendToUsers(ctx, recipients, db.PushCategoryREMINDER,
 			"Кто-то уже ответил на вопросы про тебя 👀",
-			"Зайди и посмотри, кто активен",
-			map[string]string{"screen": "reveal-waiting", "groupId": season.GroupID},
+			"Зайди и посмотри, сколько уже проголосовало",
+			map[string]string{
+				"screen":   "reveal-waiting",
+				"groupId":  season.GroupID,
+				"seasonId": season.ID,
+			},
 		)
 	}
 
@@ -166,10 +174,17 @@ func (p *PushProcessor) HandleThursdayTeaser(ctx context.Context, t *asynq.Task)
 			continue
 		}
 
-		p.svc.SendToUsers(ctx, votedUsers, db.PushCategoryREMINDER,
+		// A teaser only exists for a member who has received votes.
+		recipients := p.withVotesAbout(ctx, season.ID, votedUsers)
+
+		p.svc.SendToUsers(ctx, recipients, db.PushCategoryREMINDER,
 			fmt.Sprintf("Один твой атрибут уже почти определился… %s", emoji),
 			"Скоро Reveal — узнай, что думают о тебе",
-			map[string]string{"screen": "reveal-waiting", "groupId": season.GroupID},
+			map[string]string{
+				"screen":   "reveal-waiting",
+				"groupId":  season.GroupID,
+				"seasonId": season.ID,
+			},
 		)
 	}
 
@@ -297,3 +312,151 @@ func (p *PushProcessor) HandleReactionPush(ctx context.Context, t *asynq.Task) e
 	)
 }
 
+// PostponedPushPayload mirrors tasks.PostponePushPayload written by the reveal worker.
+type PostponedPushPayload struct {
+	SeasonID     string `json:"season_id"`
+	VotersNeeded int64  `json:"voters_needed"`
+}
+
+// HandleRevealPostponed — the Reveal could not happen because too few people voted.
+// Tells the group what it is waiting for instead of leaving them with silence.
+func (p *PushProcessor) HandleRevealPostponed(ctx context.Context, t *asynq.Task) error {
+	var payload PostponedPushPayload
+	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
+		return fmt.Errorf("unmarshal postponed push payload: %w", err)
+	}
+
+	queries := p.svc.Queries()
+	season, err := queries.GetSeasonByID(ctx, payload.SeasonID)
+	if err != nil {
+		return fmt.Errorf("get season: %w", err)
+	}
+
+	if err := p.svc.SendToGroupMembers(ctx, season.GroupID, db.PushCategoryREMINDER,
+		"Репа ещё не готова",
+		postponedPushBody(payload.VotersNeeded),
+		map[string]string{"screen": "vote", "groupId": season.GroupID, "seasonId": season.ID},
+	); err != nil {
+		return fmt.Errorf("send postponed push: %w", err)
+	}
+
+	return nil
+}
+
+// postponedPushBody phrases the shortfall in Russian with correct plural forms.
+func postponedPushBody(votersNeeded int64) string {
+	if votersNeeded <= 0 {
+		return "Ждём ещё голосов — Reveal будет в следующую пятницу."
+	}
+	return fmt.Sprintf("Не хватает %d %s — позови своих, и откроем репу.",
+		votersNeeded, pluralPeople(votersNeeded))
+}
+
+// pluralPeople returns the Russian plural form of "человек" for n.
+func pluralPeople(n int64) string {
+	mod100 := n % 100
+	if mod100 >= 11 && mod100 <= 14 {
+		return "человек"
+	}
+	switch n % 10 {
+	case 1:
+		return "человека"
+	case 2, 3, 4:
+		return "человека"
+	default:
+		return "человек"
+	}
+}
+
+// KickoffScheduledPushPayload announces that a new group's first Reveal is imminent.
+type KickoffScheduledPushPayload struct {
+	SeasonID string `json:"season_id"`
+}
+
+// HandleKickoffScheduled — the group just became reveal-eligible for the first time and
+// its Reveal fires within the hour. This is the push that makes the kickoff feel like an
+// event rather than a page refresh.
+func (p *PushProcessor) HandleKickoffScheduled(ctx context.Context, t *asynq.Task) error {
+	var payload KickoffScheduledPushPayload
+	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
+		return fmt.Errorf("unmarshal kickoff push payload: %w", err)
+	}
+
+	queries := p.svc.Queries()
+	season, err := queries.GetSeasonByID(ctx, payload.SeasonID)
+	if err != nil {
+		return fmt.Errorf("get season: %w", err)
+	}
+
+	if err := p.svc.SendToGroupMembers(ctx, season.GroupID, db.PushCategoryREVEAL,
+		"Первая репа — через час 🍆",
+		"Голосов хватило. Успей проголосовать, если ещё не.",
+		map[string]string{"screen": "reveal-waiting", "groupId": season.GroupID, "seasonId": season.ID},
+	); err != nil {
+		return fmt.Errorf("send kickoff scheduled push: %w", err)
+	}
+
+	return nil
+}
+
+// VoteSignalPayload tells a member that the number of people who answered about them went up.
+type VoteSignalPayload struct {
+	TargetID string `json:"target_id"`
+	SeasonID string `json:"season_id"`
+	GroupID  string `json:"group_id"`
+}
+
+// HandleVoteSignal — someone answered a question about this member.
+//
+// Deliberately says nothing about who voted or what they chose: the whole point of the week between
+// voting and the Reveal is that the *what* stays sealed. Debounced to once per recipient per MSK day,
+// so a 20-person group cannot turn an evening into 19 notifications.
+func (p *PushProcessor) HandleVoteSignal(ctx context.Context, t *asynq.Task) error {
+	var payload VoteSignalPayload
+	if err := json.Unmarshal(t.Payload(), &payload); err != nil {
+		return fmt.Errorf("unmarshal vote signal payload: %w", err)
+	}
+
+	if !p.svc.ClaimDailySignal(ctx, payload.TargetID) {
+		// Already told them today.
+		return nil
+	}
+
+	if err := p.svc.SendToUser(ctx, payload.TargetID, db.PushCategoryREMINDER,
+		"Кто-то ответил про тебя \U0001F440",
+		"Открой — посмотри, сколько уже проголосовало.",
+		map[string]string{
+			"screen":   "reveal-waiting",
+			"groupId":  payload.GroupID,
+			"seasonId": payload.SeasonID,
+		},
+	); err != nil {
+		return fmt.Errorf("send vote signal: %w", err)
+	}
+
+	return nil
+}
+
+// withVotesAbout filters candidates down to those about whom at least one other member has voted.
+//
+// Costs one query per candidate, bounded by group size and run twice a week off-peak. The alternative
+// is the previous behaviour: promising a count to people who have none.
+func (p *PushProcessor) withVotesAbout(ctx context.Context, seasonID string, candidates []string) []string {
+	queries := p.svc.Queries()
+	out := make([]string, 0, len(candidates))
+
+	for _, userID := range candidates {
+		count, err := queries.CountVotersAboutTarget(ctx, db.CountVotersAboutTargetParams{
+			SeasonID: seasonID,
+			TargetID: userID,
+		})
+		if err != nil {
+			log.Warn().Err(err).Str("user_id", userID).Msg("could not check votes about user; skipping")
+			continue
+		}
+		if count > 0 {
+			out = append(out, userID)
+		}
+	}
+	return out
+}

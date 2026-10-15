@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/empty_state_widget.dart';
 import '../../../core/widgets/error_state_widget.dart';
 import '../../../core/widgets/skeleton_loader.dart';
@@ -11,6 +9,7 @@ import '../domain/profile.dart';
 import 'profile_notifier.dart';
 import 'widgets/achievement_badge.dart';
 import 'widgets/stat_card.dart';
+import '../../../core/theme/app_tokens.dart';
 
 class MemberProfileScreen extends ConsumerStatefulWidget {
   final String groupId;
@@ -128,13 +127,13 @@ class _MemberProfileScreenState extends ConsumerState<MemberProfileScreen> {
             children: [
               Text(
                 profile.user.username,
-                style: AppTextStyles.headline1.copyWith(fontSize: 24),
+                style: context.ts.heading1.copyWith(fontSize: 24),
               ),
               if (profile.stats.topAttributeAllTime != null)
                 Text(
                   profile.stats.topAttributeAllTime!.questionText,
-                  style: AppTextStyles.caption.copyWith(
-                    color: AppColors.primary,
+                  style: context.ts.caption.copyWith(
+                    color: context.t.color.accent,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -142,31 +141,31 @@ class _MemberProfileScreenState extends ConsumerState<MemberProfileScreen> {
           ),
         ),
       ],
-    ).animate().fadeIn(duration: 400.ms).slideY(begin: -0.1, duration: 400.ms);
+    ).animate().fadeIn(duration: context.motion(MotionClass.emphasis)).slideY(begin: -0.1, duration: context.motion(MotionClass.emphasis));
   }
 
   Widget _buildLegend(String legend) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.primaryLight,
-        borderRadius: BorderRadius.circular(12),
+        color: context.t.color.accentFill.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(AppTokens.radius.md),
       ),
       child: Text(
         legend,
-        style: AppTextStyles.body.copyWith(
+        style: context.ts.body.copyWith(
           fontStyle: FontStyle.italic,
-          color: AppColors.textPrimary,
+          color: context.t.color.textPrimary,
         ),
       ),
-    ).animate().fadeIn(duration: 400.ms, delay: 100.ms);
+    ).animate().fadeIn(duration: context.motion(MotionClass.emphasis), delay: AppTokens.motion.stagger(2));
   }
 
   Widget _buildStats(UserStats stats) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Статистика', style: AppTextStyles.headline2.copyWith(fontSize: 18)),
+        Text('Статистика', style: context.ts.heading2.copyWith(fontSize: 18)),
         const SizedBox(height: 12),
         GridView.count(
           crossAxisCount: 2,
@@ -186,11 +185,15 @@ class _MemberProfileScreenState extends ConsumerState<MemberProfileScreen> {
               value: stats.votingStreak.toString(),
               icon: Icons.local_fire_department,
             ),
-            StatCard(
-              label: 'Точность угадывания',
-              value: '${stats.guessAccuracy}%',
-              icon: Icons.track_changes,
-            ),
+            // Shown only when the server sent it, which is only on one's own profile. Rendering a
+            // fallback here would turn "withheld" into "0% — never guessed right", which is a
+            // different and false claim about another member.
+            if (stats.guessAccuracy != null)
+              StatCard(
+                label: 'Точность угадывания',
+                value: '${stats.guessAccuracy}%',
+                icon: Icons.track_changes,
+              ),
             StatCard(
               label: 'Голосов получено',
               value: stats.totalVotesReceived.toString(),
@@ -214,7 +217,7 @@ class _MemberProfileScreenState extends ConsumerState<MemberProfileScreen> {
           ],
         ),
       ],
-    ).animate().fadeIn(duration: 400.ms, delay: 200.ms);
+    ).animate().fadeIn(duration: context.motion(MotionClass.emphasis), delay: AppTokens.motion.stagger(3));
   }
 
   Widget _buildAchievements(List<ProfileAchievement> achievements) {
@@ -229,7 +232,7 @@ class _MemberProfileScreenState extends ConsumerState<MemberProfileScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Ачивки', style: AppTextStyles.headline2.copyWith(fontSize: 18)),
+        Text('Ачивки', style: context.ts.heading2.copyWith(fontSize: 18)),
         const SizedBox(height: 12),
         SizedBox(
           height: 120,
@@ -248,7 +251,7 @@ class _MemberProfileScreenState extends ConsumerState<MemberProfileScreen> {
           ),
         ),
       ],
-    ).animate().fadeIn(duration: 400.ms, delay: 300.ms);
+    ).animate().fadeIn(duration: context.motion(MotionClass.emphasis), delay: AppTokens.motion.stagger(5));
   }
 
   Widget _buildSeasonHistory(List<SeasonCardDto> history) {
@@ -256,7 +259,7 @@ class _MemberProfileScreenState extends ConsumerState<MemberProfileScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('История сезонов',
-            style: AppTextStyles.headline2.copyWith(fontSize: 18)),
+            style: context.ts.heading2.copyWith(fontSize: 18)),
         const SizedBox(height: 12),
         ...List.generate(history.length, (index) {
           final card = history[index];
@@ -264,31 +267,29 @@ class _MemberProfileScreenState extends ConsumerState<MemberProfileScreen> {
             margin: const EdgeInsets.only(bottom: 8),
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
+        color: context.t.elevation.level1.surface,
+        borderRadius: AppTokens.radius.card,
+        border: Border.all(
+          color: context.t.elevation.level1.outline,
+          width: AppTokens.border.hairline,
+        ),
+        boxShadow: context.t.elevation.level1.shadows,
+      ),
             child: Row(
               children: [
                 Container(
                   width: 40,
                   height: 40,
                   decoration: BoxDecoration(
-                    color: AppColors.primaryLight,
-                    borderRadius: BorderRadius.circular(10),
+                    color: context.t.color.accentFill.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(AppTokens.radius.sm),
                   ),
                   alignment: Alignment.center,
                   child: Text(
                     '#${card.seasonNumber}',
-                    style: AppTextStyles.caption.copyWith(
+                    style: context.ts.caption.copyWith(
                       fontWeight: FontWeight.bold,
-                      color: AppColors.primary,
+                      color: context.t.color.accent,
                     ),
                   ),
                 ),
@@ -299,7 +300,7 @@ class _MemberProfileScreenState extends ConsumerState<MemberProfileScreen> {
                     children: [
                       Text(
                         card.topAttribute,
-                        style: AppTextStyles.body.copyWith(
+                        style: context.ts.body.copyWith(
                           fontWeight: FontWeight.w500,
                         ),
                         maxLines: 1,
@@ -307,8 +308,8 @@ class _MemberProfileScreenState extends ConsumerState<MemberProfileScreen> {
                       ),
                       Text(
                         '${card.percentage}%',
-                        style: AppTextStyles.caption.copyWith(
-                          color: AppColors.primary,
+                        style: context.ts.caption.copyWith(
+                          color: context.t.color.accent,
                         ),
                       ),
                     ],
@@ -319,9 +320,9 @@ class _MemberProfileScreenState extends ConsumerState<MemberProfileScreen> {
           )
               .animate()
               .fadeIn(
-                  duration: 300.ms,
-                  delay: Duration(milliseconds: 400 + index * 80))
-              .slideX(begin: 0.1, duration: 300.ms);
+                  duration: context.motion(MotionClass.surface),
+                  delay: AppTokens.motion.stagger(5 + index))
+              .slideX(begin: 0.1, duration: context.motion(MotionClass.surface));
         }),
       ],
     );

@@ -1,0 +1,147 @@
+name: CI
+
+# Jobs are independent on purpose: a container-startup flake in e2e should not hide, or wait on, the
+# fast feedback from vet and analyze.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  # One run per branch. Pushing twice in a minute should not queue two full e2e suites.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Pinned to what the project actually uses, not to "latest". A toolchain that updates itself turns an
+  # unrelated upstream change into a red build on someone's unrelated PR, and the first instinct is to
+  # distrust CI rather than the pin. Dependabot can raise these as PRs, which is where a toolchain change
+  # belongs — as a change.
+  GO_VERSION: '1.26.1'      # backend/go.mod
+  FLUTTER_VERSION: '3.47.6' # satisfies mobile/pubspec.yaml -> sdk: ^3.11.1
+  SQLC_VERSION: 'v1.31.1'
+
+jobs:
+  backend:
+    name: backend (vet + unit)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: backend/go.sum
+
+      - run: go vet ./...
+
+      # Excludes ./tests/e2e — see the Makefile. One definition, so CI and a developer agree.
+      - run: make test-unit
+
+  backend-e2e:
+    name: backend (e2e against real Postgres + Redis)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: backend/go.sum
+
+      # Worth the ~4 minutes: a sqlmock fixture returns whatever shape the test author wrote, so a query
+      # that no longer matches the schema passes a unit test. Only real Postgres catches that, and that is
+      # exactly the class of defect this suite has caught.
+      #
+      # Ryuk (testcontainers' reaper) is disabled because the runner is torn down after the job anyway,
+      # and starting it is one more container that can fail to come up.
+      - run: make test-e2e
+        env:
+          TESTCONTAINERS_RYUK_DISABLED: 'true'
+
+  mobile:
+    name: mobile (analyze + test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - run: flutter analyze
+
+      - run: flutter test
+
+      # `flutter analyze` rewrites analysis_options.yaml on every run ("Upgrading analysis_options.yaml
+      # to exclude build and platform directories"), so that one file is restored as a known tool side
+      # effect rather than reported.
+      #
+      # Everything else the tools touched is a real signal. In particular `flutter pub get` rewriting
+      # pubspec.lock means the committed lock does not match what the pinned SDK resolves — which makes
+      # builds non-reproducible, and is exactly what a lockfile exists to prevent. Fail, and show what
+      # moved.
+      - name: Tool side effects are only the expected one
+        if: always()
+        run: |
+          git checkout -- analysis_options.yaml
+          if ! git diff --quiet; then
+            echo "::error::the toolchain modified committed files; commit them or correct the pin" >&2
+            git --no-pager diff --stat
+            git --no-pager diff
+            exit 1
+          fi
+          echo "working tree clean apart from the analyzer's own rewrite"
+
+  generated-code:
+    name: generated code is current
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: backend/go.sum
+
+      - name: Install sqlc
+        run: go install github.com/sqlc-dev/sqlc/cmd/sqlc@${{ env.SQLC_VERSION }}
+
+      # A stale internal/db/sqlc compiles fine and silently uses the wrong query shape, so no test
+      # catches it. Compares the directory against itself across a regeneration — see the Makefile.
+      - run: make sqlc-check
+
+  secrets:
+    name: secrets are not tracked
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Not secret scanning: this does not look for keys in source, which is a different job with a
+      # different tool. It asserts the one property the project already relies on — that the directory
+      # CLAUDE.md designates for credentials is not tracked. It fails loudly the first time someone
+      # reaches for `git add -f`.
+      - name: Assert nothing under secrets/ is tracked
+        run: |
+          tracked="$(git ls-files secrets/)"
+          if [ -n "$tracked" ]; then
+            echo "::error::credentials are tracked in git:" >&2
+            echo "$tracked" >&2
+            exit 1
+          fi
+          echo "secrets/ is untracked, as .gitignore intends"

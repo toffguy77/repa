@@ -7,6 +7,7 @@ import 'package:repa/features/groups/data/groups_repository.dart';
 import 'package:repa/features/groups/presentation/groups_notifier.dart';
 import 'package:repa/features/home/home_screen.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:repa/core/theme/app_theme.dart';
 
 class _MockApiService extends Mock implements ApiService {}
 
@@ -36,7 +37,7 @@ void main() {
         groupsListProvider.overrideWith((ref) => _EmptyGroupsListNotifier()),
         connectivityProvider.overrideWith((ref) => _FakeConnectivityNotifier()),
       ],
-      child: const MaterialApp(home: HomeScreen()),
+      child: MaterialApp(theme: AppTheme.dark, home: HomeScreen()),
     );
   }
 
@@ -64,7 +65,8 @@ void main() {
     await tester.tap(find.text('Профиль'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Скоро здесь будет профиль'), findsOneWidget);
-    expect(find.text('Выйти'), findsOneWidget);
+    // The profile tab was implemented in T14; assert what it actually renders.
+    expect(find.text('Скоро здесь будет полный профиль'), findsOneWidget);
+    expect(find.byIcon(Icons.settings), findsOneWidget);
   });
 }

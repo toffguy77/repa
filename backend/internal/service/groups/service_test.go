@@ -3,12 +3,14 @@ package groups
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	db "github.com/repa-app/repa/internal/db/sqlc"
+	"github.com/repa-app/repa/internal/schedule"
 )
 
 func TestValidateCategories_Valid(t *testing.T) {
@@ -62,38 +64,6 @@ func TestCategoryStrings(t *testing.T) {
 	strs := categoryStrings(cats)
 	if len(strs) != 2 || strs[0] != "HOT" || strs[1] != "FUNNY" {
 		t.Errorf("expected [HOT FUNNY], got %v", strs)
-	}
-}
-
-func TestGetNextSeasonDates(t *testing.T) {
-	startsAt, revealAt, endsAt := getNextSeasonDates()
-
-	if startsAt.IsZero() || revealAt.IsZero() || endsAt.IsZero() {
-		t.Error("dates should not be zero")
-	}
-
-	if !revealAt.After(startsAt) {
-		t.Error("revealAt should be after startsAt")
-	}
-
-	if !endsAt.After(revealAt) {
-		t.Error("endsAt should be after revealAt")
-	}
-
-	// Reveal should be on a Friday at 17:00 UTC
-	if revealAt.Weekday() != time.Friday {
-		t.Errorf("revealAt should be Friday, got %s", revealAt.Weekday())
-	}
-	if revealAt.Hour() != 17 {
-		t.Errorf("revealAt hour should be 17, got %d", revealAt.Hour())
-	}
-}
-
-func TestGetNextSeasonDates_EndsOnSunday(t *testing.T) {
-	_, _, endsAt := getNextSeasonDates()
-
-	if endsAt.Weekday() != time.Sunday {
-		t.Errorf("endsAt should be Sunday, got %s", endsAt.Weekday())
 	}
 }
 
@@ -218,91 +188,6 @@ func TestCreateGroup_NameBoundary(t *testing.T) {
 }
 
 // --- getNextSeasonDates: startsAt is always a Monday ---
-
-func TestGetNextSeasonDates_StartsAtIsMonday(t *testing.T) {
-	startsAt, _, _ := getNextSeasonDates()
-
-	msk := time.FixedZone("MSK", 3*60*60)
-	startsAtMSK := startsAt.In(msk)
-
-	if startsAtMSK.Weekday() != time.Monday {
-		t.Errorf("startsAt in MSK should be Monday, got %s", startsAtMSK.Weekday())
-	}
-}
-
-// --- getNextSeasonDates: all dates are in the future ---
-
-func TestGetNextSeasonDates_AllInFuture(t *testing.T) {
-	now := time.Now()
-	startsAt, revealAt, endsAt := getNextSeasonDates()
-
-	if !startsAt.After(now) {
-		t.Errorf("startsAt %v should be after now %v", startsAt, now)
-	}
-	if !revealAt.After(now) {
-		t.Errorf("revealAt %v should be after now %v", revealAt, now)
-	}
-	if !endsAt.After(now) {
-		t.Errorf("endsAt %v should be after now %v", endsAt, now)
-	}
-}
-
-// --- getNextSeasonDates: startsAt is at 00:00 MSK (21:00 UTC previous day) ---
-
-func TestGetNextSeasonDates_StartsAtMidnightMSK(t *testing.T) {
-	startsAt, _, _ := getNextSeasonDates()
-
-	msk := time.FixedZone("MSK", 3*60*60)
-	startsAtMSK := startsAt.In(msk)
-
-	if startsAtMSK.Hour() != 0 || startsAtMSK.Minute() != 0 || startsAtMSK.Second() != 0 {
-		t.Errorf("startsAt MSK should be 00:00:00, got %02d:%02d:%02d",
-			startsAtMSK.Hour(), startsAtMSK.Minute(), startsAtMSK.Second())
-	}
-}
-
-// --- getNextSeasonDates: endsAt hour/minute is 23:59 MSK ---
-
-func TestGetNextSeasonDates_EndsAt2359MSK(t *testing.T) {
-	_, _, endsAt := getNextSeasonDates()
-
-	msk := time.FixedZone("MSK", 3*60*60)
-	endsAtMSK := endsAt.In(msk)
-
-	if endsAtMSK.Hour() != 23 || endsAtMSK.Minute() != 59 {
-		t.Errorf("endsAt MSK should be 23:59, got %02d:%02d",
-			endsAtMSK.Hour(), endsAtMSK.Minute())
-	}
-}
-
-// --- getNextSeasonDates: revealAt is exactly 4 days after startsAt (Monday→Friday) ---
-
-func TestGetNextSeasonDates_RevealIs4DaysAfterStart(t *testing.T) {
-	startsAt, revealAt, _ := getNextSeasonDates()
-
-	msk := time.FixedZone("MSK", 3*60*60)
-	startMSK := startsAt.In(msk)
-	revealMSK := revealAt.In(msk)
-
-	// Compare calendar days: Monday(1) to Friday(5) = 4 days
-	startYD := startMSK.YearDay()
-	revealYD := revealMSK.YearDay()
-
-	diff := revealYD - startYD
-	// Handle year boundary
-	if diff < 0 {
-		diff += 365
-		if startMSK.Year()%4 == 0 {
-			diff++
-		}
-	}
-	if diff != 4 {
-		t.Errorf("revealAt should be 4 calendar days after startsAt, got %d (start=%s, reveal=%s)",
-			diff, startMSK.Format("Mon 2006-01-02"), revealMSK.Format("Mon 2006-01-02"))
-	}
-}
-
-// --- validateCategories: all valid categories at once ---
 
 func TestValidateCategories_AllValidAtOnce(t *testing.T) {
 	all := []string{"HOT", "FUNNY", "SECRETS", "SKILLS", "ROMANCE", "STUDY"}
@@ -507,14 +392,14 @@ var groupCols = []string{
 	"id", "name", "invite_code", "admin_id",
 	"telegram_chat_id", "telegram_chat_username",
 	"telegram_connect_code", "telegram_connect_expiry",
-	"created_at", "categories",
+	"created_at", "categories", "kind_only",
 }
 
 func mockGroupRow(id, name, inviteCode, adminID string) *sqlmock.Rows {
 	return sqlmock.NewRows(groupCols).AddRow(
 		id, name, inviteCode, adminID,
 		nil, nil, nil, nil,
-		time.Now(), `{"HOT"}`,
+		time.Now(), `{"HOT"}`, false,
 	)
 }
 
@@ -605,11 +490,11 @@ func TestGetGroup_GroupNotFound(t *testing.T) {
 func TestJoinGroup_GroupNotFound(t *testing.T) {
 	svc, mock := newMockService(t)
 
-	mock.ExpectQuery("SELECT .+ FROM groups WHERE invite_code").
-		WithArgs("bad-code").
+	mock.ExpectQuery("SELECT .+ FROM groups WHERE upper.invite_code.").
+		WithArgs("BADCODE").
 		WillReturnError(sql.ErrNoRows)
 
-	_, err := svc.JoinGroup(context.Background(), "user-1", "bad-code")
+	_, err := svc.JoinGroup(context.Background(), "user-1", "bad-code", db.JoinSourceLINK, "")
 	if err != ErrGroupNotFound {
 		t.Errorf("expected ErrGroupNotFound, got %v", err)
 	}
@@ -620,15 +505,15 @@ func TestJoinGroup_GroupNotFound(t *testing.T) {
 func TestJoinGroup_AlreadyMember(t *testing.T) {
 	svc, mock := newMockService(t)
 
-	mock.ExpectQuery("SELECT .+ FROM groups WHERE invite_code").
-		WithArgs("invite-1").
+	mock.ExpectQuery("SELECT .+ FROM groups WHERE upper.invite_code.").
+		WithArgs("INVITE1").
 		WillReturnRows(mockGroupRow("group-1", "Test", "invite-1", "admin-1"))
 
 	mock.ExpectQuery("SELECT COUNT").
 		WithArgs("user-1", "group-1").
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(1)))
 
-	_, err := svc.JoinGroup(context.Background(), "user-1", "invite-1")
+	_, err := svc.JoinGroup(context.Background(), "user-1", "invite-1", db.JoinSourceLINK, "")
 	if err != ErrAlreadyMember {
 		t.Errorf("expected ErrAlreadyMember, got %v", err)
 	}
@@ -639,8 +524,8 @@ func TestJoinGroup_AlreadyMember(t *testing.T) {
 func TestJoinGroup_GroupLimitSize(t *testing.T) {
 	svc, mock := newMockService(t)
 
-	mock.ExpectQuery("SELECT .+ FROM groups WHERE invite_code").
-		WithArgs("invite-1").
+	mock.ExpectQuery("SELECT .+ FROM groups WHERE upper.invite_code.").
+		WithArgs("INVITE1").
 		WillReturnRows(mockGroupRow("group-1", "Test", "invite-1", "admin-1"))
 
 	// IsGroupMember → not a member
@@ -653,7 +538,7 @@ func TestJoinGroup_GroupLimitSize(t *testing.T) {
 		WithArgs("group-1").
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(50)))
 
-	_, err := svc.JoinGroup(context.Background(), "user-1", "invite-1")
+	_, err := svc.JoinGroup(context.Background(), "user-1", "invite-1", db.JoinSourceLINK, "")
 	if err != ErrGroupLimitSize {
 		t.Errorf("expected ErrGroupLimitSize, got %v", err)
 	}
@@ -664,8 +549,8 @@ func TestJoinGroup_GroupLimitSize(t *testing.T) {
 func TestJoinGroup_UserGroupLimit(t *testing.T) {
 	svc, mock := newMockService(t)
 
-	mock.ExpectQuery("SELECT .+ FROM groups WHERE invite_code").
-		WithArgs("invite-1").
+	mock.ExpectQuery("SELECT .+ FROM groups WHERE upper.invite_code.").
+		WithArgs("INVITE1").
 		WillReturnRows(mockGroupRow("group-1", "Test", "invite-1", "admin-1"))
 
 	mock.ExpectQuery("SELECT COUNT").
@@ -682,7 +567,7 @@ func TestJoinGroup_UserGroupLimit(t *testing.T) {
 		WithArgs("user-1").
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(10)))
 
-	_, err := svc.JoinGroup(context.Background(), "user-1", "invite-1")
+	_, err := svc.JoinGroup(context.Background(), "user-1", "invite-1", db.JoinSourceLINK, "")
 	if err != ErrGroupLimitUser {
 		t.Errorf("expected ErrGroupLimitUser, got %v", err)
 	}
@@ -693,8 +578,8 @@ func TestJoinGroup_UserGroupLimit(t *testing.T) {
 func TestJoinGroup_Success(t *testing.T) {
 	svc, mock := newMockService(t)
 
-	mock.ExpectQuery("SELECT .+ FROM groups WHERE invite_code").
-		WithArgs("invite-1").
+	mock.ExpectQuery("SELECT .+ FROM groups WHERE upper.invite_code.").
+		WithArgs("INVITE1").
 		WillReturnRows(mockGroupRow("group-1", "Test Group", "invite-1", "admin-1"))
 
 	mock.ExpectQuery("SELECT COUNT").
@@ -710,12 +595,17 @@ func TestJoinGroup_Success(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(2)))
 
 	// AddGroupMember
-	mock.ExpectQuery("INSERT INTO group_members").
-		WithArgs(sqlmock.AnyArg(), "user-1", "group-1").
-		WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "group_id", "joined_at"}).
-			AddRow("member-1", "user-1", "group-1", time.Now()))
+	// IsGroupBanned — a removal must not be undone by an invite.
+	mock.ExpectQuery("SELECT EXISTS").
+		WithArgs("group-1", "user-1").
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
 
-	group, err := svc.JoinGroup(context.Background(), "user-1", "invite-1")
+	mock.ExpectQuery("INSERT INTO group_members").
+		WithArgs(sqlmock.AnyArg(), "user-1", "group-1", sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "group_id", "joined_at", "join_source", "invited_by"}).
+			AddRow("member-1", "user-1", "group-1", time.Now(), "LINK", nil))
+
+	group, err := svc.JoinGroup(context.Background(), "user-1", "invite-1", db.JoinSourceLINK, "")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -907,6 +797,11 @@ func TestRegenerateInviteLink_Success(t *testing.T) {
 		WithArgs("group-1").
 		WillReturnRows(mockGroupRow("group-1", "Test", "invite-1", "admin-1"))
 
+	// freshInviteCode probes that the generated code is free.
+	mock.ExpectQuery("SELECT .+ FROM groups WHERE upper.invite_code.").
+		WithArgs(sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows(groupCols))
+
 	mock.ExpectExec("UPDATE groups SET invite_code").
 		WithArgs("group-1", sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(0, 1))
@@ -928,8 +823,8 @@ func TestRegenerateInviteLink_Success(t *testing.T) {
 func TestGetJoinPreview_GroupNotFound(t *testing.T) {
 	svc, mock := newMockService(t)
 
-	mock.ExpectQuery("SELECT .+ FROM groups WHERE invite_code").
-		WithArgs("bad-code").
+	mock.ExpectQuery("SELECT .+ FROM groups WHERE upper.invite_code.").
+		WithArgs("BADCODE").
 		WillReturnError(sql.ErrNoRows)
 
 	_, err := svc.GetJoinPreview(context.Background(), "bad-code")
@@ -943,8 +838,8 @@ func TestGetJoinPreview_GroupNotFound(t *testing.T) {
 func TestGetJoinPreview_Success(t *testing.T) {
 	svc, mock := newMockService(t)
 
-	mock.ExpectQuery("SELECT .+ FROM groups WHERE invite_code").
-		WithArgs("invite-1").
+	mock.ExpectQuery("SELECT .+ FROM groups WHERE upper.invite_code.").
+		WithArgs("INVITE1").
 		WillReturnRows(mockGroupRow("group-1", "Cool Group", "invite-1", "admin-1"))
 
 	mock.ExpectQuery("SELECT COUNT").
@@ -1068,14 +963,22 @@ func TestGetGroup_Success(t *testing.T) {
 			AddRow("user-2", "bob", nil, nil))
 
 	// GetActiveSeasonByGroup
-	seasonCols := []string{"id", "group_id", "number", "status", "starts_at", "reveal_at", "ends_at", "created_at"}
+	seasonCols := []string{"id", "group_id", "number", "status", "starts_at", "reveal_at", "ends_at", "created_at", "kind", "postpone_count"}
 	now := time.Now()
 	mock.ExpectQuery("SELECT .+ FROM seasons WHERE group_id").
 		WithArgs("group-1").
 		WillReturnRows(sqlmock.NewRows(seasonCols).AddRow(
 			"season-1", "group-1", int32(1), "VOTING",
-			now, now.Add(4*24*time.Hour), now.Add(6*24*time.Hour), now,
+			now, now.Add(4*24*time.Hour), now.Add(6*24*time.Hour), now, "KICKOFF", int32(0),
 		))
+
+	// CountSeasonQuestions + CountCompletedVoters feed the reveal status
+	mock.ExpectQuery("SELECT COUNT").
+		WithArgs("season-1").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(5)))
+	mock.ExpectQuery("SELECT COUNT").
+		WithArgs("season-1", int64(5)).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(2)))
 
 	detail, err := svc.GetGroup(context.Background(), "group-1", "user-1")
 	if err != nil {
@@ -1181,8 +1084,8 @@ func TestUpdateGroup_SuccessTelegramUpdate(t *testing.T) {
 
 	tg := "my_chat"
 	updated, err := svc.UpdateGroup(context.Background(), UpdateGroupParams{
-		UserID:          "admin-1",
-		GroupID:         "group-1",
+		UserID:           "admin-1",
+		GroupID:          "group-1",
 		TelegramUsername: &tg,
 	})
 	if err != nil {
@@ -1309,8 +1212,8 @@ func TestLeaveGroup_AdminTransfer(t *testing.T) {
 func TestGetJoinPreview_CountMembersError(t *testing.T) {
 	svc, mock := newMockService(t)
 
-	mock.ExpectQuery("SELECT .+ FROM groups WHERE invite_code").
-		WithArgs("invite-1").
+	mock.ExpectQuery("SELECT .+ FROM groups WHERE upper.invite_code.").
+		WithArgs("INVITE1").
 		WillReturnRows(mockGroupRow("group-1", "Test", "invite-1", "admin-1"))
 
 	mock.ExpectQuery("SELECT COUNT").
@@ -1332,6 +1235,11 @@ func TestRegenerateInviteLink_UpdateError(t *testing.T) {
 		WithArgs("group-1").
 		WillReturnRows(mockGroupRow("group-1", "Test", "invite-1", "admin-1"))
 
+	// freshInviteCode probes that the generated code is free.
+	mock.ExpectQuery("SELECT .+ FROM groups WHERE upper.invite_code.").
+		WithArgs(sqlmock.AnyArg()).
+		WillReturnRows(sqlmock.NewRows(groupCols))
+
 	mock.ExpectExec("UPDATE groups SET invite_code").
 		WithArgs("group-1", sqlmock.AnyArg()).
 		WillReturnError(fmt.Errorf("update failed"))
@@ -1352,10 +1260,11 @@ var listGroupStatsCols = []string{
 	"id", "name", "invite_code", "admin_id",
 	"telegram_chat_id", "telegram_chat_username",
 	"telegram_connect_code", "telegram_connect_expiry",
-	"created_at", "categories",
+	"created_at", "categories", "kind_only",
 	"member_count",
 	"active_season_id", "active_season_number", "active_season_status",
 	"active_season_starts_at", "active_season_reveal_at", "active_season_ends_at",
+	"active_season_kind", "active_season_postpone_count",
 	"voted_count", "user_vote_count",
 }
 
@@ -1397,9 +1306,9 @@ func TestListUserGroups_WithoutActiveSeason(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows(listGroupStatsCols).AddRow(
 			"g1", "Group One", "inv1", "admin1",
 			nil, nil, nil, nil,
-			now, `{"HOT","FUNNY"}`,
+			now, `{"HOT","FUNNY"}`, false,
 			int64(5),
-			nil, nil, nil, nil, nil, nil, // no active season
+			nil, nil, nil, nil, nil, nil, nil, nil, // no active season
 			int64(0), int64(0),
 		))
 
@@ -1432,9 +1341,10 @@ func TestListUserGroups_WithActiveSeason(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows(listGroupStatsCols).AddRow(
 			"g1", "Group One", "inv1", "admin1",
 			nil, nil, nil, nil,
-			now, `{"HOT"}`,
+			now, `{"HOT"}`, false,
 			int64(8),
 			"s1", int32(2), "VOTING", now, revealAt, endsAt,
+			"WEEKLY", int32(0),
 			int64(4), int64(1),
 		))
 
@@ -1470,10 +1380,11 @@ func TestListUserGroups_MultipleGroups(t *testing.T) {
 	mock.ExpectQuery("SELECT .+").
 		WithArgs("user-1").
 		WillReturnRows(sqlmock.NewRows(listGroupStatsCols).
-			AddRow("g1", "Group1", "inv1", "a1", nil, nil, nil, nil, now, `{"HOT"}`,
-				int64(3), nil, nil, nil, nil, nil, nil, int64(0), int64(0)).
-			AddRow("g2", "Group2", "inv2", "a2", nil, nil, nil, nil, now, `{"FUNNY"}`,
+			AddRow("g1", "Group1", "inv1", "a1", nil, nil, nil, nil, now, `{"HOT"}`, false,
+				int64(3), nil, nil, nil, nil, nil, nil, nil, nil, int64(0), int64(0)).
+			AddRow("g2", "Group2", "inv2", "a2", nil, nil, nil, nil, now, `{"FUNNY"}`, false,
 				int64(7), "s2", int32(1), "VOTING", now, now.Add(time.Hour), now.Add(2*time.Hour),
+				"WEEKLY", int32(0),
 				int64(2), int64(0)))
 
 	items, err := svc.ListUserGroups(context.Background(), "user-1")
@@ -1556,11 +1467,11 @@ func TestGetGroup_GetGroupMembersError(t *testing.T) {
 func TestJoinGroup_InviteCodeDBError(t *testing.T) {
 	svc, mock := newMockService(t)
 
-	mock.ExpectQuery("SELECT .+ FROM groups WHERE invite_code").
-		WithArgs("invite-1").
+	mock.ExpectQuery("SELECT .+ FROM groups WHERE upper.invite_code.").
+		WithArgs("INVITE1").
 		WillReturnError(fmt.Errorf("db timeout"))
 
-	_, err := svc.JoinGroup(context.Background(), "user-1", "invite-1")
+	_, err := svc.JoinGroup(context.Background(), "user-1", "invite-1", db.JoinSourceLINK, "")
 	if err == nil || err.Error() != "db timeout" {
 		t.Errorf("expected db timeout error, got %v", err)
 	}
@@ -1571,15 +1482,15 @@ func TestJoinGroup_InviteCodeDBError(t *testing.T) {
 func TestJoinGroup_IsGroupMemberDBError(t *testing.T) {
 	svc, mock := newMockService(t)
 
-	mock.ExpectQuery("SELECT .+ FROM groups WHERE invite_code").
-		WithArgs("invite-1").
+	mock.ExpectQuery("SELECT .+ FROM groups WHERE upper.invite_code.").
+		WithArgs("INVITE1").
 		WillReturnRows(mockGroupRow("group-1", "Test", "invite-1", "admin-1"))
 
 	mock.ExpectQuery("SELECT COUNT").
 		WithArgs("user-1", "group-1").
 		WillReturnError(fmt.Errorf("member check failed"))
 
-	_, err := svc.JoinGroup(context.Background(), "user-1", "invite-1")
+	_, err := svc.JoinGroup(context.Background(), "user-1", "invite-1", db.JoinSourceLINK, "")
 	if err == nil || err.Error() != "member check failed" {
 		t.Errorf("expected member check failed error, got %v", err)
 	}
@@ -1590,8 +1501,8 @@ func TestJoinGroup_IsGroupMemberDBError(t *testing.T) {
 func TestJoinGroup_CountGroupMembersDBError(t *testing.T) {
 	svc, mock := newMockService(t)
 
-	mock.ExpectQuery("SELECT .+ FROM groups WHERE invite_code").
-		WithArgs("invite-1").
+	mock.ExpectQuery("SELECT .+ FROM groups WHERE upper.invite_code.").
+		WithArgs("INVITE1").
 		WillReturnRows(mockGroupRow("group-1", "Test", "invite-1", "admin-1"))
 
 	mock.ExpectQuery("SELECT COUNT").
@@ -1602,7 +1513,7 @@ func TestJoinGroup_CountGroupMembersDBError(t *testing.T) {
 		WithArgs("group-1").
 		WillReturnError(fmt.Errorf("count members error"))
 
-	_, err := svc.JoinGroup(context.Background(), "user-1", "invite-1")
+	_, err := svc.JoinGroup(context.Background(), "user-1", "invite-1", db.JoinSourceLINK, "")
 	if err == nil || err.Error() != "count members error" {
 		t.Errorf("expected count members error, got %v", err)
 	}
@@ -1613,8 +1524,8 @@ func TestJoinGroup_CountGroupMembersDBError(t *testing.T) {
 func TestJoinGroup_CountUserGroupsDBError(t *testing.T) {
 	svc, mock := newMockService(t)
 
-	mock.ExpectQuery("SELECT .+ FROM groups WHERE invite_code").
-		WithArgs("invite-1").
+	mock.ExpectQuery("SELECT .+ FROM groups WHERE upper.invite_code.").
+		WithArgs("INVITE1").
 		WillReturnRows(mockGroupRow("group-1", "Test", "invite-1", "admin-1"))
 
 	mock.ExpectQuery("SELECT COUNT").
@@ -1629,7 +1540,7 @@ func TestJoinGroup_CountUserGroupsDBError(t *testing.T) {
 		WithArgs("user-1").
 		WillReturnError(fmt.Errorf("count user groups error"))
 
-	_, err := svc.JoinGroup(context.Background(), "user-1", "invite-1")
+	_, err := svc.JoinGroup(context.Background(), "user-1", "invite-1", db.JoinSourceLINK, "")
 	if err == nil || err.Error() != "count user groups error" {
 		t.Errorf("expected count user groups error, got %v", err)
 	}
@@ -1640,8 +1551,8 @@ func TestJoinGroup_CountUserGroupsDBError(t *testing.T) {
 func TestJoinGroup_AddGroupMemberDBError(t *testing.T) {
 	svc, mock := newMockService(t)
 
-	mock.ExpectQuery("SELECT .+ FROM groups WHERE invite_code").
-		WithArgs("invite-1").
+	mock.ExpectQuery("SELECT .+ FROM groups WHERE upper.invite_code.").
+		WithArgs("INVITE1").
 		WillReturnRows(mockGroupRow("group-1", "Test", "invite-1", "admin-1"))
 
 	mock.ExpectQuery("SELECT COUNT").
@@ -1656,11 +1567,16 @@ func TestJoinGroup_AddGroupMemberDBError(t *testing.T) {
 		WithArgs("user-1").
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(2)))
 
+	// IsGroupBanned — a removal must not be undone by an invite.
+	mock.ExpectQuery("SELECT EXISTS").
+		WithArgs("group-1", "user-1").
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(false))
+
 	mock.ExpectQuery("INSERT INTO group_members").
-		WithArgs(sqlmock.AnyArg(), "user-1", "group-1").
+		WithArgs(sqlmock.AnyArg(), "user-1", "group-1", sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnError(fmt.Errorf("insert failed"))
 
-	_, err := svc.JoinGroup(context.Background(), "user-1", "invite-1")
+	_, err := svc.JoinGroup(context.Background(), "user-1", "invite-1", db.JoinSourceLINK, "")
 	if err == nil || err.Error() != "insert failed" {
 		t.Errorf("expected insert failed error, got %v", err)
 	}
@@ -1922,14 +1838,14 @@ func TestCreateNewSeasons_SingleGroupSuccess(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows(groupCols).AddRow(
 			"g1", "Group One", "inv1", "admin1",
 			nil, nil, nil, nil,
-			now, `{"HOT"}`,
+			now, `{"HOT"}`, false,
 		))
 
 	// createSeasonForGroup transaction:
 	mock.ExpectBegin()
 
 	// GetRevealedSeasonsForGroup - no revealed seasons
-	seasonCols := []string{"id", "group_id", "number", "status", "starts_at", "reveal_at", "ends_at", "created_at"}
+	seasonCols := []string{"id", "group_id", "number", "status", "starts_at", "reveal_at", "ends_at", "created_at", "kind", "postpone_count"}
 	mock.ExpectQuery("SELECT .+ FROM seasons.+WHERE group_id.+REVEALED").
 		WithArgs("g1").
 		WillReturnRows(sqlmock.NewRows(seasonCols))
@@ -1941,9 +1857,9 @@ func TestCreateNewSeasons_SingleGroupSuccess(t *testing.T) {
 
 	// CreateSeason
 	mock.ExpectQuery("INSERT INTO seasons").
-		WithArgs(sqlmock.AnyArg(), "g1", int32(2), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WithArgs(sqlmock.AnyArg(), "g1", int32(2), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows(seasonCols).AddRow(
-			"new-season", "g1", int32(2), "VOTING", now, now, now, now,
+			"new-season", "g1", int32(2), "VOTING", now, now, now, now, "WEEKLY", int32(0),
 		))
 
 	// CountGroupMembers
@@ -1952,13 +1868,13 @@ func TestCreateNewSeasons_SingleGroupSuccess(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(5)))
 
 	// GetRandomSystemQuestionsByCategories - returns 5 questions
-	questionCols := []string{"id", "text", "category", "source", "group_id", "author_id", "status", "created_at"}
+	questionCols := []string{"id", "text", "category", "source", "group_id", "author_id", "status", "created_at", "tone"}
 	qRows := sqlmock.NewRows(questionCols)
 	for i := 0; i < 5; i++ {
-		qRows.AddRow(fmt.Sprintf("q%d", i), fmt.Sprintf("Question %d", i), "HOT", "SYSTEM", nil, nil, "ACTIVE", now)
+		qRows.AddRow(fmt.Sprintf("q%d", i), fmt.Sprintf("Question %d", i), "HOT", "SYSTEM", nil, nil, "ACTIVE", now, "NEUTRAL")
 	}
 	mock.ExpectQuery("SELECT .+ FROM questions").
-		WithArgs(sqlmock.AnyArg(), "g1", int32(10)). // 5 members * 2 = 10
+		WithArgs(sqlmock.AnyArg(), "g1", int32(10), sqlmock.AnyArg()). // 5 members * 2 = 10
 		WillReturnRows(qRows)
 
 	// AddSeasonQuestion for each question
@@ -1992,7 +1908,7 @@ func TestCreateNewSeasons_AllGroupsFail(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows(groupCols).AddRow(
 			"g1", "Group One", "inv1", "admin1",
 			nil, nil, nil, nil,
-			now, `{"HOT"}`,
+			now, `{"HOT"}`, false,
 		))
 
 	// createSeasonForGroup: BeginTx fails
@@ -2013,13 +1929,13 @@ func TestCreateNewSeasons_PartialFailure(t *testing.T) {
 	svc, mock := newMockService(t)
 
 	now := time.Now()
-	seasonCols := []string{"id", "group_id", "number", "status", "starts_at", "reveal_at", "ends_at", "created_at"}
+	seasonCols := []string{"id", "group_id", "number", "status", "starts_at", "reveal_at", "ends_at", "created_at", "kind", "postpone_count"}
 
 	// Two groups
 	mock.ExpectQuery("SELECT .+ FROM groups").
 		WillReturnRows(sqlmock.NewRows(groupCols).
-			AddRow("g1", "Group1", "inv1", "a1", nil, nil, nil, nil, now, `{"HOT"}`).
-			AddRow("g2", "Group2", "inv2", "a2", nil, nil, nil, nil, now, `{"FUNNY"}`))
+			AddRow("g1", "Group1", "inv1", "a1", nil, nil, nil, nil, now, `{"HOT"}`, false).
+			AddRow("g2", "Group2", "inv2", "a2", nil, nil, nil, nil, now, `{"FUNNY"}`, false))
 
 	// First group: BeginTx fails
 	mock.ExpectBegin().WillReturnError(fmt.Errorf("begin failed"))
@@ -2036,22 +1952,22 @@ func TestCreateNewSeasons_PartialFailure(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"coalesce"}).AddRow(int32(0)))
 
 	mock.ExpectQuery("INSERT INTO seasons").
-		WithArgs(sqlmock.AnyArg(), "g2", int32(1), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WithArgs(sqlmock.AnyArg(), "g2", int32(1), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows(seasonCols).AddRow(
-			"ns2", "g2", int32(1), "VOTING", now, now, now, now,
+			"ns2", "g2", int32(1), "VOTING", now, now, now, now, "WEEKLY", int32(0),
 		))
 
 	mock.ExpectQuery("SELECT COUNT").
 		WithArgs("g2").
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(3)))
 
-	questionCols := []string{"id", "text", "category", "source", "group_id", "author_id", "status", "created_at"}
+	questionCols := []string{"id", "text", "category", "source", "group_id", "author_id", "status", "created_at", "tone"}
 	qRows := sqlmock.NewRows(questionCols)
 	for i := 0; i < 5; i++ {
-		qRows.AddRow(fmt.Sprintf("q%d", i), fmt.Sprintf("Q %d", i), "FUNNY", "SYSTEM", nil, nil, "ACTIVE", now)
+		qRows.AddRow(fmt.Sprintf("q%d", i), fmt.Sprintf("Q %d", i), "FUNNY", "SYSTEM", nil, nil, "ACTIVE", now, "NEUTRAL")
 	}
 	mock.ExpectQuery("SELECT .+ FROM questions").
-		WithArgs(sqlmock.AnyArg(), "g2", int32(6)). // 3 * 2 = 6
+		WithArgs(sqlmock.AnyArg(), "g2", int32(6), sqlmock.AnyArg()). // 3 * 2 = 6
 		WillReturnRows(qRows)
 
 	sqCols := []string{"id", "season_id", "question_id", "ord"}
@@ -2078,11 +1994,11 @@ func TestCreateNewSeasons_ClosesRevealedSeasons(t *testing.T) {
 	svc, mock := newMockService(t)
 
 	now := time.Now()
-	seasonCols := []string{"id", "group_id", "number", "status", "starts_at", "reveal_at", "ends_at", "created_at"}
+	seasonCols := []string{"id", "group_id", "number", "status", "starts_at", "reveal_at", "ends_at", "created_at", "kind", "postpone_count"}
 
 	mock.ExpectQuery("SELECT .+ FROM groups").
 		WillReturnRows(sqlmock.NewRows(groupCols).AddRow(
-			"g1", "Group1", "inv1", "a1", nil, nil, nil, nil, now, `{"HOT"}`))
+			"g1", "Group1", "inv1", "a1", nil, nil, nil, nil, now, `{"HOT"}`, false))
 
 	mock.ExpectBegin()
 
@@ -2090,7 +2006,7 @@ func TestCreateNewSeasons_ClosesRevealedSeasons(t *testing.T) {
 	mock.ExpectQuery("SELECT .+ FROM seasons.+WHERE group_id.+REVEALED").
 		WithArgs("g1").
 		WillReturnRows(sqlmock.NewRows(seasonCols).AddRow(
-			"old-s1", "g1", int32(1), "REVEALED", now, now, now, now,
+			"old-s1", "g1", int32(1), "REVEALED", now, now, now, now, "WEEKLY", int32(0),
 		))
 
 	// UpdateSeasonStatus to close the revealed season
@@ -2105,9 +2021,9 @@ func TestCreateNewSeasons_ClosesRevealedSeasons(t *testing.T) {
 
 	// CreateSeason
 	mock.ExpectQuery("INSERT INTO seasons").
-		WithArgs(sqlmock.AnyArg(), "g1", int32(2), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WithArgs(sqlmock.AnyArg(), "g1", int32(2), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows(seasonCols).AddRow(
-			"new-s1", "g1", int32(2), "VOTING", now, now, now, now,
+			"new-s1", "g1", int32(2), "VOTING", now, now, now, now, "WEEKLY", int32(0),
 		))
 
 	// CountGroupMembers
@@ -2116,13 +2032,13 @@ func TestCreateNewSeasons_ClosesRevealedSeasons(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(4)))
 
 	// GetRandomSystemQuestionsByCategories
-	questionCols := []string{"id", "text", "category", "source", "group_id", "author_id", "status", "created_at"}
+	questionCols := []string{"id", "text", "category", "source", "group_id", "author_id", "status", "created_at", "tone"}
 	qRows := sqlmock.NewRows(questionCols)
 	for i := 0; i < 5; i++ {
-		qRows.AddRow(fmt.Sprintf("q%d", i), fmt.Sprintf("Q%d", i), "HOT", "SYSTEM", nil, nil, "ACTIVE", now)
+		qRows.AddRow(fmt.Sprintf("q%d", i), fmt.Sprintf("Q%d", i), "HOT", "SYSTEM", nil, nil, "ACTIVE", now, "NEUTRAL")
 	}
 	mock.ExpectQuery("SELECT .+ FROM questions").
-		WithArgs(sqlmock.AnyArg(), "g1", int32(8)). // 4 * 2 = 8
+		WithArgs(sqlmock.AnyArg(), "g1", int32(8), sqlmock.AnyArg()). // 4 * 2 = 8
 		WillReturnRows(qRows)
 
 	sqCols := []string{"id", "season_id", "question_id", "ord"}
@@ -2184,8 +2100,8 @@ func TestUpdateGroup_UpdateTelegramUsernameDBError(t *testing.T) {
 
 	tg := "my_chat"
 	_, err := svc.UpdateGroup(context.Background(), UpdateGroupParams{
-		UserID:          "admin-1",
-		GroupID:         "group-1",
+		UserID:           "admin-1",
+		GroupID:          "group-1",
 		TelegramUsername: &tg,
 	})
 	if err == nil || err.Error() != "update tg failed" {
@@ -2241,8 +2157,8 @@ func TestUpdateGroup_GenericDBError(t *testing.T) {
 func TestGetJoinPreview_GenericDBError(t *testing.T) {
 	svc, mock := newMockService(t)
 
-	mock.ExpectQuery("SELECT .+ FROM groups WHERE invite_code").
-		WithArgs("code-1").
+	mock.ExpectQuery("SELECT .+ FROM groups WHERE upper.invite_code.").
+		WithArgs("CODE1").
 		WillReturnError(fmt.Errorf("db broken"))
 
 	_, err := svc.GetJoinPreview(context.Background(), "code-1")
@@ -2256,8 +2172,8 @@ func TestGetJoinPreview_GenericDBError(t *testing.T) {
 func TestGetJoinPreview_GetAdminUsernameError(t *testing.T) {
 	svc, mock := newMockService(t)
 
-	mock.ExpectQuery("SELECT .+ FROM groups WHERE invite_code").
-		WithArgs("invite-1").
+	mock.ExpectQuery("SELECT .+ FROM groups WHERE upper.invite_code.").
+		WithArgs("INVITE1").
 		WillReturnRows(mockGroupRow("group-1", "Test", "invite-1", "admin-1"))
 
 	mock.ExpectQuery("SELECT COUNT").
@@ -2295,12 +2211,12 @@ func TestCreateNewSeasons_QuestionCountCappedAtMax(t *testing.T) {
 	svc, mock := newMockService(t)
 
 	now := time.Now()
-	seasonCols := []string{"id", "group_id", "number", "status", "starts_at", "reveal_at", "ends_at", "created_at"}
+	seasonCols := []string{"id", "group_id", "number", "status", "starts_at", "reveal_at", "ends_at", "created_at", "kind", "postpone_count"}
 
 	// Group with many members (memberCount * 2 > MaxSeasonQuestions)
 	mock.ExpectQuery("SELECT .+ FROM groups").
 		WillReturnRows(sqlmock.NewRows(groupCols).AddRow(
-			"g1", "Group1", "inv1", "a1", nil, nil, nil, nil, now, `{"HOT"}`))
+			"g1", "Group1", "inv1", "a1", nil, nil, nil, nil, now, `{"HOT"}`, false))
 
 	mock.ExpectBegin()
 
@@ -2313,9 +2229,9 @@ func TestCreateNewSeasons_QuestionCountCappedAtMax(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"coalesce"}).AddRow(int32(0)))
 
 	mock.ExpectQuery("INSERT INTO seasons").
-		WithArgs(sqlmock.AnyArg(), "g1", int32(1), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WithArgs(sqlmock.AnyArg(), "g1", int32(1), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnRows(sqlmock.NewRows(seasonCols).AddRow(
-			"ns1", "g1", int32(1), "VOTING", now, now, now, now,
+			"ns1", "g1", int32(1), "VOTING", now, now, now, now, "WEEKLY", int32(0),
 		))
 
 	// 20 members -> 20 * 2 = 40, capped at MaxSeasonQuestions = 10
@@ -2323,13 +2239,13 @@ func TestCreateNewSeasons_QuestionCountCappedAtMax(t *testing.T) {
 		WithArgs("g1").
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(20)))
 
-	questionCols := []string{"id", "text", "category", "source", "group_id", "author_id", "status", "created_at"}
+	questionCols := []string{"id", "text", "category", "source", "group_id", "author_id", "status", "created_at", "tone"}
 	qRows := sqlmock.NewRows(questionCols)
 	for i := 0; i < 10; i++ {
-		qRows.AddRow(fmt.Sprintf("q%d", i), fmt.Sprintf("Q%d", i), "HOT", "SYSTEM", nil, nil, "ACTIVE", now)
+		qRows.AddRow(fmt.Sprintf("q%d", i), fmt.Sprintf("Q%d", i), "HOT", "SYSTEM", nil, nil, "ACTIVE", now, "NEUTRAL")
 	}
 	mock.ExpectQuery("SELECT .+ FROM questions").
-		WithArgs(sqlmock.AnyArg(), "g1", int32(10)).
+		WithArgs(sqlmock.AnyArg(), "g1", int32(10), sqlmock.AnyArg()).
 		WillReturnRows(qRows)
 
 	sqCols := []string{"id", "season_id", "question_id", "ord"}
@@ -2346,6 +2262,143 @@ func TestCreateNewSeasons_QuestionCountCappedAtMax(t *testing.T) {
 	err := svc.CreateNewSeasons(context.Background())
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
+func TestCreateFirstSeason_IsKickoffAndOpensImmediately(t *testing.T) {
+	svc, mock := newMockService(t)
+	now := time.Now()
+
+	mock.ExpectBegin()
+	// CreateSeason must bind KICKOFF as the 7th argument.
+	mock.ExpectQuery("INSERT INTO seasons").
+		WithArgs(sqlmock.AnyArg(), "group-1", int32(1),
+			sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), db.SeasonKindKICKOFF).
+		WillReturnRows(sqlmock.NewRows(seasonRowCols).AddRow(
+			"season-1", "group-1", int32(1), "VOTING", now, now, now, now, "KICKOFF", int32(0),
+		))
+
+	questionCols := []string{"id", "text", "category", "source", "group_id", "author_id", "status", "created_at", "tone"}
+	qRows := sqlmock.NewRows(questionCols)
+	for i := 0; i < MinSeasonQuestions; i++ {
+		qRows.AddRow(fmt.Sprintf("q%d", i), fmt.Sprintf("Question %d", i), "HOT", "SYSTEM", nil, nil, "ACTIVE", now, "NEUTRAL")
+	}
+	mock.ExpectQuery("SELECT .+ FROM questions").
+		WithArgs(sqlmock.AnyArg(), "group-1", int32(MinSeasonQuestions), sqlmock.AnyArg()).
+		WillReturnRows(qRows)
+
+	sqCols := []string{"id", "season_id", "question_id", "ord"}
+	for i := 0; i < MinSeasonQuestions; i++ {
+		mock.ExpectQuery("INSERT INTO season_questions").
+			WithArgs(sqlmock.AnyArg(), "season-1", fmt.Sprintf("q%d", i), int32(i)).
+			WillReturnRows(sqlmock.NewRows(sqCols).AddRow(
+				fmt.Sprintf("sq%d", i), "season-1", fmt.Sprintf("q%d", i), int32(i),
+			))
+	}
+	mock.ExpectCommit()
+
+	tx, err := svc.sqlDB.BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	qtx := svc.queries.WithTx(tx)
+
+	if err := svc.createFirstSeasonTx(context.Background(), qtx, "group-1", []db.QuestionCategory{db.QuestionCategoryHOT}, false); err != nil {
+		t.Fatalf("createFirstSeasonTx: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+
+	// The schedule handed to CreateSeason must already be open for voting.
+	startsAt, _, _ := schedule.KickoffSeason(now)
+	if startsAt.After(now) {
+		t.Errorf("kickoff season must open immediately, startsAt %s is after %s", startsAt, now)
+	}
+}
+
+func TestCreateWeeklySeasonForGroup_SkipsWhenSeasonOpen(t *testing.T) {
+	svc, mock := newMockService(t)
+	now := time.Now()
+
+	mock.ExpectQuery("SELECT .+ FROM groups WHERE id").
+		WithArgs("g1").
+		WillReturnRows(sqlmock.NewRows(groupCols).AddRow(
+			"g1", "Group One", "inv1", "admin1",
+			nil, nil, nil, nil,
+			now, `{"HOT"}`, false,
+		))
+	// GetActiveSeasonByGroup returns an open season -> creation must be skipped.
+	mock.ExpectQuery("SELECT .+ FROM seasons WHERE group_id").
+		WithArgs("g1").
+		WillReturnRows(sqlmock.NewRows(seasonRowCols).AddRow(
+			"open-season", "g1", int32(3), "VOTING", now, now, now, now, "WEEKLY", int32(0),
+		))
+
+	if err := svc.CreateWeeklySeasonForGroup(context.Background(), "g1"); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
+func TestMaintainSeasons_NoGroupsIsNoop(t *testing.T) {
+	svc, mock := newMockService(t)
+
+	mock.ExpectQuery("SELECT .+ FROM groups").
+		WillReturnRows(sqlmock.NewRows(groupCols))
+
+	if err := svc.MaintainSeasons(context.Background()); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Errorf("unmet expectations: %v", err)
+	}
+}
+
+// --- Season kind: kickoff on group creation, weekly afterwards ---
+
+var seasonRowCols = []string{"id", "group_id", "number", "status", "starts_at", "reveal_at", "ends_at", "created_at", "kind", "postpone_count"}
+
+// --- A ban is not undone by an invite ---
+
+func TestJoinGroup_BannedMemberIsRefused(t *testing.T) {
+	svc, mock := newMockService(t)
+
+	mock.ExpectQuery("SELECT .+ FROM groups WHERE upper.invite_code.").
+		WithArgs("INVITE1").
+		WillReturnRows(mockGroupRow("group-1", "Test", "INVITE1", "admin-1"))
+
+	// IsGroupMember → not a member
+	mock.ExpectQuery("SELECT COUNT").
+		WithArgs("user-1", "group-1").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(0)))
+
+	// CountGroupMembers → room available
+	mock.ExpectQuery("SELECT COUNT").
+		WithArgs("group-1").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(5)))
+
+	// CountUserGroups → not at limit
+	mock.ExpectQuery("SELECT COUNT").
+		WithArgs("user-1").
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(int64(1)))
+
+	// IsGroupBanned → banned
+	mock.ExpectQuery("SELECT EXISTS").
+		WithArgs("group-1", "user-1").
+		WillReturnRows(sqlmock.NewRows([]string{"exists"}).AddRow(true))
+
+	_, err := svc.JoinGroup(context.Background(), "user-1", "invite-1", db.JoinSourceLINK, "")
+	if !errors.Is(err, ErrGroupBanned) {
+		t.Fatalf("expected ErrGroupBanned, got %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Errorf("unmet expectations: %v", err)

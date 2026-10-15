@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import '../theme/app_text_styles.dart';
+
+import '../theme/app_tokens.dart';
+import 'kit/kit.dart';
 
 class EmptyStateWidget extends StatelessWidget {
   final String emoji;
@@ -20,41 +22,34 @@ class EmptyStateWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.t;
     return Center(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
+        padding: EdgeInsets.symmetric(horizontal: AppTokens.space.xxl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(emoji, style: const TextStyle(fontSize: 64))
-                .animate()
-                .scale(
+            Text(emoji, style: const TextStyle(fontSize: 64)).animate().scale(
                   begin: const Offset(0.5, 0.5),
                   end: const Offset(1, 1),
-                  duration: 400.ms,
-                  curve: Curves.elasticOut,
+                  duration: context.motion(MotionClass.emphasis),
+                  curve: context.motionCurve(MotionClass.emphasis),
                 ),
-            const SizedBox(height: 16),
+            SizedBox(height: AppTokens.space.lg),
             Text(
               title,
-              style: AppTextStyles.headline2,
+              style: AppTokens.text.heading2.copyWith(color: t.color.textPrimary),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 8),
+            SizedBox(height: AppTokens.space.sm),
             Text(
               subtitle,
-              style: AppTextStyles.bodySecondary,
+              style: AppTokens.text.body.copyWith(color: t.color.textSecondary),
               textAlign: TextAlign.center,
             ),
             if (buttonText != null && onButtonPressed != null) ...[
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: onButtonPressed,
-                  child: Text(buttonText!),
-                ),
-              ),
+              SizedBox(height: AppTokens.space.xl),
+              AppButton(label: buttonText!, onPressed: onButtonPressed),
             ],
           ],
         ),

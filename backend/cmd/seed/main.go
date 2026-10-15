@@ -9,6 +9,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
+	db "github.com/repa-app/repa/internal/db/sqlc"
+	questionsvc "github.com/repa-app/repa/internal/service/questions"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -16,6 +18,12 @@ import (
 type question struct {
 	Text     string
 	Category string
+}
+
+// tone classifies a seeded question, so a fresh database arrives classified. Uses the same rules as
+// internal/service/questions (and as migration 010, which corrects databases that already exist).
+func (q question) tone() string {
+	return string(questionsvc.ClassifyTone(q.Text, db.QuestionCategory(q.Category)))
 }
 
 func main() {
@@ -44,10 +52,10 @@ func main() {
 	for _, q := range questions {
 		id := generateID()
 		tag, err := pool.Exec(ctx,
-			`INSERT INTO questions (id, text, category, source, status)
-			 VALUES ($1, $2, $3, 'SYSTEM', 'ACTIVE')
+			`INSERT INTO questions (id, text, category, source, status, tone)
+			 VALUES ($1, $2, $3, 'SYSTEM', 'ACTIVE', $4)
 			 ON CONFLICT DO NOTHING`,
-			id, q.Text, q.Category,
+			id, q.Text, q.Category, q.tone(),
 		)
 		if err != nil {
 			log.Error().Err(err).Str("question", q.Text).Msg("failed to insert question")

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import '../theme/app_colors.dart';
-import '../theme/app_text_styles.dart';
+
+import '../theme/app_tokens.dart';
+import 'kit/kit.dart';
 
 class ErrorStateWidget extends StatelessWidget {
   final String? message;
@@ -30,11 +31,12 @@ class ErrorStateWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.t;
     final displayMessage = friendlyMessage(message);
 
     return Center(
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 32),
+        padding: EdgeInsets.symmetric(horizontal: AppTokens.space.xxl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -42,30 +44,24 @@ class ErrorStateWidget extends StatelessWidget {
               width: 64,
               height: 64,
               decoration: BoxDecoration(
-                color: AppColors.error.withValues(alpha: 0.1),
+                color: t.color.danger.withValues(alpha: 0.12),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.error_outline_rounded,
-                color: AppColors.error,
+                color: t.color.danger,
                 size: 32,
               ),
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: AppTokens.space.lg),
             Text(
               displayMessage,
-              style: AppTextStyles.body,
+              style: AppTokens.text.body.copyWith(color: t.color.textPrimary),
               textAlign: TextAlign.center,
             ),
             if (onRetry != null) ...[
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: onRetry,
-                  child: const Text('Повторить'),
-                ),
-              ),
+              SizedBox(height: AppTokens.space.xl),
+              AppButton(label: 'Повторить', onPressed: onRetry),
             ],
           ],
         ),

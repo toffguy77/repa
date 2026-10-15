@@ -98,7 +98,11 @@ class PushService {
           _router.go('/groups/$groupId/reveal/$seasonId');
         }
       case 'reveal-waiting':
-        if (groupId != null) {
+        // Point at the screen that actually holds the count and the teaser. It used to open the
+        // group, which is why the mid-week pushes promised something the tap could not deliver.
+        if (groupId != null && seasonId != null) {
+          _router.go('/groups/$groupId/reveal/$seasonId?status=VOTING');
+        } else if (groupId != null) {
           _router.go('/groups/$groupId');
         }
       case 'vote':

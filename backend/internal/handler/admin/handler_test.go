@@ -28,6 +28,22 @@ type mockQuerier struct {
 	countActiveUsers30DFunc  func(ctx context.Context) (int64, error)
 	countGroupsFunc          func(ctx context.Context) (int64, error)
 	sumRevenue7DaysFunc      func(ctx context.Context) (int64, error)
+	countSharesByChannelFunc func(ctx context.Context) ([]db.CountSharesByChannelRow, error)
+	countJoinsBySourceFunc   func(ctx context.Context) ([]db.CountJoinsBySourceRow, error)
+}
+
+func (m *mockQuerier) CountSharesByChannel(ctx context.Context) ([]db.CountSharesByChannelRow, error) {
+	if m.countSharesByChannelFunc != nil {
+		return m.countSharesByChannelFunc(ctx)
+	}
+	return nil, nil
+}
+
+func (m *mockQuerier) CountJoinsBySource(ctx context.Context) ([]db.CountJoinsBySourceRow, error) {
+	if m.countJoinsBySourceFunc != nil {
+		return m.countJoinsBySourceFunc(ctx)
+	}
+	return nil, nil
 }
 
 func (m *mockQuerier) ListReports(ctx context.Context, arg db.ListReportsParams) ([]db.ListReportsRow, error) {
@@ -216,7 +232,7 @@ func TestListReports_SuccessWithDefaults(t *testing.T) {
 					QuestionText:     "Bad question?",
 					QuestionCategory: db.QuestionCategoryFUNNY,
 					QuestionStatus:   db.QuestionStatusPENDING,
-					ReporterUsername:  "alice",
+					ReporterUsername: "alice",
 				},
 			}, nil
 		},
@@ -346,7 +362,7 @@ func TestListReports_ReportWithNilReason(t *testing.T) {
 					QuestionText:     "Some question",
 					QuestionCategory: db.QuestionCategoryHOT,
 					QuestionStatus:   db.QuestionStatusACTIVE,
-					ReporterUsername:  "bob",
+					ReporterUsername: "bob",
 				},
 			}, nil
 		},
@@ -390,7 +406,7 @@ func TestListReports_ReportWithReason(t *testing.T) {
 					QuestionText:     "Some question",
 					QuestionCategory: db.QuestionCategorySECRETS,
 					QuestionStatus:   db.QuestionStatusPENDING,
-					ReporterUsername:  "charlie",
+					ReporterUsername: "charlie",
 				},
 			}, nil
 		},
@@ -676,5 +692,88 @@ func TestGetStats_DBErrorsSilentlyIgnored(t *testing.T) {
 	}
 	if data["revenue_7d_rub"].(float64) != 0 {
 		t.Errorf("expected revenue_7d_rub 0, got %v", data["revenue_7d_rub"])
+	}
+}
+
+// --- Acquisition funnel in stats ---
+
+func TestGetStats_ReportsSharesAndAttributedJoins(t *testing.T) {
+	mock := &mockQuerier{
+		countSharesByChannelFunc: func(_ context.Context) ([]db.CountSharesByChannelRow, error) {
+			return []db.CountSharesByChannelRow{
+				{Channel: "card", Count: 12},
+				{Channel: "telegram", Count: 4},
+			}, nil
+		},
+		countJoinsBySourceFunc: func(_ context.Context) ([]db.CountJoinsBySourceRow, error) {
+			return []db.CountJoinsBySourceRow{
+				{JoinSource: db.JoinSourceCARD, Count: 5},
+				{JoinSource: db.JoinSourceUNKNOWN, Count: 3},
+			}, nil
+		},
+	}
+
+	h := NewHandler(mock, "admin", "secret")
+	e := setupEcho()
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/stats", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	if err := h.GetStats(c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+
+	var resp map[string]map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	shares := resp["data"]["shares_by_channel"].(map[string]any)
+	if shares["card"] != float64(12) {
+		t.Errorf("shares_by_channel[card] = %v, want 12", shares["card"])
+	}
+	if shares["telegram"] != float64(4) {
+		t.Errorf("shares_by_channel[telegram] = %v, want 4", shares["telegram"])
+	}
+
+	joins := resp["data"]["joins_by_source"].(map[string]any)
+	if joins["CARD"] != float64(5) {
+		t.Errorf("joins_by_source[CARD] = %v, want 5", joins["CARD"])
+	}
+	if joins["UNKNOWN"] != float64(3) {
+		t.Errorf("joins_by_source[UNKNOWN] = %v, want 3", joins["UNKNOWN"])
+	}
+}
+
+func TestGetStats_FunnelQueryErrorsDoNotFailTheResponse(t *testing.T) {
+	mock := &mockQuerier{
+		countSharesByChannelFunc: func(_ context.Context) ([]db.CountSharesByChannelRow, error) {
+			return nil, errors.New("db down")
+		},
+		countJoinsBySourceFunc: func(_ context.Context) ([]db.CountJoinsBySourceRow, error) {
+			return nil, errors.New("db down")
+		},
+	}
+
+	h := NewHandler(mock, "admin", "secret")
+	e := setupEcho()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(httptest.NewRequest(http.MethodGet, "/admin/stats", nil), rec)
+
+	if err := h.GetStats(c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Errorf("a funnel query failure should not take down the whole stats page, got %d", rec.Code)
+	}
+
+	var resp map[string]map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
+	if _, ok := resp["data"]["shares_by_channel"]; !ok {
+		t.Error("expected the key to be present (empty) rather than missing")
 	}
 }

@@ -81,19 +81,82 @@ class ApiService {
     return response.data as Map<String, dynamic>;
   }
 
-  Future<Map<String, dynamic>> joinGroup(String inviteCode) async {
-    final response = await _dio.post('/groups/join/$inviteCode');
+  /// [source] records how the member arrived (see `join_source` in docs/features/groups.md).
+  /// It is optional: an absent or unrecognised value is recorded as UNKNOWN server-side and
+  /// never fails the join.
+  Future<Map<String, dynamic>> joinGroup(
+    String inviteCode, {
+    String? source,
+    String? referrerId,
+  }) async {
+    // Built imperatively rather than with collection-if or null-aware elements: this file is
+    // also read by build_runner's resolver, which follows the pubspec SDK floor rather than the
+    // installed SDK.
+    final query = <String, String>{};
+    if (source != null) {
+      query['source'] = source;
+    }
+    // An empty referrer is the same as none: the server drops an unverifiable claim anyway.
+    if (referrerId != null && referrerId.isNotEmpty) {
+      query['ref'] = referrerId;
+    }
+    final response = await _dio.post(
+      '/groups/join/$inviteCode',
+      queryParameters: query.isEmpty ? null : query,
+    );
     return response.data as Map<String, dynamic>;
   }
 
-  Future<Map<String, dynamic>> leaveGroup(String id) async {
-    final response = await _dio.delete('/groups/$id/leave');
+  // --- Member safety ---
+
+  Future<Map<String, dynamic>> blockMember(String userId) async {
+    final response = await _dio.post('/members/$userId/block');
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> unblockMember(String userId) async {
+    final response = await _dio.delete('/members/$userId/block');
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> reportMember(
+    String userId, {
+    required String groupId,
+    String? reason,
+  }) async {
+    // Built imperatively rather than with collection-if: build_runner's resolver follows the pubspec
+    // SDK floor, which rejects the null-aware element form the analyzer prefers here.
+    final body = <String, String>{'group_id': groupId};
+    if (reason != null && reason.isNotEmpty) {
+      body['reason'] = reason;
+    }
+    final response = await _dio.post('/members/$userId/report', data: body);
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> removeMember(String groupId, String userId) async {
+    final response = await _dio.delete('/groups/$groupId/members/$userId');
+    return response.data as Map<String, dynamic>;
+  }
+
+  /// [permanent] makes the departure irreversible: an invite will not bring the member back.
+  /// Ordinary leaving stays reversible, because people leave groups by accident.
+  Future<Map<String, dynamic>> leaveGroup(String id, {bool permanent = false}) async {
+    final response = await _dio.delete(
+      '/groups/$id/leave',
+      queryParameters: permanent ? {'permanent': 'true'} : null,
+    );
     return response.data as Map<String, dynamic>;
   }
 
   Future<Map<String, dynamic>> updateGroup(
       String id, Map<String, dynamic> body) async {
     final response = await _dio.patch('/groups/$id', data: body);
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> getGroupChronicle(String id) async {
+    final response = await _dio.get('/groups/$id/chronicle');
     return response.data as Map<String, dynamic>;
   }
 
@@ -148,8 +211,28 @@ class ApiService {
     return response.data as Map<String, dynamic>;
   }
 
+  Future<Map<String, dynamic>> getAnticipation(String seasonId) async {
+    final response = await _dio.get('/seasons/$seasonId/anticipation');
+    return response.data as Map<String, dynamic>;
+  }
+
+  /// Buys one rung of the detector ladder: a partial reveal of a single voter.
+  Future<Map<String, dynamic>> buyDetectorHint(String seasonId) async {
+    final response = await _dio.post('/seasons/$seasonId/detector/hint');
+    return response.data as Map<String, dynamic>;
+  }
+
   Future<Map<String, dynamic>> buyDetector(String seasonId) async {
     final response = await _dio.post('/seasons/$seasonId/detector');
+    return response.data as Map<String, dynamic>;
+  }
+
+  /// Records that the member shared their card. Telemetry only — callers swallow failures.
+  Future<Map<String, dynamic>> recordShare(String seasonId, String channel) async {
+    final response = await _dio.post(
+      '/seasons/$seasonId/shares',
+      data: {'channel': channel},
+    );
     return response.data as Map<String, dynamic>;
   }
 
@@ -157,6 +240,11 @@ class ApiService {
 
   Future<Map<String, dynamic>> getCrystalBalance() async {
     final response = await _dio.get('/crystals/balance');
+    return response.data as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> getCrystalHistory() async {
+    final response = await _dio.get('/crystals/history');
     return response.data as Map<String, dynamic>;
   }
 

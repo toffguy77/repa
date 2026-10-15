@@ -273,8 +273,10 @@ func TestGetProfile_StatsNotFound_ZeroStats(t *testing.T) {
 	if resp.Stats.TotalVotesCast != 0 {
 		t.Errorf("expected total_votes_cast 0, got %d", resp.Stats.TotalVotesCast)
 	}
-	if resp.Stats.GuessAccuracy != 0 {
-		t.Errorf("expected guess_accuracy 0, got %f", resp.Stats.GuessAccuracy)
+	// Absent rather than zero: a member with no stats row has not been through a reveal, which is a
+	// different fact from matching nothing.
+	if resp.Stats.GuessAccuracy != nil {
+		t.Errorf("expected guess_accuracy to be absent, got %f", *resp.Stats.GuessAccuracy)
 	}
 }
 
@@ -417,14 +419,18 @@ func TestGetProfile_PercentageRounding(t *testing.T) {
 	// TopAttribute percentage 85.67 should round to 85.7
 	svc := NewService(m)
 
-	resp, err := svc.GetProfile(context.Background(), "g1", "u1", "u2")
+	// Viewing one's own profile, which is the only place the accuracy figure appears at all.
+	resp, err := svc.GetProfile(context.Background(), "g1", "u1", "u1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	expected := math.Round(72.35*10) / 10
-	if resp.Stats.GuessAccuracy != expected {
-		t.Errorf("expected guess_accuracy %f, got %f", expected, resp.Stats.GuessAccuracy)
+	if resp.Stats.GuessAccuracy == nil {
+		t.Fatal("expected guess_accuracy on one's own profile")
+	}
+	if *resp.Stats.GuessAccuracy != expected {
+		t.Errorf("expected guess_accuracy %f, got %f", expected, *resp.Stats.GuessAccuracy)
 	}
 
 	if resp.Stats.TopAttributeAllTime == nil {

@@ -4,9 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_text_styles.dart';
 import 'settings_notifier.dart';
+import '../../../core/theme/app_tokens.dart';
 
 final _packageInfoProvider = FutureProvider<PackageInfo>((ref) {
   return PackageInfo.fromPlatform();
@@ -52,7 +51,7 @@ class SettingsScreen extends ConsumerWidget {
             return SwitchListTile(
               title: Text(pref.label),
               value: pref.enabled,
-              activeTrackColor: AppColors.primary,
+              activeTrackColor: context.t.color.accent,
               onChanged: (v) =>
                   ref.read(settingsProvider.notifier).togglePushPref(i, v),
             );
@@ -62,14 +61,14 @@ class SettingsScreen extends ConsumerWidget {
           // --- Account ---
           _SectionHeader('Аккаунт'),
           ListTile(
-            leading: Icon(Icons.logout, color: AppColors.error),
-            title: Text('Выйти', style: TextStyle(color: AppColors.error)),
+            leading: Icon(Icons.logout, color: context.t.color.danger),
+            title: Text('Выйти', style: TextStyle(color: context.t.color.danger)),
             onTap: () => _confirmLogout(context, ref),
           ),
           ListTile(
-            leading: Icon(Icons.delete_forever, color: AppColors.error),
+            leading: Icon(Icons.delete_forever, color: context.t.color.danger),
             title: Text('Удалить аккаунт',
-                style: TextStyle(color: AppColors.error)),
+                style: TextStyle(color: context.t.color.danger)),
             onTap: () => _confirmDelete(context, ref),
           ),
           const Divider(height: 32),
@@ -157,7 +156,7 @@ class SettingsScreen extends ConsumerWidget {
               Navigator.pop(context);
               ref.read(settingsProvider.notifier).logout();
             },
-            child: Text('Выйти', style: TextStyle(color: AppColors.error)),
+            child: Text('Выйти', style: TextStyle(color: context.t.color.danger)),
           ),
         ],
       ),
@@ -182,7 +181,7 @@ class SettingsScreen extends ConsumerWidget {
               Navigator.pop(context);
               ref.read(settingsProvider.notifier).deleteAccount();
             },
-            child: Text('Удалить', style: TextStyle(color: AppColors.error)),
+            child: Text('Удалить', style: TextStyle(color: context.t.color.danger)),
           ),
         ],
       ),
@@ -200,7 +199,7 @@ class _SectionHeader extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       child: Text(
         title,
-        style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w600),
+        style: context.ts.caption.copyWith(fontWeight: FontWeight.w600),
       ),
     );
   }
@@ -226,7 +225,7 @@ class _AvatarTile extends StatelessWidget {
         children: [
           CircleAvatar(
             radius: 28,
-            backgroundColor: AppColors.primaryLight,
+            backgroundColor: context.t.color.accentFill.withValues(alpha: 0.18),
             backgroundImage:
                 avatarUrl != null ? NetworkImage(avatarUrl!) : null,
             child: avatarUrl == null

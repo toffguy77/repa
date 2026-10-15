@@ -15,16 +15,24 @@ class GroupsRepository {
 
   GroupsRepository(this._api);
 
+  /// [kindOnly] is sent only when the creator actually chose a value. Omitting it lets the server
+  /// apply its age-based default, which is the only place that rule lives — a client that always sent
+  /// its own switch value would override it, and would get it wrong whenever it does not know the
+  /// creator's birth year.
   Future<CreateGroupResult> createGroup({
     required String name,
     required List<String> categories,
     String? telegramUsername,
+    bool? kindOnly,
   }) async {
     try {
       final body = <String, dynamic>{
         'name': name,
         'categories': categories,
       };
+      if (kindOnly != null) {
+        body['kind_only'] = kindOnly;
+      }
       if (telegramUsername != null && telegramUsername.isNotEmpty) {
         body['telegram_username'] = telegramUsername;
       }
@@ -34,6 +42,19 @@ class GroupsRepository {
         group: Group.fromJson(data['group'] as Map<String, dynamic>),
         inviteUrl: data['invite_url'] as String,
       );
+    } on DioException catch (e) {
+      throw parseError(e);
+    }
+  }
+
+  /// Changes the group's kind-only setting. Admin only, enforced by the server.
+  ///
+  /// Applies from the next season: the open one is left as members found it.
+  Future<Group> setKindOnly(String groupId, bool kindOnly) async {
+    try {
+      final response = await _api.updateGroup(groupId, {'kind_only': kindOnly});
+      final data = response['data'] as Map<String, dynamic>;
+      return Group.fromJson(data['group'] as Map<String, dynamic>);
     } on DioException catch (e) {
       throw parseError(e);
     }
@@ -72,9 +93,17 @@ class GroupsRepository {
     }
   }
 
-  Future<Group> joinGroup(String inviteCode) async {
+  Future<Group> joinGroup(
+    String inviteCode, {
+    String? source,
+    String? referrerId,
+  }) async {
     try {
-      final response = await _api.joinGroup(inviteCode);
+      final response = await _api.joinGroup(
+        inviteCode,
+        source: source,
+        referrerId: referrerId,
+      );
       final data = response['data'] as Map<String, dynamic>;
       return Group.fromJson(data['group'] as Map<String, dynamic>);
     } on DioException catch (e) {
@@ -82,9 +111,45 @@ class GroupsRepository {
     }
   }
 
-  Future<void> leaveGroup(String id) async {
+  Future<void> blockMember(String userId) async {
     try {
-      await _api.leaveGroup(id);
+      await _api.blockMember(userId);
+    } on DioException catch (e) {
+      throw parseError(e);
+    }
+  }
+
+  Future<void> unblockMember(String userId) async {
+    try {
+      await _api.unblockMember(userId);
+    } on DioException catch (e) {
+      throw parseError(e);
+    }
+  }
+
+  Future<void> reportMember(
+    String userId, {
+    required String groupId,
+    String? reason,
+  }) async {
+    try {
+      await _api.reportMember(userId, groupId: groupId, reason: reason);
+    } on DioException catch (e) {
+      throw parseError(e);
+    }
+  }
+
+  Future<void> removeMember(String groupId, String userId) async {
+    try {
+      await _api.removeMember(groupId, userId);
+    } on DioException catch (e) {
+      throw parseError(e);
+    }
+  }
+
+  Future<void> leaveGroup(String id, {bool permanent = false}) async {
+    try {
+      await _api.leaveGroup(id, permanent: permanent);
     } on DioException catch (e) {
       throw parseError(e);
     }

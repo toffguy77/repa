@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../providers/connectivity_provider.dart';
-import '../theme/app_colors.dart';
+import '../theme/app_tokens.dart';
 
 class OfflineBanner extends ConsumerWidget {
   final Widget child;
@@ -12,27 +12,28 @@ class OfflineBanner extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isOnline = ref.watch(connectivityProvider);
+    final t = context.t;
 
     return Column(
       children: [
         AnimatedSize(
-          duration: 300.ms,
+          duration: context.motion(MotionClass.surface),
+          curve: context.motionCurve(MotionClass.surface),
           child: isOnline
               ? const SizedBox.shrink()
               : Container(
                   width: double.infinity,
-                  color: AppColors.error,
+                  color: t.color.danger,
                   padding: EdgeInsets.only(
-                    top: MediaQuery.of(context).padding.top + 4,
-                    bottom: 4,
+                    top: MediaQuery.of(context).padding.top + AppTokens.space.xs,
+                    bottom: AppTokens.space.xs,
                   ),
-                  child: const Text(
+                  child: Text(
                     'Нет соединения',
                     textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
+                    style: AppTokens.text.caption.copyWith(
+                      color: t.color.onAccentFill,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),

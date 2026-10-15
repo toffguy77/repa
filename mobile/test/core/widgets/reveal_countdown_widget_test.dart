@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:repa/core/widgets/reveal_countdown_widget.dart';
+import 'package:repa/core/theme/app_theme.dart';
 
 void main() {
   Widget buildWidget({required String revealAt}) {
     return MaterialApp(
+      theme: AppTheme.dark,
       home: Scaffold(
         body: RevealCountdownWidget(revealAt: revealAt),
       ),
@@ -73,7 +75,7 @@ void main() {
     await tester.pump();
 
     // Remove widget — should dispose timer cleanly
-    await tester.pumpWidget(const MaterialApp(home: Scaffold()));
+    await tester.pumpWidget(MaterialApp(theme: AppTheme.dark, home: Scaffold()));
     await tester.pump();
     // No exception = pass
   });

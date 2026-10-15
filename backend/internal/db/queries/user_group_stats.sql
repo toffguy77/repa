@@ -13,3 +13,21 @@ RETURNING *;
 
 -- name: GetUserGroupStats :one
 SELECT * FROM user_group_stats WHERE user_id = $1 AND group_id = $2;
+
+-- name: GetGroupGuessStanding :many
+-- Every current member of the group with their stored guess accuracy.
+--
+-- A LEFT JOIN on purpose: a member who has not yet been through a reveal has no stats row, and that is
+-- how "not yet ranked" is expressed. Defaulting them to zero would rank them last on a number nobody
+-- measured.
+--
+-- The accuracy is read, never recomputed: the stored value is a rolling average over a 5-season
+-- window (see internal/service/achievements), so recomputing here would show a different number than
+-- the profile does.
+SELECT u.id, u.username, u.avatar_emoji,
+  ugs.guess_accuracy, ugs.seasons_played
+FROM group_members gm
+JOIN users u ON u.id = gm.user_id
+LEFT JOIN user_group_stats ugs ON ugs.user_id = gm.user_id AND ugs.group_id = gm.group_id
+WHERE gm.group_id = $1
+ORDER BY ugs.guess_accuracy DESC NULLS LAST, u.username ASC;

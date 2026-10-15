@@ -62,3 +62,22 @@ SELECT DISTINCT ON (v.voter_id) u.id, u.username, u.avatar_emoji, u.avatar_url
 FROM votes v
 JOIN users u ON u.id = v.voter_id
 WHERE v.season_id = $1;
+
+-- name: CountVotersAboutTarget :one
+-- How many distinct members have answered at least one question about this target.
+-- Excludes the target's own votes: answering about others must not inflate your own count.
+SELECT COUNT(DISTINCT voter_id)::bigint
+FROM votes
+WHERE season_id = $1 AND target_id = $2 AND voter_id <> $2;
+
+-- name: GetLeadingCategoryForTarget :one
+-- The category this target has received the most votes in.
+-- Ties break on the category's own ordering — arbitrary but stable, because a random tiebreak would
+-- make the Thursday teaser flicker between two emojis on consecutive loads and read as a bug.
+SELECT q.category, COUNT(*)::bigint AS votes
+FROM votes v
+JOIN questions q ON q.id = v.question_id
+WHERE v.season_id = $1 AND v.target_id = $2 AND v.voter_id <> $2
+GROUP BY q.category
+ORDER BY votes DESC, q.category ASC
+LIMIT 1;

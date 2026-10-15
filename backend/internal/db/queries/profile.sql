@@ -3,7 +3,9 @@ SELECT q.text as question_text, COALESCE(MAX(sr.percentage), 0)::float as percen
 FROM season_results sr
 JOIN questions q ON q.id = sr.question_id
 JOIN seasons s ON s.id = sr.season_id
-WHERE sr.target_id = $1 AND s.group_id = $2 AND s.status = 'REVEALED'
+-- CLOSED as well as REVEALED: a REVEALED season becomes CLOSED when the next one opens, so a group
+-- has at most one REVEALED season and "all time" filtered on REVEALED alone meant "this week".
+WHERE sr.target_id = $1 AND s.group_id = $2 AND s.status IN ('REVEALED', 'CLOSED')
 GROUP BY q.id, q.text
 ORDER BY MAX(sr.percentage) DESC
 LIMIT 1;
@@ -19,7 +21,8 @@ FROM (
   FROM seasons s
   JOIN season_results sr ON sr.season_id = s.id AND sr.target_id = $1
   JOIN questions q ON q.id = sr.question_id
-  WHERE s.group_id = $2 AND s.status = 'REVEALED'
+  -- Same reason as above: without CLOSED this history held a single season.
+  WHERE s.group_id = $2 AND s.status IN ('REVEALED', 'CLOSED')
   ORDER BY s.id, sr.percentage DESC, sr.vote_count DESC
 ) h
 ORDER BY h.season_number DESC

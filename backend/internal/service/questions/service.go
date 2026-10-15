@@ -81,6 +81,10 @@ func (s *Service) CreateQuestion(ctx context.Context, userID, groupID, text stri
 		GroupID:  sql.NullString{String: groupID, Valid: true},
 		AuthorID: sql.NullString{String: userID, Valid: true},
 		Status:   status,
+		// Tone is assigned independently of the allow/reject verdict: the moderator decides whether
+		// the question may exist at all, tone decides which groups it may be asked in. A question the
+		// moderator allowed can still be a jab, and a kind-only group must not receive it.
+		Tone: ClassifyTone(text, category),
 	})
 	if err != nil {
 		return nil, err

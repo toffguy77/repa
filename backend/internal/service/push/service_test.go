@@ -648,3 +648,35 @@ func TestMskLocation_Initialized(t *testing.T) {
 		t.Errorf("expected MSK offset 10800 seconds, got %d", offset)
 	}
 }
+
+// --- Daily signal claim ---
+
+func TestUntilMidnightMSK(t *testing.T) {
+	msk := time.FixedZone("MSK", 3*60*60)
+
+	// Just after midnight: nearly a full day left.
+	early := time.Date(2026, 10, 2, 0, 30, 0, 0, msk)
+	if got := untilMidnightMSK(early); got <= 23*time.Hour || got > 24*time.Hour {
+		t.Errorf("at 00:30 the key should live ~23.5h, got %s", got)
+	}
+
+	// Just before midnight: almost nothing left, but still positive — a non-positive TTL would make
+	// the key immortal in Redis.
+	late := time.Date(2026, 10, 2, 23, 59, 0, 0, msk)
+	got := untilMidnightMSK(late)
+	if got <= 0 {
+		t.Errorf("TTL must stay positive, got %s", got)
+	}
+	if got > time.Hour {
+		t.Errorf("at 23:59 the key should expire within the hour, got %s", got)
+	}
+}
+
+func TestClaimDailySignal_WithoutRedisAllows(t *testing.T) {
+	// Redis is optional in some deployments, and a missing one must not disable the feature.
+	svc := NewService(nil, nil, nil)
+
+	if !svc.ClaimDailySignal(context.Background(), "u1") {
+		t.Error("a nil Redis client should fail open")
+	}
+}

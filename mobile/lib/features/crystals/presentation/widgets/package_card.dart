@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_text_styles.dart';
 import '../../domain/crystals.dart';
+import '../../../../core/theme/app_tokens.dart';
 
 class PackageCard extends StatelessWidget {
   final CrystalPackage package;
@@ -43,16 +42,16 @@ class PackageCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
+          color: context.t.elevation.level1.surface,
+          borderRadius: BorderRadius.circular(AppTokens.radius.lg),
           border: Border.all(
-            color: highlighted ? AppColors.primary : AppColors.surface,
+            color: highlighted ? context.t.color.accent : context.t.color.surface,
             width: highlighted ? 2 : 1,
           ),
           boxShadow: [
             if (highlighted)
               BoxShadow(
-                color: AppColors.primary.withValues(alpha: 0.15),
+                color: context.t.color.accent.withValues(alpha: 0.15),
                 blurRadius: 12,
                 offset: const Offset(0, 4),
               ),
@@ -65,13 +64,13 @@ class PackageCard extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 margin: const EdgeInsets.only(bottom: 8),
                 decoration: BoxDecoration(
-                  color: AppColors.primaryLight,
-                  borderRadius: BorderRadius.circular(8),
+                  color: context.t.color.accentFill.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(AppTokens.radius.sm),
                 ),
                 child: Text(
                   'Популярный',
-                  style: AppTextStyles.caption.copyWith(
-                    color: AppColors.primary,
+                  style: context.ts.caption.copyWith(
+                    color: context.t.color.accent,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -86,13 +85,13 @@ class PackageCard extends StatelessWidget {
                     children: [
                       Text(
                         _crystalsText,
-                        style: AppTextStyles.headline2,
+                        style: context.ts.heading2,
                       ),
                       if (package.bonus > 0)
                         Text(
                           '+${package.bonus} бонус',
-                          style: AppTextStyles.caption.copyWith(
-                            color: AppColors.success,
+                          style: context.ts.caption.copyWith(
+                            color: context.t.color.success,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -103,14 +102,14 @@ class PackageCard extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   decoration: BoxDecoration(
-                    color: highlighted ? AppColors.primary : AppColors.surface,
-                    borderRadius: BorderRadius.circular(12),
+                    color: highlighted ? context.t.color.accent : context.t.color.surface,
+                    borderRadius: BorderRadius.circular(AppTokens.radius.md),
                   ),
                   child: Text(
                     _priceText,
-                    style: AppTextStyles.body.copyWith(
+                    style: context.ts.body.copyWith(
                       fontWeight: FontWeight.w600,
-                      color: highlighted ? Colors.white : AppColors.textPrimary,
+                      color: highlighted ? context.t.color.onAccentFill : context.t.color.textPrimary,
                     ),
                   ),
                 ),

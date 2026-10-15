@@ -55,6 +55,7 @@ func (m *mockQuerier) CreateQuestion(_ context.Context, arg db.CreateQuestionPar
 		GroupID:  arg.GroupID,
 		AuthorID: arg.AuthorID,
 		Status:   arg.Status,
+		Tone:     arg.Tone,
 	}, nil
 }
 
@@ -721,5 +722,111 @@ func TestNewService_NilModerator(t *testing.T) {
 	svc := NewService(m, nil)
 	if svc == nil {
 		t.Fatal("expected non-nil service")
+	}
+}
+
+// --- Tone assignment on submission ---
+
+// setupToneSubmission returns a service whose moderator gives the stated verdict, and the group the
+// question is submitted to.
+func setupToneSubmission(t *testing.T, approved bool) (*Service, *mockQuerier) {
+	t.Helper()
+	q := &mockQuerier{
+		questionCounts: map[string]int64{},
+		groups: map[string]db.Group{
+			"g1": {ID: "g1", AdminID: "u1"},
+		},
+	}
+	return NewService(q, &mockModerator{approved: approved}), q
+}
+
+func TestCreateQuestion_AssignsTone(t *testing.T) {
+	tests := []struct {
+		name     string
+		text     string
+		category db.QuestionCategory
+		want     db.QuestionTone
+	}{
+		{
+			name:     "a warm submission",
+			text:     "Кто всегда поможет разобраться с задачей?",
+			category: db.QuestionCategorySTUDY,
+			want:     db.QuestionToneWARM,
+		},
+		{
+			name:     "an edgy submission",
+			text:     "Кто тайно читает чужие сообщения?",
+			category: db.QuestionCategoryFUNNY,
+			want:     db.QuestionToneEDGY,
+		},
+		{
+			name: "an undeterminable submission is neutral, not rejected",
+			// No marker and a category with no leaning: nothing to go on, so it is neutral and the
+			// question is still usable.
+			text:     "Кто чаще всех слушает музыку в метро?",
+			category: db.QuestionCategoryFUNNY,
+			want:     db.QuestionToneNEUTRAL,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			svc, q := setupToneSubmission(t, true)
+
+			res, err := svc.CreateQuestion(context.Background(), "u1", "g1", tt.text, tt.category)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !res.Approved {
+				t.Fatal("expected the question to be approved")
+			}
+			if len(q.createdQuestions) != 1 {
+				t.Fatalf("expected 1 stored question, got %d", len(q.createdQuestions))
+			}
+			if got := q.createdQuestions[0].Tone; got != tt.want {
+				t.Errorf("stored tone = %s, want %s", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCreateQuestion_ToneIsIndependentOfTheVerdict(t *testing.T) {
+	// A question the moderator rejected still gets a tone, and an edgy question the moderator allowed
+	// is not rejected for being edgy. The two decisions answer different questions: whether the
+	// question may exist, and which groups may be asked it.
+	for _, approved := range []bool{true, false} {
+		svc, q := setupToneSubmission(t, approved)
+
+		_, err := svc.CreateQuestion(context.Background(), "u1", "g1",
+			"Кто тайно читает чужие сообщения?", db.QuestionCategoryFUNNY)
+		if err != nil {
+			t.Fatalf("approved=%v: unexpected error: %v", approved, err)
+		}
+		stored := q.createdQuestions[0]
+		if stored.Tone != db.QuestionToneEDGY {
+			t.Errorf("approved=%v: tone = %s, want EDGY", approved, stored.Tone)
+		}
+		wantStatus := db.QuestionStatusACTIVE
+		if !approved {
+			wantStatus = db.QuestionStatusREJECTED
+		}
+		if stored.Status != wantStatus {
+			t.Errorf("approved=%v: status = %s, want %s", approved, stored.Status, wantStatus)
+		}
+	}
+}
+
+func TestCreateQuestion_NeverStoresAnEmptyTone(t *testing.T) {
+	// The column is NOT NULL with a default, so an empty value here would be written as the zero
+	// string and fail at the database rather than at the boundary where it can be explained.
+	svc, q := setupToneSubmission(t, true)
+
+	_, err := svc.CreateQuestion(context.Background(), "u1", "g1",
+		"Кто чаще всех забывает зарядку?", db.QuestionCategoryFUNNY)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q.createdQuestions[0].Tone == "" {
+		t.Error("stored an empty tone")
 	}
 }

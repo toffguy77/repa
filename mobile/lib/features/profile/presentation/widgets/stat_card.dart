@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_text_styles.dart';
+import '../../../../core/theme/app_tokens.dart';
 
 class StatCard extends StatefulWidget {
   final String label;
@@ -28,19 +27,26 @@ class _StatCardState extends State<StatCard>
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      duration: const Duration(milliseconds: 800),
-      vsync: this,
-    );
+    // No duration yet: context.motion reads MediaQuery (for the reduce-motion preference), and
+    // Flutter forbids reading an inherited widget before initState completes. Set in
+    // didChangeDependencies below, which also means the duration follows the preference if it
+    // changes while the card is on screen — the whole point of the motion token.
+    _controller = AnimationController(vsync: this);
     _animation = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
 
     if (widget.animateNumber) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _controller.forward();
+        if (mounted) _controller.forward();
       });
     } else {
       _controller.value = 1.0;
     }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _controller.duration = context.motion(MotionClass.emphasis);
   }
 
   @override
@@ -65,21 +71,19 @@ class _StatCardState extends State<StatCard>
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        color: context.t.elevation.level1.surface,
+        borderRadius: AppTokens.radius.card,
+        border: Border.all(
+          color: context.t.elevation.level1.outline,
+          width: AppTokens.border.hairline,
+        ),
+        boxShadow: context.t.elevation.level1.shadows,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(widget.icon, size: 20, color: AppColors.primary),
+          Icon(widget.icon, size: 20, color: context.t.color.accent),
           const SizedBox(height: 8),
           if (numValue != null && widget.animateNumber)
             AnimatedBuilder(
@@ -91,19 +95,19 @@ class _StatCardState extends State<StatCard>
                     : current.toInt().toString();
                 return Text(
                   display,
-                  style: AppTextStyles.headline2.copyWith(fontSize: 20),
+                  style: context.ts.heading2.copyWith(fontSize: 20),
                 );
               },
             )
           else
             Text(
               widget.value,
-              style: AppTextStyles.headline2.copyWith(fontSize: 20),
+              style: context.ts.heading2.copyWith(fontSize: 20),
             ),
           const SizedBox(height: 4),
           Text(
             widget.label,
-            style: AppTextStyles.caption.copyWith(fontSize: 12),
+            style: context.ts.caption.copyWith(fontSize: 12),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),

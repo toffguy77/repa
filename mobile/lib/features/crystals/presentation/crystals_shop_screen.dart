@@ -4,12 +4,12 @@ import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_text_styles.dart';
 import 'crystals_notifier.dart';
 import 'widgets/package_card.dart';
 import 'widgets/payment_pending_sheet.dart';
 import 'widgets/purchase_success_sheet.dart';
+import '../../../core/theme/app_tokens.dart';
+import 'widgets/crystal_history_list.dart';
 
 class CrystalsShopScreen extends ConsumerStatefulWidget {
   const CrystalsShopScreen({super.key});
@@ -110,7 +110,7 @@ class _CrystalsShopScreenState extends ConsumerState<CrystalsShopScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(next.error!),
-            backgroundColor: AppColors.error,
+            backgroundColor: context.t.color.danger,
           ),
         );
         ref.read(crystalsProvider.notifier).clearError();
@@ -132,13 +132,13 @@ class _CrystalsShopScreenState extends ConsumerState<CrystalsShopScreen> {
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        AppColors.primary,
-                        AppColors.primary.withValues(alpha: 0.8),
+                        context.t.color.accent,
+                        context.t.color.accent.withValues(alpha: 0.8),
                       ],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(AppTokens.radius.lg),
                   ),
                   child: Column(
                     children: [
@@ -149,24 +149,22 @@ class _CrystalsShopScreenState extends ConsumerState<CrystalsShopScreen> {
                       const SizedBox(height: 8),
                       Text(
                         '${state.balance}',
-                        style: const TextStyle(
-                          fontSize: 36,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                        style: AppTokens.text.display1.copyWith(
+                          color: context.t.color.onAccentFill,
+                          fontFeatures: AppTokens.text.numeric.fontFeatures,
                         ),
                       ),
                       Text(
                         'кристаллов',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.white.withValues(alpha: 0.8),
+                        style: AppTokens.text.label.copyWith(
+                          color: context.t.color.onAccentFill.withValues(alpha: 0.85),
                         ),
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 24),
-                Text('Пакеты кристаллов', style: AppTextStyles.headline2),
+                Text('Пакеты кристаллов', style: context.ts.heading2),
                 const SizedBox(height: 12),
                 ...state.packages.map((pkg) {
                   return Padding(
@@ -179,11 +177,13 @@ class _CrystalsShopScreenState extends ConsumerState<CrystalsShopScreen> {
                     ),
                   );
                 }),
+                const SizedBox(height: 24),
+                CrystalHistoryList(entries: state.history),
                 const SizedBox(height: 16),
                 Text(
                   'Оплата через внешний сервис ЮKassa.\n'
                   'Средства зачисляются автоматически.',
-                  style: AppTextStyles.caption,
+                  style: context.ts.caption,
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 32),

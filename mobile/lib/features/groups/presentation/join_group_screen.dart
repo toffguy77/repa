@@ -3,15 +3,29 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_text_styles.dart';
 import '../../../core/analytics/analytics_service.dart';
 import 'groups_notifier.dart';
+import '../../../core/theme/app_tokens.dart';
+import 'widgets/invite_share_sheet.dart';
+import '../../reveal/domain/share_link.dart';
 
 class JoinGroupScreen extends ConsumerStatefulWidget {
   final String? initialCode;
 
-  const JoinGroupScreen({super.key, this.initialCode});
+  /// How the user arrived. The join screen itself is the typed-code path; a deep link passes
+  /// the source its channel marker implies.
+  final JoinSource source;
+
+  /// The member who shared the link, so a referral reward reaches them. Validated server-side;
+  /// an invalid claim is dropped rather than failing the join.
+  final String? referrerId;
+
+  const JoinGroupScreen({
+    super.key,
+    this.initialCode,
+    this.source = JoinSource.code,
+    this.referrerId,
+  });
 
   @override
   ConsumerState<JoinGroupScreen> createState() => _JoinGroupScreenState();
@@ -46,7 +60,9 @@ class _JoinGroupScreenState extends ConsumerState<JoinGroupScreen> {
       return;
     }
     _debounce = Timer(const Duration(milliseconds: 500), () {
-      ref.read(joinGroupProvider.notifier).loadPreview(value);
+      // The code travels as a URL path segment, so a pasted link has to be reduced to the
+      // bare code here; the server still normalises case and separators.
+      ref.read(joinGroupProvider.notifier).loadPreview(extractInviteCode(value));
     });
   }
 
@@ -54,7 +70,11 @@ class _JoinGroupScreenState extends ConsumerState<JoinGroupScreen> {
     HapticFeedback.mediumImpact();
     final group = await ref
         .read(joinGroupProvider.notifier)
-        .join(_controller.text);
+        .join(
+          extractInviteCode(_controller.text),
+          source: widget.source,
+          referrerId: widget.referrerId,
+        );
     if (group != null && mounted) {
       ref.read(analyticsProvider).logGroupJoined();
       ref.read(groupsListProvider.notifier).refresh();
@@ -73,12 +93,17 @@ class _JoinGroupScreenState extends ConsumerState<JoinGroupScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Инвайт-код или ссылка', style: AppTextStyles.body),
+            Text('Код группы или ссылка', style: context.ts.body),
             const SizedBox(height: 8),
             TextField(
               controller: _controller,
+              textCapitalization: TextCapitalization.characters,
+              autocorrect: false,
+              // Codes are case-insensitive server-side; upper-casing as you type is purely
+              // so what you see matches the code you were given.
+              inputFormatters: [UpperCaseFormatter()],
               decoration: const InputDecoration(
-                hintText: 'Вставь ссылку или код',
+                hintText: 'AB2 CD3 или ссылка',
                 prefixIcon: Icon(Icons.link),
               ),
               onChanged: _onChanged,
@@ -91,24 +116,24 @@ class _JoinGroupScreenState extends ConsumerState<JoinGroupScreen> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.circular(12),
+                  color: context.t.color.surface,
+                  borderRadius: BorderRadius.circular(AppTokens.radius.md),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       state.preview!.name,
-                      style: AppTextStyles.headline2.copyWith(fontSize: 18),
+                      style: context.ts.heading2.copyWith(fontSize: 18),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       '${state.preview!.memberCount} участников',
-                      style: AppTextStyles.caption,
+                      style: context.ts.caption,
                     ),
                     Text(
                       'Админ: ${state.preview!.adminUsername}',
-                      style: AppTextStyles.caption,
+                      style: context.ts.caption,
                     ),
                   ],
                 ),
@@ -118,7 +143,7 @@ class _JoinGroupScreenState extends ConsumerState<JoinGroupScreen> {
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
                   state.error!,
-                  style: AppTextStyles.caption.copyWith(color: AppColors.error),
+                  style: context.ts.caption.copyWith(color: context.t.color.danger),
                 ),
               ),
             const Spacer(),
@@ -130,12 +155,12 @@ class _JoinGroupScreenState extends ConsumerState<JoinGroupScreen> {
                     ? _join
                     : null,
                 child: state.loading
-                    ? const SizedBox(
+                    ? SizedBox(
                         width: 24,
                         height: 24,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color: context.t.color.onAccentFill,
                         ),
                       )
                     : const Text('Вступить'),
@@ -145,5 +170,19 @@ class _JoinGroupScreenState extends ConsumerState<JoinGroupScreen> {
         ),
       ),
     );
+  }
+}
+
+/// Upper-cases as the user types. Display only — the backend normalises authoritatively
+/// (see docs/features/groups.md → Invite codes).
+class UpperCaseFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    // Leave a pasted URL alone: upper-casing a host or path can break it.
+    if (newValue.text.contains('/')) return newValue;
+    return newValue.copyWith(text: newValue.text.toUpperCase());
   }
 }

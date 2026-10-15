@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_text_styles.dart';
 import '../../domain/reveal.dart';
+import '../../../../core/theme/app_tokens.dart';
 
 class AchievementPopup extends StatefulWidget {
   final List<AchievementDto> achievements;
@@ -39,7 +38,7 @@ class _AchievementPopupState extends State<AchievementPopup> {
     return GestureDetector(
       onTap: _next,
       child: Container(
-        color: Colors.black.withValues(alpha: 0.7),
+        color: context.t.color.scrim,
         child: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -55,52 +54,52 @@ class _AchievementPopupState extends State<AchievementPopup> {
                   .scale(
                     begin: const Offset(0.3, 0.3),
                     end: const Offset(1.0, 1.0),
-                    duration: 500.ms,
+                    duration: context.motion(MotionClass.emphasis),
                     curve: Curves.elasticOut,
                   )
-                  .fadeIn(duration: 300.ms),
+                  .fadeIn(duration: context.motion(MotionClass.surface)),
               const SizedBox(height: 24),
               Text(
                 'Новая ачивка!',
-                style: AppTextStyles.headline2.copyWith(
-                  color: Colors.white,
+                style: AppTokens.text.heading2.copyWith(
+                  color: AppColorTokens.dark.textPrimary,
                 ),
               ).animate(key: ValueKey('title_$_currentIndex'))
-                  .fadeIn(duration: 400.ms, delay: 200.ms),
+                  .fadeIn(duration: context.motion(MotionClass.emphasis), delay: AppTokens.motion.stagger(3)),
               const SizedBox(height: 12),
               Text(
                 _achievementName(achievement.type),
-                style: AppTextStyles.headline1.copyWith(
-                  color: AppColors.primary,
+                style: context.ts.heading1.copyWith(
+                  color: context.t.color.accent,
                   fontSize: 28,
                 ),
                 textAlign: TextAlign.center,
               )
                   .animate(key: ValueKey('name_$_currentIndex'))
-                  .fadeIn(duration: 400.ms, delay: 300.ms)
-                  .slideY(begin: 0.2, duration: 400.ms),
+                  .fadeIn(duration: context.motion(MotionClass.emphasis), delay: AppTokens.motion.stagger(5))
+                  .slideY(begin: 0.2, duration: context.motion(MotionClass.emphasis)),
               const SizedBox(height: 8),
               Text(
                 _achievementDescription(achievement.type),
-                style: AppTextStyles.body.copyWith(
-                  color: Colors.white70,
+                style: context.ts.body.copyWith(
+                  color: context.t.color.textSecondary,
                 ),
                 textAlign: TextAlign.center,
               ).animate(key: ValueKey('desc_$_currentIndex'))
-                  .fadeIn(duration: 400.ms, delay: 400.ms),
+                  .fadeIn(duration: context.motion(MotionClass.emphasis), delay: AppTokens.motion.stagger(7)),
               const SizedBox(height: 40),
               Text(
                 isLast ? 'Нажми чтобы закрыть' : 'Нажми чтобы продолжить',
-                style: AppTextStyles.caption.copyWith(
-                  color: Colors.white54,
+                style: context.ts.caption.copyWith(
+                  color: context.t.color.textSecondary,
                 ),
-              ).animate().fadeIn(duration: 400.ms, delay: 600.ms),
+              ).animate().fadeIn(duration: context.motion(MotionClass.emphasis), delay: AppTokens.motion.stagger(10)),
               if (widget.achievements.length > 1) ...[
                 const SizedBox(height: 12),
                 Text(
                   '${_currentIndex + 1} / ${widget.achievements.length}',
-                  style: AppTextStyles.caption.copyWith(
-                    color: Colors.white54,
+                  style: context.ts.caption.copyWith(
+                    color: context.t.color.textSecondary,
                   ),
                 ),
               ],

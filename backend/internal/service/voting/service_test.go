@@ -3,11 +3,14 @@ package voting
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
 
+	"github.com/hibiken/asynq"
 	db "github.com/repa-app/repa/internal/db/sqlc"
+	"github.com/repa-app/repa/internal/lib"
 )
 
 // mockQuerier implements only the methods used by the voting service.
@@ -25,6 +28,29 @@ type mockQuerier struct {
 	completedCount int64
 	userVoteCount  int64
 	questionCount  int64
+	memberships    map[string]db.GroupMember
+	membershipErr  error
+	blocked        map[string]bool // "a:b" -> a blocked b
+}
+
+func (m *mockQuerier) GetVotingTargets(_ context.Context, arg db.GetVotingTargetsParams) ([]db.GetVotingTargetsRow, error) {
+	var out []db.GetVotingTargetsRow
+	for _, r := range m.memberRows[arg.GroupID] {
+		if r.ID == arg.ID || m.blocked[arg.ID+":"+r.ID] || m.blocked[r.ID+":"+arg.ID] {
+			continue
+		}
+		out = append(out, db.GetVotingTargetsRow{
+			ID:          r.ID,
+			Username:    r.Username,
+			AvatarEmoji: r.AvatarEmoji,
+			AvatarUrl:   r.AvatarUrl,
+		})
+	}
+	return out, nil
+}
+
+func (m *mockQuerier) IsBlockedEitherWay(_ context.Context, arg db.IsBlockedEitherWayParams) (bool, error) {
+	return m.blocked[arg.BlockerID+":"+arg.BlockedID] || m.blocked[arg.BlockedID+":"+arg.BlockerID], nil
 }
 
 func (m *mockQuerier) GetSeasonByID(_ context.Context, id string) (db.Season, error) {
@@ -116,10 +142,11 @@ func newMock() *mockQuerier {
 				{ID: "q2", Text: "Question 2", Category: db.QuestionCategoryHOT},
 			},
 		},
-		votes:        map[string][]db.Vote{},
-		voteForQ:     map[string]int64{},
-		createdVotes: nil,
-		memberCounts: map[string]int64{"g1": 3},
+		votes:         map[string][]db.Vote{},
+		voteForQ:      map[string]int64{},
+		createdVotes:  nil,
+		memberCounts:  map[string]int64{"g1": 3},
+		blocked:       map[string]bool{},
 		questionCount: 2,
 	}
 }
@@ -403,5 +430,390 @@ func TestGetProgress_SeasonNotFound(t *testing.T) {
 	_, err := svc.GetProgress(context.Background(), "nonexistent", "u1")
 	if !errors.Is(err, ErrSeasonNotFound) {
 		t.Errorf("expected ErrSeasonNotFound, got %v", err)
+	}
+}
+
+// --- Kickoff reveal scheduling on session completion ---
+
+type fakeKickoffScheduler struct {
+	calls     []string
+	scheduled bool
+	err       error
+}
+
+func (f *fakeKickoffScheduler) ScheduleKickoffIfEligible(_ context.Context, seasonID string) (bool, error) {
+	f.calls = append(f.calls, seasonID)
+	return f.scheduled, f.err
+}
+
+type fakeEnqueuer struct {
+	tasks []*asynq.Task
+}
+
+func (f *fakeEnqueuer) Enqueue(task *asynq.Task, _ ...asynq.Option) (*asynq.TaskInfo, error) {
+	f.tasks = append(f.tasks, task)
+	return &asynq.TaskInfo{}, nil
+}
+
+// ofType filters the recorded tasks, so a test about one kind of push is not perturbed by another.
+func (f *fakeEnqueuer) ofType(taskType string) []*asynq.Task {
+	var out []*asynq.Task
+	for _, t := range f.tasks {
+		if t.Type() == taskType {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// kickoffSetup returns a service whose season is a kickoff with 2 questions, so the
+// second vote completes the session.
+func kickoffSetup(t *testing.T, kind db.SeasonKind, scheduled bool) (*Service, *fakeKickoffScheduler, *fakeEnqueuer) {
+	t.Helper()
+	m := newMock()
+	s := m.seasons["s1"]
+	s.Kind = kind
+	m.seasons["s1"] = s
+
+	sched := &fakeKickoffScheduler{scheduled: scheduled}
+	enq := &fakeEnqueuer{}
+	return NewService(m).WithKickoff(sched, enq), sched, enq
+}
+
+func TestCastVote_CompletingSessionSchedulesKickoffReveal(t *testing.T) {
+	svc, sched, enq := kickoffSetup(t, db.SeasonKindKICKOFF, true)
+
+	// First vote: session not yet complete (2 questions).
+	if _, err := svc.CastVote(context.Background(), "s1", "u1", "q1", "u2"); err != nil {
+		t.Fatal(err)
+	}
+	if len(sched.calls) != 0 {
+		t.Errorf("scheduling must only be attempted on a completed session, got %v", sched.calls)
+	}
+
+	// Second vote completes the session.
+	if _, err := svc.CastVote(context.Background(), "s1", "u1", "q2", "u3"); err != nil {
+		t.Fatal(err)
+	}
+	if len(sched.calls) != 1 || sched.calls[0] != "s1" {
+		t.Errorf("expected one scheduling attempt for s1, got %v", sched.calls)
+	}
+	kickoffPushes := enq.ofType(lib.TypePushKickoff)
+	if len(kickoffPushes) != 1 {
+		t.Fatalf("expected exactly one kickoff push, got %d", len(kickoffPushes))
+	}
+}
+
+func TestCastVote_NoPushWhenAlreadyScheduled(t *testing.T) {
+	svc, sched, enq := kickoffSetup(t, db.SeasonKindKICKOFF, false)
+
+	if _, err := svc.CastVote(context.Background(), "s1", "u1", "q1", "u2"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.CastVote(context.Background(), "s1", "u1", "q2", "u3"); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(sched.calls) != 1 {
+		t.Errorf("expected one scheduling attempt, got %v", sched.calls)
+	}
+	if got := len(enq.ofType(lib.TypePushKickoff)); got != 0 {
+		t.Errorf("a voter who did not trigger scheduling must not announce it, got %d pushes", got)
+	}
+}
+
+func TestCastVote_WeeklySeasonNeverSchedulesKickoff(t *testing.T) {
+	svc, sched, enq := kickoffSetup(t, db.SeasonKindWEEKLY, true)
+
+	if _, err := svc.CastVote(context.Background(), "s1", "u1", "q1", "u2"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.CastVote(context.Background(), "s1", "u1", "q2", "u3"); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(sched.calls) != 0 {
+		t.Errorf("weekly seasons keep their Friday reveal, got %v", sched.calls)
+	}
+	if got := len(enq.ofType(lib.TypePushKickoff)); got != 0 {
+		t.Errorf("expected no kickoff push, got %d", got)
+	}
+}
+
+func TestCastVote_SchedulerErrorDoesNotFailTheVote(t *testing.T) {
+	m := newMock()
+	s := m.seasons["s1"]
+	s.Kind = db.SeasonKindKICKOFF
+	m.seasons["s1"] = s
+	sched := &fakeKickoffScheduler{err: errors.New("db down")}
+	enq := &fakeEnqueuer{}
+	svc := NewService(m).WithKickoff(sched, enq)
+
+	if _, err := svc.CastVote(context.Background(), "s1", "u1", "q1", "u2"); err != nil {
+		t.Fatal(err)
+	}
+	result, err := svc.CastVote(context.Background(), "s1", "u1", "q2", "u3")
+	if err != nil {
+		t.Fatalf("a scheduling failure must not roll back the recorded vote: %v", err)
+	}
+	if result.Answered != 2 {
+		t.Errorf("Answered = %d, want 2", result.Answered)
+	}
+	if got := len(enq.ofType(lib.TypePushKickoff)); got != 0 {
+		t.Errorf("expected no kickoff push after a scheduling error, got %d", got)
+	}
+}
+
+func TestCastVote_NilKickoffCollaboratorsAreSafe(t *testing.T) {
+	m := newMock()
+	s := m.seasons["s1"]
+	s.Kind = db.SeasonKindKICKOFF
+	m.seasons["s1"] = s
+	svc := NewService(m) // no WithKickoff
+
+	if _, err := svc.CastVote(context.Background(), "s1", "u1", "q1", "u2"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.CastVote(context.Background(), "s1", "u1", "q2", "u3"); err != nil {
+		t.Fatalf("voting must work without the kickoff collaborators: %v", err)
+	}
+}
+
+// --- Referral payout on first completed session ---
+
+type fakeReferralGranter struct {
+	calls [][2]string // {inviterID, inviteeID}
+}
+
+func (f *fakeReferralGranter) GrantReferral(_ context.Context, inviterID, inviteeID string) {
+	f.calls = append(f.calls, [2]string{inviterID, inviteeID})
+}
+
+func (m *mockQuerier) GetMembershipByUserAndGroup(_ context.Context, arg db.GetMembershipByUserAndGroupParams) (db.GroupMember, error) {
+	if m.membershipErr != nil {
+		return db.GroupMember{}, m.membershipErr
+	}
+	gm, ok := m.memberships[arg.UserID]
+	if !ok {
+		return db.GroupMember{}, sql.ErrNoRows
+	}
+	return gm, nil
+}
+
+// referralSetup returns a service whose voter u1 was invited by [invitedBy] (empty for none).
+func referralSetup(t *testing.T, invitedBy string) (*Service, *fakeReferralGranter) {
+	t.Helper()
+	m := newMock()
+	m.memberships = map[string]db.GroupMember{
+		"u1": {
+			ID:        "mem-1",
+			UserID:    "u1",
+			GroupID:   "g1",
+			InvitedBy: sql.NullString{String: invitedBy, Valid: invitedBy != ""},
+		},
+	}
+	granter := &fakeReferralGranter{}
+	return NewService(m).WithReferralGrants(granter), granter
+}
+
+func TestCastVote_PaysTheInviterOnFirstCompletedSession(t *testing.T) {
+	svc, granter := referralSetup(t, "inviter")
+
+	// First vote: the session is not complete, so nothing is payable.
+	if _, err := svc.CastVote(context.Background(), "s1", "u1", "q1", "u2"); err != nil {
+		t.Fatal(err)
+	}
+	if len(granter.calls) != 0 {
+		t.Errorf("a partial session must not pay: %v", granter.calls)
+	}
+
+	// Second vote completes it.
+	if _, err := svc.CastVote(context.Background(), "s1", "u1", "q2", "u3"); err != nil {
+		t.Fatal(err)
+	}
+	if len(granter.calls) != 1 {
+		t.Fatalf("expected one payout, got %v", granter.calls)
+	}
+	if granter.calls[0] != [2]string{"inviter", "u1"} {
+		t.Errorf("payout = %v, want {inviter u1}", granter.calls[0])
+	}
+}
+
+func TestCastVote_PaysNobodyWhenThereIsNoReferrer(t *testing.T) {
+	svc, granter := referralSetup(t, "")
+
+	if _, err := svc.CastVote(context.Background(), "s1", "u1", "q1", "u2"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.CastVote(context.Background(), "s1", "u1", "q2", "u3"); err != nil {
+		t.Fatal(err)
+	}
+
+	if len(granter.calls) != 0 {
+		t.Errorf("an unattributed join pays nobody, got %v", granter.calls)
+	}
+}
+
+func TestCastVote_MembershipReadFailureDoesNotFailTheVote(t *testing.T) {
+	m := newMock()
+	m.membershipErr = errors.New("db down")
+	granter := &fakeReferralGranter{}
+	svc := NewService(m).WithReferralGrants(granter)
+
+	if _, err := svc.CastVote(context.Background(), "s1", "u1", "q1", "u2"); err != nil {
+		t.Fatal(err)
+	}
+	result, err := svc.CastVote(context.Background(), "s1", "u1", "q2", "u3")
+	if err != nil {
+		t.Fatalf("a payout problem must not roll back a recorded vote: %v", err)
+	}
+	if result.Answered != 2 {
+		t.Errorf("Answered = %d, want 2", result.Answered)
+	}
+	if len(granter.calls) != 0 {
+		t.Errorf("expected no payout after a read failure, got %v", granter.calls)
+	}
+}
+
+func TestCastVote_NoReferralGranterIsSafe(t *testing.T) {
+	m := newMock()
+	svc := NewService(m) // no WithReferralGrants
+
+	if _, err := svc.CastVote(context.Background(), "s1", "u1", "q1", "u2"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.CastVote(context.Background(), "s1", "u1", "q2", "u3"); err != nil {
+		t.Fatalf("voting must work without the grants collaborator: %v", err)
+	}
+}
+
+// --- The immediate, non-attributed signal ---
+
+func TestCastVote_SignalsTheTargetNotTheVoter(t *testing.T) {
+	m := newMock()
+	enq := &fakeEnqueuer{}
+	svc := NewService(m).WithKickoff(nil, enq)
+
+	if _, err := svc.CastVote(context.Background(), "s1", "u1", "q1", "u2"); err != nil {
+		t.Fatal(err)
+	}
+
+	signals := enq.ofType(lib.TypePushVoteSignal)
+	if len(signals) != 1 {
+		t.Fatalf("expected one signal, got %d", len(signals))
+	}
+
+	var payload map[string]string
+	if err := json.Unmarshal(signals[0].Payload(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload["target_id"] != "u2" {
+		t.Errorf("target_id = %q, want u2 — the person voted about", payload["target_id"])
+	}
+	if payload["target_id"] == "u1" {
+		t.Error("answering about others must never notify the voter about themselves")
+	}
+	// The payload carries no answer: the *what* stays sealed until Friday.
+	if _, ok := payload["question_id"]; ok {
+		t.Error("the signal must not carry the question")
+	}
+}
+
+func TestCastVote_SignalFailureDoesNotFailTheVote(t *testing.T) {
+	m := newMock()
+	svc := NewService(m).WithKickoff(nil, &failingEnqueuer{})
+
+	result, err := svc.CastVote(context.Background(), "s1", "u1", "q1", "u2")
+	if err != nil {
+		t.Fatalf("a notification must never cost a recorded vote: %v", err)
+	}
+	if result.Answered != 1 {
+		t.Errorf("Answered = %d, want 1", result.Answered)
+	}
+	if len(m.createdVotes) != 1 {
+		t.Error("the vote should still be recorded")
+	}
+}
+
+func TestCastVote_NoEnqueuerIsSafe(t *testing.T) {
+	m := newMock()
+	svc := NewService(m)
+
+	if _, err := svc.CastVote(context.Background(), "s1", "u1", "q1", "u2"); err != nil {
+		t.Fatalf("voting must work without the push collaborator: %v", err)
+	}
+}
+
+// failingEnqueuer stands in for a broken queue.
+type failingEnqueuer struct{}
+
+func (failingEnqueuer) Enqueue(*asynq.Task, ...asynq.Option) (*asynq.TaskInfo, error) {
+	return nil, errors.New("queue down")
+}
+
+// --- Blocks and voting ---
+
+func TestGetVotingSession_ExcludesBlockedMembersBothWays(t *testing.T) {
+	m := newMock()
+	// u1 blocked u2; u3 blocked u1. Neither should be offered to u1.
+	m.blocked["u1:u2"] = true
+	m.blocked["u3:u1"] = true
+	svc := NewService(m)
+
+	session, err := svc.GetVotingSession(context.Background(), "s1", "u1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, target := range session.Targets {
+		if target.UserID == "u2" {
+			t.Error("a member I blocked must not be offered as a target")
+		}
+		if target.UserID == "u3" {
+			t.Error("a member who blocked me must not be offered either")
+		}
+	}
+}
+
+func TestCastVote_RefusesABlockedTarget(t *testing.T) {
+	m := newMock()
+	m.blocked["u1:u2"] = true
+	svc := NewService(m)
+
+	_, err := svc.CastVote(context.Background(), "s1", "u1", "q1", "u2")
+	if !errors.Is(err, ErrTargetBlocked) {
+		t.Errorf("expected ErrTargetBlocked, got %v", err)
+	}
+	if len(m.createdVotes) != 0 {
+		t.Error("no vote should be recorded between blocked members")
+	}
+}
+
+func TestCastVote_RefusesWhenTheOtherPersonBlockedMe(t *testing.T) {
+	m := newMock()
+	// Only u2 created the block, but the effect is symmetric.
+	m.blocked["u2:u1"] = true
+	svc := NewService(m)
+
+	_, err := svc.CastVote(context.Background(), "s1", "u1", "q1", "u2")
+	if !errors.Is(err, ErrTargetBlocked) {
+		t.Errorf("expected ErrTargetBlocked, got %v", err)
+	}
+}
+
+func TestCastVote_VotesCastBeforeABlockAreKept(t *testing.T) {
+	m := newMock()
+	svc := NewService(m)
+
+	// Vote first, then block.
+	if _, err := svc.CastVote(context.Background(), "s1", "u1", "q1", "u2"); err != nil {
+		t.Fatal(err)
+	}
+	m.blocked["u1:u2"] = true
+
+	// Removing the earlier vote would shift u2's card at the moment of the block — a worse result,
+	// and a signal that a block happened.
+	if len(m.createdVotes) != 1 {
+		t.Errorf("the earlier vote must survive the block, got %d votes", len(m.createdVotes))
 	}
 }

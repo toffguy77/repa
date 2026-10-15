@@ -15,6 +15,9 @@ class RevealState {
   final String? error;
   final bool unlockingHidden;
   final bool buyingDetector;
+
+  /// What is known about votes concerning this member before the Reveal. Null until loaded.
+  final AnticipationState? anticipation;
   // Reactions keyed by target user ID
   final Map<String, ReactionCounts> reactions;
 
@@ -27,6 +30,7 @@ class RevealState {
     this.error,
     this.unlockingHidden = false,
     this.buyingDetector = false,
+    this.anticipation,
     this.reactions = const {},
   });
 
@@ -39,6 +43,7 @@ class RevealState {
     String? error,
     bool? unlockingHidden,
     bool? buyingDetector,
+    AnticipationState? anticipation,
     Map<String, ReactionCounts>? reactions,
   }) {
     return RevealState(
@@ -50,6 +55,7 @@ class RevealState {
       error: error,
       unlockingHidden: unlockingHidden ?? this.unlockingHidden,
       buyingDetector: buyingDetector ?? this.buyingDetector,
+      anticipation: anticipation ?? this.anticipation,
       reactions: reactions ?? this.reactions,
     );
   }
@@ -68,6 +74,8 @@ class RevealNotifier extends StateNotifier<RevealState> {
 
     if (seasonStatus != 'REVEALED') {
       state = state.copyWith(phase: RevealPhase.waiting);
+      // The waiting screen is where the mid-week pushes land, so it needs something to say.
+      await loadAnticipation();
       return;
     }
 
@@ -130,6 +138,15 @@ class RevealNotifier extends StateNotifier<RevealState> {
     }
   }
 
+  /// Loads the mid-week signal. A failure leaves the waiting screen as it was: the anticipation
+  /// state is an enrichment, not a prerequisite for the screen.
+  Future<void> loadAnticipation() async {
+    try {
+      final state = await _repo.getAnticipation(seasonId);
+      this.state = this.state.copyWith(anticipation: state);
+    } catch (_) {}
+  }
+
   Future<void> loadDetector() async {
     try {
       final result = await _repo.getDetector(seasonId);
@@ -153,6 +170,24 @@ class RevealNotifier extends StateNotifier<RevealState> {
       state = state.copyWith(
         buyingDetector: false,
         error: 'Не удалось купить детектор',
+      );
+    }
+  }
+
+  /// Buys the middle rung: one voter revealed partially.
+  Future<void> buyDetectorHint() async {
+    if (state.buyingDetector) return;
+    state = state.copyWith(buyingDetector: true, error: null);
+
+    try {
+      final result = await _repo.buyDetectorHint(seasonId);
+      state = state.copyWith(detector: result, buyingDetector: false);
+    } on AppException catch (e) {
+      state = state.copyWith(buyingDetector: false, error: e.message);
+    } catch (_) {
+      state = state.copyWith(
+        buyingDetector: false,
+        error: 'Не удалось получить подсказку',
       );
     }
   }
@@ -207,6 +242,12 @@ class RevealNotifier extends StateNotifier<RevealState> {
     state = state.copyWith(error: null);
   }
 }
+
+/// The reveal repository, exposed so screens can report a share without going through the
+/// notifier — a share is not part of the reveal's state.
+final revealRepositoryProvider = Provider<RevealRepository>(
+  (ref) => RevealRepository(ref.watch(apiServiceProvider)),
+);
 
 final revealProvider = StateNotifierProvider.autoDispose
     .family<RevealNotifier, RevealState, ({String seasonId, String status})>(

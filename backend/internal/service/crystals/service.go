@@ -18,10 +18,10 @@ import (
 )
 
 var (
-	ErrPackageNotFound    = errors.New("package not found")
-	ErrInsufficientFunds  = errors.New("insufficient crystal balance")
-	ErrPaymentNotFound    = errors.New("payment not found")
-	ErrDuplicatePayment   = errors.New("payment already processed")
+	ErrPackageNotFound   = errors.New("package not found")
+	ErrInsufficientFunds = errors.New("insufficient crystal balance")
+	ErrPaymentNotFound   = errors.New("payment not found")
+	ErrDuplicatePayment  = errors.New("payment already processed")
 )
 
 type CrystalPackage struct {
@@ -47,10 +47,10 @@ const paymentKeyPrefix = "payment:"
 const paymentTTL = 1 * time.Hour
 
 type Service struct {
-	queries  db.Querier
-	sqlDB    *sql.DB
-	rdb      *redis.Client
-	yukassa  *lib.YukassaClient
+	queries db.Querier
+	sqlDB   *sql.DB
+	rdb     *redis.Client
+	yukassa *lib.YukassaClient
 }
 
 func NewService(queries db.Querier, sqlDB *sql.DB, rdb *redis.Client, yukassa *lib.YukassaClient) *Service {
@@ -68,6 +68,45 @@ func (s *Service) GetBalance(ctx context.Context, userID string) (int32, error) 
 
 func (s *Service) GetPackages() []CrystalPackage {
 	return Packages
+}
+
+// HistoryEntry is one movement in a user's crystal balance.
+type HistoryEntry struct {
+	Delta     int32  `json:"delta"`
+	Type      string `json:"type"`
+	Reason    string `json:"reason"`
+	CreatedAt string `json:"created_at"`
+	// IsGrant separates free crystals from purchases, so a balance that grew without a payment
+	// is not mysterious to the user.
+	IsGrant bool `json:"is_grant"`
+}
+
+// GetHistory returns a user's crystal movements, newest first.
+func (s *Service) GetHistory(ctx context.Context, userID string, limit, offset int32) ([]HistoryEntry, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+
+	logs, err := s.queries.GetUserCrystalLogs(ctx, db.GetUserCrystalLogsParams{
+		UserID: userID,
+		Limit:  limit,
+		Offset: offset,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	entries := make([]HistoryEntry, 0, len(logs))
+	for _, l := range logs {
+		entries = append(entries, HistoryEntry{
+			Delta:     l.Delta,
+			Type:      string(l.Type),
+			Reason:    l.Description.String,
+			CreatedAt: l.CreatedAt.Format(time.RFC3339),
+			IsGrant:   l.Type == db.CrystalLogTypeBONUS,
+		})
+	}
+	return entries, nil
 }
 
 func findPackage(id string) *CrystalPackage {

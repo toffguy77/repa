@@ -109,6 +109,10 @@ void main() {
       ),
     ));
     when(() => mockStorage.delete(key: tokenKey)).thenAnswer((_) async {});
+    // logout() also clears the pending invite code; leaving it unstubbed makes mocktail
+    // return null for a Future<void> and the test fails for the wrong reason.
+    when(() => mockStorage.delete(key: 'pending_invite_code'))
+        .thenAnswer((_) async {});
 
     await container.read(authProvider.notifier).checkAuth();
 
@@ -149,6 +153,10 @@ void main() {
     when(() => mockStorage.write(key: tokenKey, value: any(named: 'value')))
         .thenAnswer((_) async {});
     when(() => mockStorage.delete(key: tokenKey)).thenAnswer((_) async {});
+    // logout() also clears the pending invite code; leaving it unstubbed makes mocktail
+    // return null for a Future<void> and the test fails for the wrong reason.
+    when(() => mockStorage.delete(key: 'pending_invite_code'))
+        .thenAnswer((_) async {});
 
     // First login
     await container.read(authProvider.notifier).login(

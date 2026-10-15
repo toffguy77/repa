@@ -7,6 +7,7 @@ import (
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 	"github.com/google/uuid"
+	"github.com/repa-app/repa/internal/cardorder"
 	db "github.com/repa-app/repa/internal/db/sqlc"
 	"github.com/repa-app/repa/internal/lib"
 	"github.com/rs/zerolog/log"
@@ -65,18 +66,20 @@ func (s *Service) GenerateCardsForSeason(ctx context.Context, seasonID string) e
 	return nil
 }
 
-func (s *Service) generateCardForUser(browserCtx context.Context, season db.Season, group db.Group, member db.GetGroupMembersRow) error {
-	results, err := s.queries.GetSeasonResultsByUser(browserCtx, db.GetSeasonResultsByUserParams{
-		SeasonID: season.ID,
-		TargetID: member.ID,
-	})
-	if err != nil {
-		return fmt.Errorf("get results: %w", err)
-	}
+// cardTopAttributes picks what the rendered card shows: the leading three attributes and the title.
+//
+// Split out from generateCardForUser so it can be tested without a browser — the ordering rule is the
+// part worth testing, and it is the part that would otherwise be verifiable only by looking at a PNG.
+//
+// Ordered the same way the API orders a card, because this *is* the card: the PNG is the artifact a
+// person is invited to share, so if any path must lead with something worth sharing it is this one.
+// Taking the results in raw percentage order here would have let the app and the shared image
+// disagree about which attribute comes first.
+func cardTopAttributes(results []db.GetSeasonResultsByUserRow) ([]CardAttribute, string) {
+	ordered := cardorder.ByTone(results)
 
-	// Build top attributes (max 3)
 	topAttrs := make([]CardAttribute, 0, 3)
-	for i, r := range results {
+	for i, r := range ordered {
 		if i >= 3 {
 			break
 		}
@@ -86,15 +89,38 @@ func (s *Service) generateCardForUser(browserCtx context.Context, season db.Seas
 		})
 	}
 
-	// Determine reputation title
+	// The title describes the attribute the reader sees first, not the highest percentage.
 	title := "Загадка века"
-	if len(results) > 0 {
-		title = titleForCategory(string(results[0].QuestionCategory))
+	if len(ordered) > 0 {
+		title = titleForCategory(string(ordered[0].QuestionCategory))
 	}
+	return topAttrs, title
+}
+
+func (s *Service) generateCardForUser(browserCtx context.Context, season db.Season, group db.Group, member db.GetGroupMembersRow) error {
+	results, err := s.queries.GetSeasonResultsByUser(browserCtx, db.GetSeasonResultsByUserParams{
+		SeasonID: season.ID,
+		TargetID: member.ID,
+	})
+	if err != nil {
+		return fmt.Errorf("get results: %w", err)
+	}
+
+	topAttrs, title := cardTopAttributes(results)
 
 	avatarEmoji := "\U0001F346"
 	if member.AvatarEmoji.Valid && member.AvatarEmoji.String != "" {
 		avatarEmoji = member.AvatarEmoji.String
+	}
+
+	// The card doubles as the group's invitation, so it carries the live invite code and a
+	// QR of its link. A QR failure degrades to the printed code rather than losing the card.
+	// The card is generated per member, so its link can carry *who* shared it — a group's
+	// invite code identifies the group, not the inviter, and a referral reward has to reach the
+	// person who actually invited rather than the group's admin.
+	inviteURL := ""
+	if group.InviteCode != "" {
+		inviteURL = fmt.Sprintf("https://repa.app/join/%s?s=card&ref=%s", group.InviteCode, member.ID)
 	}
 
 	data := CardData{
@@ -104,6 +130,8 @@ func (s *Service) generateCardForUser(browserCtx context.Context, season db.Seas
 		ReputationTitle: title,
 		GroupName:       group.Name,
 		SeasonNumber:    int(season.Number),
+		InviteCode:      group.InviteCode,
+		InviteQRDataURI: InviteQRDataURI(inviteURL),
 	}
 
 	html := BuildCardHTML(data)

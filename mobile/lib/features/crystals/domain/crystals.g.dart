@@ -48,3 +48,23 @@ Map<String, dynamic> _$$VerifyResultImplToJson(_$VerifyResultImpl instance) =>
       'status': instance.status,
       'new_balance': instance.newBalance,
     };
+
+_$CrystalHistoryEntryImpl _$$CrystalHistoryEntryImplFromJson(
+        Map<String, dynamic> json) =>
+    _$CrystalHistoryEntryImpl(
+      delta: (json['delta'] as num).toInt(),
+      type: json['type'] as String,
+      reason: json['reason'] as String,
+      createdAt: json['created_at'] as String,
+      isGrant: json['is_grant'] as bool? ?? false,
+    );
+
+Map<String, dynamic> _$$CrystalHistoryEntryImplToJson(
+        _$CrystalHistoryEntryImpl instance) =>
+    <String, dynamic>{
+      'delta': instance.delta,
+      'type': instance.type,
+      'reason': instance.reason,
+      'created_at': instance.createdAt,
+      'is_grant': instance.isGrant,
+    };

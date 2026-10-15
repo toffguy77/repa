@@ -1,5 +1,55 @@
 # Crystals & Billing (T15)
 
+
+## Free crystal grants
+
+Before this, `crystal_log_type` had a `BONUS` value that **no production code ever wrote** —
+every crystal came from a purchase, which meant the detector (the product's central hook) was
+never *tried* before it was sold. The audience is 14–22; the younger half has no card.
+
+| Grant | Amount | Trigger | Idempotency key |
+|---|---|---|---|
+| Welcome | 10 💎 | Successful registration | `welcome:{userID}` |
+| Referral | 5 💎 | An invited member **completes their first voting session** | `referral:{inviteeID}` |
+| `STREAK_VOTER` milestone | 5 💎 | The achievement is awarded (5/10/20 seasons) | `achievement:{achievementID}` |
+| `RECRUITER` | 10 💎 | The achievement is awarded (3+ members joined after this user) | `achievement:{achievementID}` |
+
+### Why these amounts
+
+- The welcome grant is **exactly one detector**, not two: the goal is to create the want, not to
+  satisfy it.
+- Two referrals buy a detector, so inviting is a real path to the hook for someone with no card.
+- `RECRUITER` pays a whole detector because bringing three people in is the behaviour the
+  product most wants.
+- Only `STREAK_VOTER` and `RECRUITER` pay. Paying for every achievement would make the currency
+  meaningless — and would reward `BLIND` (accuracy under 20%), which is a joke badge.
+
+### Why the referral pays on the first completed *vote*
+
+Rewarding the join would pay for an account, and accounts are free. A completed session means
+the invitee answered every question about real people in a group that can actually reveal (see
+the participation floors in `docs/features/reveal.md`) — not worth faking for 5 crystals.
+
+### Idempotency
+
+Every grant writes a `BONUS` row in `crystal_logs` with a **derived** `external_id`. That column
+is already `UNIQUE`, so a replayed job hits the constraint and the grants service treats that
+specific failure as success: the grant exists, which is what the caller wanted. A random id would
+make every retry a new payment.
+
+`referral:{inviteeID}` is keyed on the *invitee*, which is what makes "once per invited member"
+true by construction rather than by a count query that races.
+
+### Failure behaviour
+
+A grant never returns an error to its caller. Every trigger is a path whose primary job —
+registering a user, recording a vote, awarding an achievement — must not be rolled back by a
+payout. Failures are logged; because grants are idempotent, a missed grant can be re-driven.
+
+Existing users receive no welcome grant: backfilling would mean paying out for sessions that
+already happened.
+
+
 ## Overview
 Virtual currency system (crystals) with YuKassa payment integration for purchasing crystal packages.
 
@@ -101,3 +151,36 @@ Env vars in `backend/.env`:
 - `YUKASSA_SHOP_ID` — YuKassa shop identifier
 - `YUKASSA_SECRET_KEY` — YuKassa API secret
 - `YUKASSA_RETURN_URL` — URL to redirect user after payment
+
+## Crystal history
+
+### `GET /api/v1/crystals/history`
+Lists the user's crystal movements, newest first.
+- **Query:** `limit` (default 50, clamped to 100), `offset`
+- **Success 200:** `{ "data": { "entries": [{ "delta", "type", "reason", "created_at", "is_grant" }] } }`
+- `is_grant` separates free crystals from purchases, so a balance that grew without a payment is
+  not mysterious.
+
+### Mobile
+
+`CrystalHistoryList` (`lib/features/crystals/presentation/widgets/crystal_history_list.dart`)
+renders the list under the packages on the shop screen:
+
+- A grant shows a gift icon tinted with the `energy` role and the subtitle "Бесплатно"; a
+  purchase shows a bag icon in the secondary text colour.
+- Amounts are signed and use tabular figures, so a changing list does not shift horizontally.
+- An entry with no reason falls back to "Подарок" / "Покупка" rather than rendering blank.
+- The history load is wrapped so a failure degrades to an empty list — it must not take the shop
+  down with it.
+
+## What crystals buy
+
+| Action | Price |
+|---|---|
+| Detector — voter count | **free** |
+| Detector — one partial hint | 3 💎 |
+| Detector — full voter list | 10 💎 |
+| Open hidden attributes | 5 💎 |
+
+The detector is a ladder rather than a single purchase; the reasoning and the anonymity limits are in
+`docs/features/reveal.md` → Detector ladder.

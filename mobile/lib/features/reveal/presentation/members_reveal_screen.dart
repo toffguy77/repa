@@ -4,8 +4,6 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../core/providers/connectivity_provider.dart';
-import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/empty_state_widget.dart';
 import '../../../core/widgets/error_state_widget.dart';
 import '../../../core/widgets/skeleton_loader.dart';
@@ -14,6 +12,7 @@ import '../domain/reveal.dart';
 import 'reveal_notifier.dart';
 import 'widgets/attribute_bar.dart';
 import 'widgets/reaction_bar.dart';
+import '../../../core/theme/app_tokens.dart';
 
 class MembersRevealScreen extends ConsumerStatefulWidget {
   final String groupId;
@@ -166,15 +165,13 @@ class _MemberCardTileState extends ConsumerState<_MemberCardTile> {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        color: context.t.elevation.level1.surface,
+        borderRadius: AppTokens.radius.card,
+        border: Border.all(
+          color: context.t.elevation.level1.outline,
+          width: AppTokens.border.hairline,
+        ),
+        boxShadow: context.t.elevation.level1.shadows,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -190,13 +187,13 @@ class _MemberCardTileState extends ConsumerState<_MemberCardTile> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(card.username, style: AppTextStyles.body.copyWith(
+                    Text(card.username, style: context.ts.body.copyWith(
                       fontWeight: FontWeight.w600,
                     )),
                     Text(
                       card.reputationTitle,
-                      style: AppTextStyles.caption.copyWith(
-                        color: AppColors.primary,
+                      style: context.ts.caption.copyWith(
+                        color: context.t.color.accent,
                       ),
                     ),
                   ],
@@ -230,8 +227,8 @@ class _MemberCardTileState extends ConsumerState<_MemberCardTile> {
         ],
       ),
     ).animate()
-        .fadeIn(duration: 300.ms, delay: Duration(milliseconds: widget.index * 100))
-        .slideY(begin: 0.1, duration: 300.ms),
+        .fadeIn(duration: context.motion(MotionClass.surface), delay: Duration(milliseconds: widget.index * 100))
+        .slideY(begin: 0.1, duration: context.motion(MotionClass.surface)),
     );
   }
 }

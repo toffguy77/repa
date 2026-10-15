@@ -1802,6 +1802,200 @@ abstract class _MemberCard implements MemberCard {
       throw _privateConstructorUsedError;
 }
 
+DetectorHint _$DetectorHintFromJson(Map<String, dynamic> json) {
+  return _DetectorHint.fromJson(json);
+}
+
+/// @nodoc
+mixin _$DetectorHint {
+  @JsonKey(name: 'first_letter')
+  String get firstLetter => throw _privateConstructorUsedError;
+  @JsonKey(name: 'avatar_emoji')
+  String? get avatarEmoji => throw _privateConstructorUsedError;
+  @JsonKey(name: 'avatar_url')
+  String? get avatarUrl => throw _privateConstructorUsedError;
+
+  Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
+  @JsonKey(ignore: true)
+  $DetectorHintCopyWith<DetectorHint> get copyWith =>
+      throw _privateConstructorUsedError;
+}
+
+/// @nodoc
+abstract class $DetectorHintCopyWith<$Res> {
+  factory $DetectorHintCopyWith(
+          DetectorHint value, $Res Function(DetectorHint) then) =
+      _$DetectorHintCopyWithImpl<$Res, DetectorHint>;
+  @useResult
+  $Res call(
+      {@JsonKey(name: 'first_letter') String firstLetter,
+      @JsonKey(name: 'avatar_emoji') String? avatarEmoji,
+      @JsonKey(name: 'avatar_url') String? avatarUrl});
+}
+
+/// @nodoc
+class _$DetectorHintCopyWithImpl<$Res, $Val extends DetectorHint>
+    implements $DetectorHintCopyWith<$Res> {
+  _$DetectorHintCopyWithImpl(this._value, this._then);
+
+  // ignore: unused_field
+  final $Val _value;
+  // ignore: unused_field
+  final $Res Function($Val) _then;
+
+  @pragma('vm:prefer-inline')
+  @override
+  $Res call({
+    Object? firstLetter = null,
+    Object? avatarEmoji = freezed,
+    Object? avatarUrl = freezed,
+  }) {
+    return _then(_value.copyWith(
+      firstLetter: null == firstLetter
+          ? _value.firstLetter
+          : firstLetter // ignore: cast_nullable_to_non_nullable
+              as String,
+      avatarEmoji: freezed == avatarEmoji
+          ? _value.avatarEmoji
+          : avatarEmoji // ignore: cast_nullable_to_non_nullable
+              as String?,
+      avatarUrl: freezed == avatarUrl
+          ? _value.avatarUrl
+          : avatarUrl // ignore: cast_nullable_to_non_nullable
+              as String?,
+    ) as $Val);
+  }
+}
+
+/// @nodoc
+abstract class _$$DetectorHintImplCopyWith<$Res>
+    implements $DetectorHintCopyWith<$Res> {
+  factory _$$DetectorHintImplCopyWith(
+          _$DetectorHintImpl value, $Res Function(_$DetectorHintImpl) then) =
+      __$$DetectorHintImplCopyWithImpl<$Res>;
+  @override
+  @useResult
+  $Res call(
+      {@JsonKey(name: 'first_letter') String firstLetter,
+      @JsonKey(name: 'avatar_emoji') String? avatarEmoji,
+      @JsonKey(name: 'avatar_url') String? avatarUrl});
+}
+
+/// @nodoc
+class __$$DetectorHintImplCopyWithImpl<$Res>
+    extends _$DetectorHintCopyWithImpl<$Res, _$DetectorHintImpl>
+    implements _$$DetectorHintImplCopyWith<$Res> {
+  __$$DetectorHintImplCopyWithImpl(
+      _$DetectorHintImpl _value, $Res Function(_$DetectorHintImpl) _then)
+      : super(_value, _then);
+
+  @pragma('vm:prefer-inline')
+  @override
+  $Res call({
+    Object? firstLetter = null,
+    Object? avatarEmoji = freezed,
+    Object? avatarUrl = freezed,
+  }) {
+    return _then(_$DetectorHintImpl(
+      firstLetter: null == firstLetter
+          ? _value.firstLetter
+          : firstLetter // ignore: cast_nullable_to_non_nullable
+              as String,
+      avatarEmoji: freezed == avatarEmoji
+          ? _value.avatarEmoji
+          : avatarEmoji // ignore: cast_nullable_to_non_nullable
+              as String?,
+      avatarUrl: freezed == avatarUrl
+          ? _value.avatarUrl
+          : avatarUrl // ignore: cast_nullable_to_non_nullable
+              as String?,
+    ));
+  }
+}
+
+/// @nodoc
+@JsonSerializable()
+class _$DetectorHintImpl implements _DetectorHint {
+  const _$DetectorHintImpl(
+      {@JsonKey(name: 'first_letter') required this.firstLetter,
+      @JsonKey(name: 'avatar_emoji') this.avatarEmoji,
+      @JsonKey(name: 'avatar_url') this.avatarUrl});
+
+  factory _$DetectorHintImpl.fromJson(Map<String, dynamic> json) =>
+      _$$DetectorHintImplFromJson(json);
+
+  @override
+  @JsonKey(name: 'first_letter')
+  final String firstLetter;
+  @override
+  @JsonKey(name: 'avatar_emoji')
+  final String? avatarEmoji;
+  @override
+  @JsonKey(name: 'avatar_url')
+  final String? avatarUrl;
+
+  @override
+  String toString() {
+    return 'DetectorHint(firstLetter: $firstLetter, avatarEmoji: $avatarEmoji, avatarUrl: $avatarUrl)';
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is _$DetectorHintImpl &&
+            (identical(other.firstLetter, firstLetter) ||
+                other.firstLetter == firstLetter) &&
+            (identical(other.avatarEmoji, avatarEmoji) ||
+                other.avatarEmoji == avatarEmoji) &&
+            (identical(other.avatarUrl, avatarUrl) ||
+                other.avatarUrl == avatarUrl));
+  }
+
+  @JsonKey(ignore: true)
+  @override
+  int get hashCode =>
+      Object.hash(runtimeType, firstLetter, avatarEmoji, avatarUrl);
+
+  @JsonKey(ignore: true)
+  @override
+  @pragma('vm:prefer-inline')
+  _$$DetectorHintImplCopyWith<_$DetectorHintImpl> get copyWith =>
+      __$$DetectorHintImplCopyWithImpl<_$DetectorHintImpl>(this, _$identity);
+
+  @override
+  Map<String, dynamic> toJson() {
+    return _$$DetectorHintImplToJson(
+      this,
+    );
+  }
+}
+
+abstract class _DetectorHint implements DetectorHint {
+  const factory _DetectorHint(
+          {@JsonKey(name: 'first_letter') required final String firstLetter,
+          @JsonKey(name: 'avatar_emoji') final String? avatarEmoji,
+          @JsonKey(name: 'avatar_url') final String? avatarUrl}) =
+      _$DetectorHintImpl;
+
+  factory _DetectorHint.fromJson(Map<String, dynamic> json) =
+      _$DetectorHintImpl.fromJson;
+
+  @override
+  @JsonKey(name: 'first_letter')
+  String get firstLetter;
+  @override
+  @JsonKey(name: 'avatar_emoji')
+  String? get avatarEmoji;
+  @override
+  @JsonKey(name: 'avatar_url')
+  String? get avatarUrl;
+  @override
+  @JsonKey(ignore: true)
+  _$$DetectorHintImplCopyWith<_$DetectorHintImpl> get copyWith =>
+      throw _privateConstructorUsedError;
+}
+
 DetectorResult _$DetectorResultFromJson(Map<String, dynamic> json) {
   return _DetectorResult.fromJson(json);
 }
@@ -1812,6 +2006,23 @@ mixin _$DetectorResult {
   List<VoterProfile> get voters => throw _privateConstructorUsedError;
   @JsonKey(name: 'crystal_balance')
   int get crystalBalance => throw _privateConstructorUsedError;
+
+  /// False while the group has fewer than 5 members: a voter list drawn from at most
+  /// 4 people is not anonymous, so the backend refuses the purchase (GROUP_TOO_SMALL).
+  /// Defaults to true so an older backend keeps working.
+  bool get available => throw _privateConstructorUsedError;
+
+  /// The ladder. All default so an older backend keeps working: the free count is 0, no hints
+  /// are revealed, and the prices fall back to the shipped values.
+  @JsonKey(name: 'voter_count')
+  int get voterCount => throw _privateConstructorUsedError;
+  List<DetectorHint> get hints => throw _privateConstructorUsedError;
+  @JsonKey(name: 'hint_cost')
+  int get hintCost => throw _privateConstructorUsedError;
+  @JsonKey(name: 'full_cost')
+  int get fullCost => throw _privateConstructorUsedError;
+  @JsonKey(name: 'hint_available')
+  bool get hintAvailable => throw _privateConstructorUsedError;
 
   Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
   @JsonKey(ignore: true)
@@ -1828,7 +2039,13 @@ abstract class $DetectorResultCopyWith<$Res> {
   $Res call(
       {bool purchased,
       List<VoterProfile> voters,
-      @JsonKey(name: 'crystal_balance') int crystalBalance});
+      @JsonKey(name: 'crystal_balance') int crystalBalance,
+      bool available,
+      @JsonKey(name: 'voter_count') int voterCount,
+      List<DetectorHint> hints,
+      @JsonKey(name: 'hint_cost') int hintCost,
+      @JsonKey(name: 'full_cost') int fullCost,
+      @JsonKey(name: 'hint_available') bool hintAvailable});
 }
 
 /// @nodoc
@@ -1847,6 +2064,12 @@ class _$DetectorResultCopyWithImpl<$Res, $Val extends DetectorResult>
     Object? purchased = null,
     Object? voters = null,
     Object? crystalBalance = null,
+    Object? available = null,
+    Object? voterCount = null,
+    Object? hints = null,
+    Object? hintCost = null,
+    Object? fullCost = null,
+    Object? hintAvailable = null,
   }) {
     return _then(_value.copyWith(
       purchased: null == purchased
@@ -1861,6 +2084,30 @@ class _$DetectorResultCopyWithImpl<$Res, $Val extends DetectorResult>
           ? _value.crystalBalance
           : crystalBalance // ignore: cast_nullable_to_non_nullable
               as int,
+      available: null == available
+          ? _value.available
+          : available // ignore: cast_nullable_to_non_nullable
+              as bool,
+      voterCount: null == voterCount
+          ? _value.voterCount
+          : voterCount // ignore: cast_nullable_to_non_nullable
+              as int,
+      hints: null == hints
+          ? _value.hints
+          : hints // ignore: cast_nullable_to_non_nullable
+              as List<DetectorHint>,
+      hintCost: null == hintCost
+          ? _value.hintCost
+          : hintCost // ignore: cast_nullable_to_non_nullable
+              as int,
+      fullCost: null == fullCost
+          ? _value.fullCost
+          : fullCost // ignore: cast_nullable_to_non_nullable
+              as int,
+      hintAvailable: null == hintAvailable
+          ? _value.hintAvailable
+          : hintAvailable // ignore: cast_nullable_to_non_nullable
+              as bool,
     ) as $Val);
   }
 }
@@ -1876,7 +2123,13 @@ abstract class _$$DetectorResultImplCopyWith<$Res>
   $Res call(
       {bool purchased,
       List<VoterProfile> voters,
-      @JsonKey(name: 'crystal_balance') int crystalBalance});
+      @JsonKey(name: 'crystal_balance') int crystalBalance,
+      bool available,
+      @JsonKey(name: 'voter_count') int voterCount,
+      List<DetectorHint> hints,
+      @JsonKey(name: 'hint_cost') int hintCost,
+      @JsonKey(name: 'full_cost') int fullCost,
+      @JsonKey(name: 'hint_available') bool hintAvailable});
 }
 
 /// @nodoc
@@ -1893,6 +2146,12 @@ class __$$DetectorResultImplCopyWithImpl<$Res>
     Object? purchased = null,
     Object? voters = null,
     Object? crystalBalance = null,
+    Object? available = null,
+    Object? voterCount = null,
+    Object? hints = null,
+    Object? hintCost = null,
+    Object? fullCost = null,
+    Object? hintAvailable = null,
   }) {
     return _then(_$DetectorResultImpl(
       purchased: null == purchased
@@ -1907,6 +2166,30 @@ class __$$DetectorResultImplCopyWithImpl<$Res>
           ? _value.crystalBalance
           : crystalBalance // ignore: cast_nullable_to_non_nullable
               as int,
+      available: null == available
+          ? _value.available
+          : available // ignore: cast_nullable_to_non_nullable
+              as bool,
+      voterCount: null == voterCount
+          ? _value.voterCount
+          : voterCount // ignore: cast_nullable_to_non_nullable
+              as int,
+      hints: null == hints
+          ? _value._hints
+          : hints // ignore: cast_nullable_to_non_nullable
+              as List<DetectorHint>,
+      hintCost: null == hintCost
+          ? _value.hintCost
+          : hintCost // ignore: cast_nullable_to_non_nullable
+              as int,
+      fullCost: null == fullCost
+          ? _value.fullCost
+          : fullCost // ignore: cast_nullable_to_non_nullable
+              as int,
+      hintAvailable: null == hintAvailable
+          ? _value.hintAvailable
+          : hintAvailable // ignore: cast_nullable_to_non_nullable
+              as bool,
     ));
   }
 }
@@ -1917,8 +2200,15 @@ class _$DetectorResultImpl implements _DetectorResult {
   const _$DetectorResultImpl(
       {required this.purchased,
       required final List<VoterProfile> voters,
-      @JsonKey(name: 'crystal_balance') required this.crystalBalance})
-      : _voters = voters;
+      @JsonKey(name: 'crystal_balance') required this.crystalBalance,
+      this.available = true,
+      @JsonKey(name: 'voter_count') this.voterCount = 0,
+      final List<DetectorHint> hints = const <DetectorHint>[],
+      @JsonKey(name: 'hint_cost') this.hintCost = 3,
+      @JsonKey(name: 'full_cost') this.fullCost = 10,
+      @JsonKey(name: 'hint_available') this.hintAvailable = false})
+      : _voters = voters,
+        _hints = hints;
 
   factory _$DetectorResultImpl.fromJson(Map<String, dynamic> json) =>
       _$$DetectorResultImplFromJson(json);
@@ -1937,9 +2227,40 @@ class _$DetectorResultImpl implements _DetectorResult {
   @JsonKey(name: 'crystal_balance')
   final int crystalBalance;
 
+  /// False while the group has fewer than 5 members: a voter list drawn from at most
+  /// 4 people is not anonymous, so the backend refuses the purchase (GROUP_TOO_SMALL).
+  /// Defaults to true so an older backend keeps working.
+  @override
+  @JsonKey()
+  final bool available;
+
+  /// The ladder. All default so an older backend keeps working: the free count is 0, no hints
+  /// are revealed, and the prices fall back to the shipped values.
+  @override
+  @JsonKey(name: 'voter_count')
+  final int voterCount;
+  final List<DetectorHint> _hints;
+  @override
+  @JsonKey()
+  List<DetectorHint> get hints {
+    if (_hints is EqualUnmodifiableListView) return _hints;
+    // ignore: implicit_dynamic_type
+    return EqualUnmodifiableListView(_hints);
+  }
+
+  @override
+  @JsonKey(name: 'hint_cost')
+  final int hintCost;
+  @override
+  @JsonKey(name: 'full_cost')
+  final int fullCost;
+  @override
+  @JsonKey(name: 'hint_available')
+  final bool hintAvailable;
+
   @override
   String toString() {
-    return 'DetectorResult(purchased: $purchased, voters: $voters, crystalBalance: $crystalBalance)';
+    return 'DetectorResult(purchased: $purchased, voters: $voters, crystalBalance: $crystalBalance, available: $available, voterCount: $voterCount, hints: $hints, hintCost: $hintCost, fullCost: $fullCost, hintAvailable: $hintAvailable)';
   }
 
   @override
@@ -1951,13 +2272,33 @@ class _$DetectorResultImpl implements _DetectorResult {
                 other.purchased == purchased) &&
             const DeepCollectionEquality().equals(other._voters, _voters) &&
             (identical(other.crystalBalance, crystalBalance) ||
-                other.crystalBalance == crystalBalance));
+                other.crystalBalance == crystalBalance) &&
+            (identical(other.available, available) ||
+                other.available == available) &&
+            (identical(other.voterCount, voterCount) ||
+                other.voterCount == voterCount) &&
+            const DeepCollectionEquality().equals(other._hints, _hints) &&
+            (identical(other.hintCost, hintCost) ||
+                other.hintCost == hintCost) &&
+            (identical(other.fullCost, fullCost) ||
+                other.fullCost == fullCost) &&
+            (identical(other.hintAvailable, hintAvailable) ||
+                other.hintAvailable == hintAvailable));
   }
 
   @JsonKey(ignore: true)
   @override
-  int get hashCode => Object.hash(runtimeType, purchased,
-      const DeepCollectionEquality().hash(_voters), crystalBalance);
+  int get hashCode => Object.hash(
+      runtimeType,
+      purchased,
+      const DeepCollectionEquality().hash(_voters),
+      crystalBalance,
+      available,
+      voterCount,
+      const DeepCollectionEquality().hash(_hints),
+      hintCost,
+      fullCost,
+      hintAvailable);
 
   @JsonKey(ignore: true)
   @override
@@ -1976,10 +2317,16 @@ class _$DetectorResultImpl implements _DetectorResult {
 
 abstract class _DetectorResult implements DetectorResult {
   const factory _DetectorResult(
-      {required final bool purchased,
-      required final List<VoterProfile> voters,
-      @JsonKey(name: 'crystal_balance')
-      required final int crystalBalance}) = _$DetectorResultImpl;
+          {required final bool purchased,
+          required final List<VoterProfile> voters,
+          @JsonKey(name: 'crystal_balance') required final int crystalBalance,
+          final bool available,
+          @JsonKey(name: 'voter_count') final int voterCount,
+          final List<DetectorHint> hints,
+          @JsonKey(name: 'hint_cost') final int hintCost,
+          @JsonKey(name: 'full_cost') final int fullCost,
+          @JsonKey(name: 'hint_available') final bool hintAvailable}) =
+      _$DetectorResultImpl;
 
   factory _DetectorResult.fromJson(Map<String, dynamic> json) =
       _$DetectorResultImpl.fromJson;
@@ -1991,6 +2338,29 @@ abstract class _DetectorResult implements DetectorResult {
   @override
   @JsonKey(name: 'crystal_balance')
   int get crystalBalance;
+  @override
+
+  /// False while the group has fewer than 5 members: a voter list drawn from at most
+  /// 4 people is not anonymous, so the backend refuses the purchase (GROUP_TOO_SMALL).
+  /// Defaults to true so an older backend keeps working.
+  bool get available;
+  @override
+
+  /// The ladder. All default so an older backend keeps working: the free count is 0, no hints
+  /// are revealed, and the prices fall back to the shipped values.
+  @JsonKey(name: 'voter_count')
+  int get voterCount;
+  @override
+  List<DetectorHint> get hints;
+  @override
+  @JsonKey(name: 'hint_cost')
+  int get hintCost;
+  @override
+  @JsonKey(name: 'full_cost')
+  int get fullCost;
+  @override
+  @JsonKey(name: 'hint_available')
+  bool get hintAvailable;
   @override
   @JsonKey(ignore: true)
   _$$DetectorResultImplCopyWith<_$DetectorResultImpl> get copyWith =>
@@ -2534,5 +2904,200 @@ abstract class _ReactionCounts implements ReactionCounts {
   @override
   @JsonKey(ignore: true)
   _$$ReactionCountsImplCopyWith<_$ReactionCountsImpl> get copyWith =>
+      throw _privateConstructorUsedError;
+}
+
+AnticipationState _$AnticipationStateFromJson(Map<String, dynamic> json) {
+  return _AnticipationState.fromJson(json);
+}
+
+/// @nodoc
+mixin _$AnticipationState {
+  @JsonKey(name: 'voters_about_me')
+  int get votersAboutMe => throw _privateConstructorUsedError;
+  @JsonKey(name: 'teaser_emoji')
+  String get teaserEmoji => throw _privateConstructorUsedError;
+  @JsonKey(name: 'reveal_at')
+  String get revealAt => throw _privateConstructorUsedError;
+
+  Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
+  @JsonKey(ignore: true)
+  $AnticipationStateCopyWith<AnticipationState> get copyWith =>
+      throw _privateConstructorUsedError;
+}
+
+/// @nodoc
+abstract class $AnticipationStateCopyWith<$Res> {
+  factory $AnticipationStateCopyWith(
+          AnticipationState value, $Res Function(AnticipationState) then) =
+      _$AnticipationStateCopyWithImpl<$Res, AnticipationState>;
+  @useResult
+  $Res call(
+      {@JsonKey(name: 'voters_about_me') int votersAboutMe,
+      @JsonKey(name: 'teaser_emoji') String teaserEmoji,
+      @JsonKey(name: 'reveal_at') String revealAt});
+}
+
+/// @nodoc
+class _$AnticipationStateCopyWithImpl<$Res, $Val extends AnticipationState>
+    implements $AnticipationStateCopyWith<$Res> {
+  _$AnticipationStateCopyWithImpl(this._value, this._then);
+
+  // ignore: unused_field
+  final $Val _value;
+  // ignore: unused_field
+  final $Res Function($Val) _then;
+
+  @pragma('vm:prefer-inline')
+  @override
+  $Res call({
+    Object? votersAboutMe = null,
+    Object? teaserEmoji = null,
+    Object? revealAt = null,
+  }) {
+    return _then(_value.copyWith(
+      votersAboutMe: null == votersAboutMe
+          ? _value.votersAboutMe
+          : votersAboutMe // ignore: cast_nullable_to_non_nullable
+              as int,
+      teaserEmoji: null == teaserEmoji
+          ? _value.teaserEmoji
+          : teaserEmoji // ignore: cast_nullable_to_non_nullable
+              as String,
+      revealAt: null == revealAt
+          ? _value.revealAt
+          : revealAt // ignore: cast_nullable_to_non_nullable
+              as String,
+    ) as $Val);
+  }
+}
+
+/// @nodoc
+abstract class _$$AnticipationStateImplCopyWith<$Res>
+    implements $AnticipationStateCopyWith<$Res> {
+  factory _$$AnticipationStateImplCopyWith(_$AnticipationStateImpl value,
+          $Res Function(_$AnticipationStateImpl) then) =
+      __$$AnticipationStateImplCopyWithImpl<$Res>;
+  @override
+  @useResult
+  $Res call(
+      {@JsonKey(name: 'voters_about_me') int votersAboutMe,
+      @JsonKey(name: 'teaser_emoji') String teaserEmoji,
+      @JsonKey(name: 'reveal_at') String revealAt});
+}
+
+/// @nodoc
+class __$$AnticipationStateImplCopyWithImpl<$Res>
+    extends _$AnticipationStateCopyWithImpl<$Res, _$AnticipationStateImpl>
+    implements _$$AnticipationStateImplCopyWith<$Res> {
+  __$$AnticipationStateImplCopyWithImpl(_$AnticipationStateImpl _value,
+      $Res Function(_$AnticipationStateImpl) _then)
+      : super(_value, _then);
+
+  @pragma('vm:prefer-inline')
+  @override
+  $Res call({
+    Object? votersAboutMe = null,
+    Object? teaserEmoji = null,
+    Object? revealAt = null,
+  }) {
+    return _then(_$AnticipationStateImpl(
+      votersAboutMe: null == votersAboutMe
+          ? _value.votersAboutMe
+          : votersAboutMe // ignore: cast_nullable_to_non_nullable
+              as int,
+      teaserEmoji: null == teaserEmoji
+          ? _value.teaserEmoji
+          : teaserEmoji // ignore: cast_nullable_to_non_nullable
+              as String,
+      revealAt: null == revealAt
+          ? _value.revealAt
+          : revealAt // ignore: cast_nullable_to_non_nullable
+              as String,
+    ));
+  }
+}
+
+/// @nodoc
+@JsonSerializable()
+class _$AnticipationStateImpl implements _AnticipationState {
+  const _$AnticipationStateImpl(
+      {@JsonKey(name: 'voters_about_me') this.votersAboutMe = 0,
+      @JsonKey(name: 'teaser_emoji') this.teaserEmoji = '',
+      @JsonKey(name: 'reveal_at') this.revealAt = ''});
+
+  factory _$AnticipationStateImpl.fromJson(Map<String, dynamic> json) =>
+      _$$AnticipationStateImplFromJson(json);
+
+  @override
+  @JsonKey(name: 'voters_about_me')
+  final int votersAboutMe;
+  @override
+  @JsonKey(name: 'teaser_emoji')
+  final String teaserEmoji;
+  @override
+  @JsonKey(name: 'reveal_at')
+  final String revealAt;
+
+  @override
+  String toString() {
+    return 'AnticipationState(votersAboutMe: $votersAboutMe, teaserEmoji: $teaserEmoji, revealAt: $revealAt)';
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is _$AnticipationStateImpl &&
+            (identical(other.votersAboutMe, votersAboutMe) ||
+                other.votersAboutMe == votersAboutMe) &&
+            (identical(other.teaserEmoji, teaserEmoji) ||
+                other.teaserEmoji == teaserEmoji) &&
+            (identical(other.revealAt, revealAt) ||
+                other.revealAt == revealAt));
+  }
+
+  @JsonKey(ignore: true)
+  @override
+  int get hashCode =>
+      Object.hash(runtimeType, votersAboutMe, teaserEmoji, revealAt);
+
+  @JsonKey(ignore: true)
+  @override
+  @pragma('vm:prefer-inline')
+  _$$AnticipationStateImplCopyWith<_$AnticipationStateImpl> get copyWith =>
+      __$$AnticipationStateImplCopyWithImpl<_$AnticipationStateImpl>(
+          this, _$identity);
+
+  @override
+  Map<String, dynamic> toJson() {
+    return _$$AnticipationStateImplToJson(
+      this,
+    );
+  }
+}
+
+abstract class _AnticipationState implements AnticipationState {
+  const factory _AnticipationState(
+          {@JsonKey(name: 'voters_about_me') final int votersAboutMe,
+          @JsonKey(name: 'teaser_emoji') final String teaserEmoji,
+          @JsonKey(name: 'reveal_at') final String revealAt}) =
+      _$AnticipationStateImpl;
+
+  factory _AnticipationState.fromJson(Map<String, dynamic> json) =
+      _$AnticipationStateImpl.fromJson;
+
+  @override
+  @JsonKey(name: 'voters_about_me')
+  int get votersAboutMe;
+  @override
+  @JsonKey(name: 'teaser_emoji')
+  String get teaserEmoji;
+  @override
+  @JsonKey(name: 'reveal_at')
+  String get revealAt;
+  @override
+  @JsonKey(ignore: true)
+  _$$AnticipationStateImplCopyWith<_$AnticipationStateImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }

@@ -12,12 +12,26 @@ import (
 	"github.com/sqlc-dev/pqtype"
 )
 
+// AchievementGranter pays out the achievements that carry crystal grants. Implemented by the
+// crystals service; a narrow interface keeps the achievement engine from depending on billing.
+type AchievementGranter interface {
+	GrantForAchievement(ctx context.Context, userID, achievementID string, achievementType db.AchievementType)
+}
+
 type Service struct {
 	queries db.Querier
+	grants  AchievementGranter
 }
 
 func NewService(queries db.Querier) *Service {
 	return &Service{queries: queries}
+}
+
+// WithGrants wires the crystal payout. Optional: nil means achievements are awarded without a
+// payout, which is what the engine's own unit tests want.
+func (s *Service) WithGrants(g AchievementGranter) *Service {
+	s.grants = g
+	return s
 }
 
 // CalculateAchievements runs all achievement checks for a revealed season.
@@ -172,8 +186,9 @@ func (s *Service) grantAchievement(
 		}
 	}
 
+	achievementID := uuid.New().String()
 	_, err := s.queries.CreateAchievement(ctx, db.CreateAchievementParams{
-		ID:              uuid.New().String(),
+		ID:              achievementID,
 		UserID:          userID,
 		GroupID:         groupID,
 		SeasonID:        sql.NullString{String: seasonID, Valid: seasonID != ""},
@@ -186,6 +201,11 @@ func (s *Service) grantAchievement(
 			Str("type", string(achievementType)).
 			Msg("failed to create achievement")
 	} else {
+		// Milestone achievements pay out, so the retention loop and the acquisition loop use the
+		// same currency the product sells. Keyed on the achievement id by the grants service.
+		if s.grants != nil {
+			s.grants.GrantForAchievement(ctx, userID, achievementID, achievementType)
+		}
 		log.Info().
 			Str("user_id", userID).
 			Str("type", string(achievementType)).

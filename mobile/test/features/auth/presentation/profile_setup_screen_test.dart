@@ -5,13 +5,14 @@ import 'package:mocktail/mocktail.dart';
 import 'package:repa/features/auth/data/auth_repository.dart';
 import 'package:repa/features/auth/presentation/auth_notifier.dart';
 import 'package:repa/features/auth/presentation/profile_setup_screen.dart';
+import 'package:repa/core/theme/app_theme.dart';
 
 class MockAuthRepository extends Mock implements AuthRepository {}
 
 Widget _wrapWidget(Widget child, {List<Override> overrides = const []}) {
   return ProviderScope(
     overrides: overrides,
-    child: MaterialApp(home: child),
+    child: MaterialApp(theme: AppTheme.dark, home: child),
   );
 }
 

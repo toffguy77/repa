@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_text_styles.dart';
 import '../../domain/question_candidate.dart';
+import '../../../../core/theme/app_tokens.dart';
 
 const _categoryEmojis = {
   'HOT': '\u{1F525}',
@@ -39,21 +38,21 @@ class QuestionCandidateCard extends StatelessWidget {
               onTap?.call();
             },
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
+        duration: context.motion(MotionClass.surface),
         curve: Curves.easeOutCubic,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
+          color: context.t.elevation.level1.surface,
+          borderRadius: BorderRadius.circular(AppTokens.radius.lg),
           border: Border.all(
-            color: selected ? AppColors.primary : Colors.transparent,
+            color: selected ? context.t.color.accent : Colors.transparent,
             width: 2,
           ),
           boxShadow: [
             BoxShadow(
               color: selected
-                  ? AppColors.primary.withValues(alpha: 0.15)
-                  : Colors.black.withValues(alpha: 0.05),
+                  ? context.t.color.accent.withValues(alpha: 0.15)
+                  : context.t.color.scrim.withValues(alpha: 0.05),
               blurRadius: selected ? 16 : 10,
               offset: const Offset(0, 2),
             ),
@@ -66,10 +65,10 @@ class QuestionCandidateCard extends StatelessWidget {
             Expanded(
               child: Text(
                 candidate.text,
-                style: AppTextStyles.body.copyWith(
+                style: context.ts.body.copyWith(
                   color: disabled && !selected
-                      ? AppColors.textSecondary
-                      : AppColors.textPrimary,
+                      ? context.t.color.textSecondary
+                      : context.t.color.textPrimary,
                 ),
               ),
             ),
@@ -77,11 +76,15 @@ class QuestionCandidateCard extends StatelessWidget {
               Container(
                 width: 28,
                 height: 28,
-                decoration: const BoxDecoration(
-                  color: AppColors.primary,
+                decoration: BoxDecoration(
+                  color: context.t.color.accentFill,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.check, color: Colors.white, size: 18),
+                child: Icon(
+                  Icons.check,
+                  color: context.t.color.onAccentFill,
+                  size: 18,
+                ),
               ),
           ],
         ),

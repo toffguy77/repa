@@ -551,3 +551,233 @@ abstract class _VerifyResult implements VerifyResult {
   _$$VerifyResultImplCopyWith<_$VerifyResultImpl> get copyWith =>
       throw _privateConstructorUsedError;
 }
+
+CrystalHistoryEntry _$CrystalHistoryEntryFromJson(Map<String, dynamic> json) {
+  return _CrystalHistoryEntry.fromJson(json);
+}
+
+/// @nodoc
+mixin _$CrystalHistoryEntry {
+  int get delta => throw _privateConstructorUsedError;
+  String get type => throw _privateConstructorUsedError;
+  String get reason => throw _privateConstructorUsedError;
+  @JsonKey(name: 'created_at')
+  String get createdAt => throw _privateConstructorUsedError;
+  @JsonKey(name: 'is_grant')
+  bool get isGrant => throw _privateConstructorUsedError;
+
+  Map<String, dynamic> toJson() => throw _privateConstructorUsedError;
+  @JsonKey(ignore: true)
+  $CrystalHistoryEntryCopyWith<CrystalHistoryEntry> get copyWith =>
+      throw _privateConstructorUsedError;
+}
+
+/// @nodoc
+abstract class $CrystalHistoryEntryCopyWith<$Res> {
+  factory $CrystalHistoryEntryCopyWith(
+          CrystalHistoryEntry value, $Res Function(CrystalHistoryEntry) then) =
+      _$CrystalHistoryEntryCopyWithImpl<$Res, CrystalHistoryEntry>;
+  @useResult
+  $Res call(
+      {int delta,
+      String type,
+      String reason,
+      @JsonKey(name: 'created_at') String createdAt,
+      @JsonKey(name: 'is_grant') bool isGrant});
+}
+
+/// @nodoc
+class _$CrystalHistoryEntryCopyWithImpl<$Res, $Val extends CrystalHistoryEntry>
+    implements $CrystalHistoryEntryCopyWith<$Res> {
+  _$CrystalHistoryEntryCopyWithImpl(this._value, this._then);
+
+  // ignore: unused_field
+  final $Val _value;
+  // ignore: unused_field
+  final $Res Function($Val) _then;
+
+  @pragma('vm:prefer-inline')
+  @override
+  $Res call({
+    Object? delta = null,
+    Object? type = null,
+    Object? reason = null,
+    Object? createdAt = null,
+    Object? isGrant = null,
+  }) {
+    return _then(_value.copyWith(
+      delta: null == delta
+          ? _value.delta
+          : delta // ignore: cast_nullable_to_non_nullable
+              as int,
+      type: null == type
+          ? _value.type
+          : type // ignore: cast_nullable_to_non_nullable
+              as String,
+      reason: null == reason
+          ? _value.reason
+          : reason // ignore: cast_nullable_to_non_nullable
+              as String,
+      createdAt: null == createdAt
+          ? _value.createdAt
+          : createdAt // ignore: cast_nullable_to_non_nullable
+              as String,
+      isGrant: null == isGrant
+          ? _value.isGrant
+          : isGrant // ignore: cast_nullable_to_non_nullable
+              as bool,
+    ) as $Val);
+  }
+}
+
+/// @nodoc
+abstract class _$$CrystalHistoryEntryImplCopyWith<$Res>
+    implements $CrystalHistoryEntryCopyWith<$Res> {
+  factory _$$CrystalHistoryEntryImplCopyWith(_$CrystalHistoryEntryImpl value,
+          $Res Function(_$CrystalHistoryEntryImpl) then) =
+      __$$CrystalHistoryEntryImplCopyWithImpl<$Res>;
+  @override
+  @useResult
+  $Res call(
+      {int delta,
+      String type,
+      String reason,
+      @JsonKey(name: 'created_at') String createdAt,
+      @JsonKey(name: 'is_grant') bool isGrant});
+}
+
+/// @nodoc
+class __$$CrystalHistoryEntryImplCopyWithImpl<$Res>
+    extends _$CrystalHistoryEntryCopyWithImpl<$Res, _$CrystalHistoryEntryImpl>
+    implements _$$CrystalHistoryEntryImplCopyWith<$Res> {
+  __$$CrystalHistoryEntryImplCopyWithImpl(_$CrystalHistoryEntryImpl _value,
+      $Res Function(_$CrystalHistoryEntryImpl) _then)
+      : super(_value, _then);
+
+  @pragma('vm:prefer-inline')
+  @override
+  $Res call({
+    Object? delta = null,
+    Object? type = null,
+    Object? reason = null,
+    Object? createdAt = null,
+    Object? isGrant = null,
+  }) {
+    return _then(_$CrystalHistoryEntryImpl(
+      delta: null == delta
+          ? _value.delta
+          : delta // ignore: cast_nullable_to_non_nullable
+              as int,
+      type: null == type
+          ? _value.type
+          : type // ignore: cast_nullable_to_non_nullable
+              as String,
+      reason: null == reason
+          ? _value.reason
+          : reason // ignore: cast_nullable_to_non_nullable
+              as String,
+      createdAt: null == createdAt
+          ? _value.createdAt
+          : createdAt // ignore: cast_nullable_to_non_nullable
+              as String,
+      isGrant: null == isGrant
+          ? _value.isGrant
+          : isGrant // ignore: cast_nullable_to_non_nullable
+              as bool,
+    ));
+  }
+}
+
+/// @nodoc
+@JsonSerializable()
+class _$CrystalHistoryEntryImpl implements _CrystalHistoryEntry {
+  const _$CrystalHistoryEntryImpl(
+      {required this.delta,
+      required this.type,
+      required this.reason,
+      @JsonKey(name: 'created_at') required this.createdAt,
+      @JsonKey(name: 'is_grant') this.isGrant = false});
+
+  factory _$CrystalHistoryEntryImpl.fromJson(Map<String, dynamic> json) =>
+      _$$CrystalHistoryEntryImplFromJson(json);
+
+  @override
+  final int delta;
+  @override
+  final String type;
+  @override
+  final String reason;
+  @override
+  @JsonKey(name: 'created_at')
+  final String createdAt;
+  @override
+  @JsonKey(name: 'is_grant')
+  final bool isGrant;
+
+  @override
+  String toString() {
+    return 'CrystalHistoryEntry(delta: $delta, type: $type, reason: $reason, createdAt: $createdAt, isGrant: $isGrant)';
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        (other.runtimeType == runtimeType &&
+            other is _$CrystalHistoryEntryImpl &&
+            (identical(other.delta, delta) || other.delta == delta) &&
+            (identical(other.type, type) || other.type == type) &&
+            (identical(other.reason, reason) || other.reason == reason) &&
+            (identical(other.createdAt, createdAt) ||
+                other.createdAt == createdAt) &&
+            (identical(other.isGrant, isGrant) || other.isGrant == isGrant));
+  }
+
+  @JsonKey(ignore: true)
+  @override
+  int get hashCode =>
+      Object.hash(runtimeType, delta, type, reason, createdAt, isGrant);
+
+  @JsonKey(ignore: true)
+  @override
+  @pragma('vm:prefer-inline')
+  _$$CrystalHistoryEntryImplCopyWith<_$CrystalHistoryEntryImpl> get copyWith =>
+      __$$CrystalHistoryEntryImplCopyWithImpl<_$CrystalHistoryEntryImpl>(
+          this, _$identity);
+
+  @override
+  Map<String, dynamic> toJson() {
+    return _$$CrystalHistoryEntryImplToJson(
+      this,
+    );
+  }
+}
+
+abstract class _CrystalHistoryEntry implements CrystalHistoryEntry {
+  const factory _CrystalHistoryEntry(
+          {required final int delta,
+          required final String type,
+          required final String reason,
+          @JsonKey(name: 'created_at') required final String createdAt,
+          @JsonKey(name: 'is_grant') final bool isGrant}) =
+      _$CrystalHistoryEntryImpl;
+
+  factory _CrystalHistoryEntry.fromJson(Map<String, dynamic> json) =
+      _$CrystalHistoryEntryImpl.fromJson;
+
+  @override
+  int get delta;
+  @override
+  String get type;
+  @override
+  String get reason;
+  @override
+  @JsonKey(name: 'created_at')
+  String get createdAt;
+  @override
+  @JsonKey(name: 'is_grant')
+  bool get isGrant;
+  @override
+  @JsonKey(ignore: true)
+  _$$CrystalHistoryEntryImplCopyWith<_$CrystalHistoryEntryImpl> get copyWith =>
+      throw _privateConstructorUsedError;
+}

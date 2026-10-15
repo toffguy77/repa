@@ -39,6 +39,23 @@ Report a question as inappropriate.
    - **Rejected** -> question status set to `REJECTED`, not shown to users
    - **Timeout/error** -> question stays `PENDING`, available for manual review
 
+### Tone is assigned independently of the verdict
+
+Every stored question also gets a tone (`questions.tone` — `WARM`, `NEUTRAL`, `EDGY`), assigned by
+`ClassifyTone(text, category)` in `internal/service/questions/tone.go`. This is **not** part of the
+allow/reject decision and does not depend on it:
+
+- The moderator decides whether the question may exist at all. Tone decides which groups may be asked
+  it. A question the moderator allowed can still be a jab, and a kind-only group must not receive it.
+- A question is never rejected for being edgy, and a rejected question still gets a tone — the two
+  answers are stored side by side.
+- When the tone cannot be determined from the text, the category decides (SKILLS → WARM, HOT/SECRETS →
+  EDGY, everything else → NEUTRAL). The result is always one of the three; nothing is stored untoned,
+  and an undeterminable question stays usable.
+
+See `docs/features/groups.md` → **Question tone** for the classification rules and the group setting
+that consumes them.
+
 ## Anthropic Client
 
 - Implementation: `internal/lib/anthropic.go` — plain HTTP client (no SDK)
@@ -66,3 +83,20 @@ backend/
 │   └── db/
 │       └── queries/questions.sql       # CreateUserQuestion, ListGroupQuestions, SoftDeleteQuestion, CreateReport
 ```
+
+## Person reports
+
+Separate from question reports, because the two carry different columns and a merged feed would be
+sparse in both directions.
+
+### `GET /api/v1/admin/user-reports`
+- **Query:** `page`, `limit` (max 100, default 20)
+- **Success 200:** `{ "data": { "reports": [{ id, reported_id, reported_username, reporter_id,
+  reporter_username, group_id, reason, created_at }], "total": number } }`
+- Nullable columns are flattened to plain strings. (The older question-report endpoint still returns raw
+  sqlc rows, where `sql.NullString` marshals as `{String, Valid}`; changing that is a separate, breaking
+  change.)
+
+Triage stays manual, as it already is for questions. Filing a report never notifies the reported member.
+
+See `docs/features/groups.md` → Member safety for blocking, removal and bans.

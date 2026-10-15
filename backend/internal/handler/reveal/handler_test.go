@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -186,9 +187,80 @@ type handlerMockQuerier struct {
 	cardCache       map[string]db.CardCache // key = userID:seasonID
 	hasDetector     map[string]bool         // key = userID:seasonID
 	voterProfiles   map[string][]db.GetVoterProfilesBySeasonRow
+	memberCounts    map[string]int64 // groupID -> member count (default defaultMemberCount)
+	seasonVoters    map[string]int64 // seasonID -> voter count
+	hints           map[string][]db.GetDetectorHintsRow
+	unrevealed      map[string][]db.PickUnrevealedVoterRow
+	createdHints    []db.CreateDetectorHintParams
+	blockedIDs      map[string][]string
 
 	// error injection
 	forceErr error
+}
+
+// defaultMemberCount keeps existing fixtures above the detector's 5-member floor.
+const defaultMemberCount = 6
+
+func (m *handlerMockQuerier) CountGroupMembers(_ context.Context, groupID string) (int64, error) {
+	if m.forceErr != nil {
+		return 0, m.forceErr
+	}
+	if n, ok := m.memberCounts[groupID]; ok {
+		return n, nil
+	}
+	return defaultMemberCount, nil
+}
+
+func (m *handlerMockQuerier) ListBlockedUserIDs(_ context.Context, userID string) ([]string, error) {
+	return m.blockedIDs[userID], nil
+}
+
+// CountBlockedGroupMembers is the group-scoped form the detector uses. The fixture's block list is not
+// scoped to a group, so this counts all of it — which is what these tests already assumed.
+func (m *handlerMockQuerier) CountBlockedGroupMembers(_ context.Context, arg db.CountBlockedGroupMembersParams) (int64, error) {
+	return int64(len(m.blockedIDs[arg.BlockerID])), nil
+}
+
+func (m *handlerMockQuerier) CountSeasonVoters(_ context.Context, seasonID string) (int64, error) {
+	if m.forceErr != nil {
+		return 0, m.forceErr
+	}
+	return m.seasonVoters[seasonID], nil
+}
+
+func (m *handlerMockQuerier) GetDetectorHints(_ context.Context, arg db.GetDetectorHintsParams) ([]db.GetDetectorHintsRow, error) {
+	return m.hints[arg.UserID+":"+arg.SeasonID], nil
+}
+
+func (m *handlerMockQuerier) PickUnrevealedVoter(_ context.Context, arg db.PickUnrevealedVoterParams) (db.PickUnrevealedVoterRow, error) {
+	pool := m.unrevealed[arg.VoterID+":"+arg.SeasonID]
+	if len(pool) == 0 {
+		return db.PickUnrevealedVoterRow{}, sql.ErrNoRows
+	}
+	return pool[0], nil
+}
+
+func (m *handlerMockQuerier) CreateDetectorHint(_ context.Context, arg db.CreateDetectorHintParams) (db.DetectorHint, error) {
+	m.createdHints = append(m.createdHints, arg)
+	key := arg.UserID + ":" + arg.SeasonID
+	var kept []db.PickUnrevealedVoterRow
+	for _, v := range m.unrevealed[key] {
+		if v.ID == arg.RevealedUserID {
+			if m.hints == nil {
+				m.hints = map[string][]db.GetDetectorHintsRow{}
+			}
+			m.hints[key] = append(m.hints[key], db.GetDetectorHintsRow{
+				RevealedUserID: v.ID,
+				Username:       v.Username,
+				AvatarEmoji:    v.AvatarEmoji,
+				AvatarUrl:      v.AvatarUrl,
+			})
+			continue
+		}
+		kept = append(kept, v)
+	}
+	m.unrevealed[key] = kept
+	return db.DetectorHint{ID: arg.ID}, nil
 }
 
 func (m *handlerMockQuerier) GetSeasonByID(_ context.Context, id string) (db.Season, error) {
@@ -272,6 +344,11 @@ func (m *handlerMockQuerier) LockUserForUpdate(_ context.Context, id string) (st
 
 func newHandlerMock() *handlerMockQuerier {
 	return &handlerMockQuerier{
+		memberCounts: map[string]int64{},
+		blockedIDs:   map[string][]string{},
+		seasonVoters: map[string]int64{"s-revealed": 4},
+		hints:        map[string][]db.GetDetectorHintsRow{},
+		unrevealed:   map[string][]db.PickUnrevealedVoterRow{},
 		seasons: map[string]db.Season{
 			"s-revealed": {ID: "s-revealed", GroupID: "g1", Number: 2, Status: db.SeasonStatusREVEALED},
 			"s-voting":   {ID: "s-voting", GroupID: "g1", Number: 1, Status: db.SeasonStatusVOTING},
@@ -616,5 +693,257 @@ func TestGetDetector_Success(t *testing.T) {
 	data := body["data"].(map[string]any)
 	if data["purchased"] != false {
 		t.Errorf("expected purchased=false, got %v", data["purchased"])
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Detector — small-group gating
+// ---------------------------------------------------------------------------
+
+func TestBuyDetector_GroupTooSmall(t *testing.T) {
+	mq := newHandlerMock()
+	mq.memberCounts["g1"] = 4
+	h := buildHandler(mq)
+	e := setupEcho()
+
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("seasonId")
+	c.SetParamValues("s-revealed")
+	setUser(c, "u1", "alice")
+
+	_ = h.BuyDetector(c)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d (body %s)", rec.Code, rec.Body.String())
+	}
+	var resp map[string]map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got := resp["error"]["code"]; got != "GROUP_TOO_SMALL" {
+		t.Errorf("error code = %v, want GROUP_TOO_SMALL", got)
+	}
+}
+
+func TestBuyDetector_GroupTooSmall_NoCrystalsSpent(t *testing.T) {
+	mq := newHandlerMock()
+	mq.memberCounts["g1"] = 4
+	before := mq.balance["u1"]
+	h := buildHandler(mq)
+	e := setupEcho()
+
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("seasonId")
+	c.SetParamValues("s-revealed")
+	setUser(c, "u1", "alice")
+
+	_ = h.BuyDetector(c)
+
+	if mq.balance["u1"] != before {
+		t.Errorf("balance changed from %d to %d on a refused purchase", before, mq.balance["u1"])
+	}
+	if mq.hasDetector["u1:s-revealed"] {
+		t.Error("no detector record should be created for a refused purchase")
+	}
+}
+
+func TestGetDetector_ReportsUnavailableInSmallGroup(t *testing.T) {
+	mq := newHandlerMock()
+	mq.memberCounts["g1"] = 4
+	h := buildHandler(mq)
+	e := setupEcho()
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("seasonId")
+	c.SetParamValues("s-revealed")
+	setUser(c, "u1", "alice")
+
+	if err := h.GetDetector(c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+
+	var resp map[string]map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if available, ok := resp["data"]["available"].(bool); !ok || available {
+		t.Errorf("available = %v, want false for a 4-member group", resp["data"]["available"])
+	}
+}
+
+func TestGetDetector_AvailableOnceGroupIsBigEnough(t *testing.T) {
+	mq := newHandlerMock()
+	mq.memberCounts["g1"] = 5
+	h := buildHandler(mq)
+	e := setupEcho()
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("seasonId")
+	c.SetParamValues("s-revealed")
+	setUser(c, "u1", "alice")
+
+	if err := h.GetDetector(c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var resp map[string]map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if available, ok := resp["data"]["available"].(bool); !ok || !available {
+		t.Errorf("available = %v, want true for a 5-member group", resp["data"]["available"])
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Detector ladder
+// ---------------------------------------------------------------------------
+
+// ladderHandler returns a handler whose user u1 has `voters` people who voted about them.
+func ladderHandler(t *testing.T, voters int) (*Handler, *handlerMockQuerier, *echo.Echo) {
+	t.Helper()
+	mq := newHandlerMock()
+	mq.seasonVoters["s-revealed"] = int64(voters)
+	for i := 0; i < voters; i++ {
+		mq.unrevealed["u1:s-revealed"] = append(mq.unrevealed["u1:s-revealed"],
+			db.PickUnrevealedVoterRow{
+				ID:          fmt.Sprintf("voter-%d", i),
+				Username:    fmt.Sprintf("Маша%d", i),
+				AvatarEmoji: sql.NullString{String: "\U0001F346", Valid: true},
+			})
+	}
+	return buildHandler(mq), mq, setupEcho()
+}
+
+func hintRequest(t *testing.T, h *Handler, e *echo.Echo) *httptest.ResponseRecorder {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	c := e.NewContext(httptest.NewRequest(http.MethodPost, "/", nil), rec)
+	c.SetParamNames("seasonId")
+	c.SetParamValues("s-revealed")
+	setUser(c, "u1", "alice")
+	_ = h.BuyDetectorHint(c)
+	return rec
+}
+
+func TestBuyDetectorHint_Success(t *testing.T) {
+	h, mq, e := ladderHandler(t, 3)
+	mq.balance["u1"] = 50
+
+	rec := hintRequest(t, h, e)
+	assertStatus(t, rec, http.StatusOK)
+
+	var resp map[string]map[string]any
+	mustUnmarshal(t, rec, &resp)
+
+	hints := resp["data"]["hints"].([]any)
+	if len(hints) != 1 {
+		t.Fatalf("expected 1 hint, got %d", len(hints))
+	}
+
+	hint := hints[0].(map[string]any)
+	if hint["first_letter"] != "М" {
+		t.Errorf("first_letter = %v, want М", hint["first_letter"])
+	}
+	// The hint type has no username field, so there is no key that could carry a full name.
+	if _, ok := hint["username"]; ok {
+		t.Error("a hint must not carry a username field at all")
+	}
+}
+
+func TestBuyDetectorHint_GroupTooSmall(t *testing.T) {
+	h, mq, e := ladderHandler(t, 3)
+	mq.balance["u1"] = 50
+	mq.memberCounts["g1"] = 4
+
+	rec := hintRequest(t, h, e)
+	assertStatus(t, rec, http.StatusForbidden)
+
+	var resp map[string]map[string]any
+	mustUnmarshal(t, rec, &resp)
+	if got := resp["error"]["code"]; got != "GROUP_TOO_SMALL" {
+		t.Errorf("error code = %v, want GROUP_TOO_SMALL", got)
+	}
+}
+
+func TestBuyDetectorHint_InsufficientFunds(t *testing.T) {
+	h, mq, e := ladderHandler(t, 3)
+	mq.balance["u1"] = 0
+
+	rec := hintRequest(t, h, e)
+	assertStatus(t, rec, http.StatusPaymentRequired)
+}
+
+func TestBuyDetectorHint_NothingLeftToReveal(t *testing.T) {
+	h, mq, e := ladderHandler(t, 0)
+	mq.balance["u1"] = 50
+
+	rec := hintRequest(t, h, e)
+	assertStatus(t, rec, http.StatusConflict)
+
+	var resp map[string]map[string]any
+	mustUnmarshal(t, rec, &resp)
+	if got := resp["error"]["code"]; got != "NOTHING_TO_REVEAL" {
+		t.Errorf("error code = %v, want NOTHING_TO_REVEAL", got)
+	}
+}
+
+func TestGetDetector_StillCarriesTheLegacyFields(t *testing.T) {
+	// Older clients read `purchased` and `voters`; the ladder is additive on purpose.
+	h, mq, e := ladderHandler(t, 3)
+	mq.hasDetector["u1:s-revealed"] = true
+	mq.voterProfiles["s-revealed"] = []db.GetVoterProfilesBySeasonRow{
+		{ID: "voter-0", Username: "Маша0"},
+	}
+
+	rec := httptest.NewRecorder()
+	c := e.NewContext(httptest.NewRequest(http.MethodGet, "/", nil), rec)
+	c.SetParamNames("seasonId")
+	c.SetParamValues("s-revealed")
+	setUser(c, "u1", "alice")
+	if err := h.GetDetector(c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var resp map[string]map[string]any
+	mustUnmarshal(t, rec, &resp)
+
+	for _, key := range []string{"purchased", "voters", "voter_count", "hint_cost", "hint_available"} {
+		if _, ok := resp["data"][key]; !ok {
+			t.Errorf("response is missing %q", key)
+		}
+	}
+	if resp["data"]["purchased"] != true {
+		t.Error("purchased should still be true for an owned list")
+	}
+	if resp["data"]["hint_available"] != false {
+		t.Error("nothing is left to hint at once the list is owned")
+	}
+}
+
+// --- stdlib assertion helpers for the ladder tests ---
+
+func assertStatus(t *testing.T, rec *httptest.ResponseRecorder, want int) {
+	t.Helper()
+	if rec.Code != want {
+		t.Fatalf("expected %d, got %d (body %s)", want, rec.Code, rec.Body.String())
+	}
+}
+
+func mustUnmarshal(t *testing.T, rec *httptest.ResponseRecorder, out any) {
+	t.Helper()
+	if err := json.Unmarshal(rec.Body.Bytes(), out); err != nil {
+		t.Fatalf("unmarshal: %v (body %s)", err, rec.Body.String())
 	}
 }

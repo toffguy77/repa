@@ -47,7 +47,7 @@ _$UserStatsImpl _$$UserStatsImplFromJson(Map<String, dynamic> json) =>
       seasonsPlayed: (json['seasons_played'] as num).toInt(),
       votingStreak: (json['voting_streak'] as num).toInt(),
       maxVotingStreak: (json['max_voting_streak'] as num).toInt(),
-      guessAccuracy: (json['guess_accuracy'] as num).toDouble(),
+      guessAccuracy: (json['guess_accuracy'] as num?)?.toDouble(),
       totalVotesCast: (json['total_votes_cast'] as num).toInt(),
       totalVotesReceived: (json['total_votes_received'] as num).toInt(),
       topAttributeAllTime: json['top_attribute_all_time'] == null

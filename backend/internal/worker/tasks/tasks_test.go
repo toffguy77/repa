@@ -1,11 +1,15 @@
 package tasks
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/hibiken/asynq"
+	db "github.com/repa-app/repa/internal/db/sqlc"
 	"github.com/repa-app/repa/internal/lib"
+	pushsvc "github.com/repa-app/repa/internal/service/push"
 )
 
 // ---------- Payload marshaling / unmarshaling ----------
@@ -384,5 +388,81 @@ func TestTaskTypeConstants(t *testing.T) {
 			t.Errorf("duplicate task type constant: %q", typ)
 		}
 		seen[typ] = true
+	}
+}
+
+// --- Mid-week push honesty ---
+
+// signalQuerier answers only what withVotesAbout and the signal need.
+type signalQuerier struct {
+	db.Querier
+	votersAbout map[string]int64 // "seasonID:userID" -> count
+	err         error
+}
+
+func (q *signalQuerier) CountVotersAboutTarget(_ context.Context, arg db.CountVotersAboutTargetParams) (int64, error) {
+	if q.err != nil {
+		return 0, q.err
+	}
+	return q.votersAbout[arg.SeasonID+":"+arg.TargetID], nil
+}
+
+func TestWithVotesAbout_KeepsOnlyMembersWithSomethingToSee(t *testing.T) {
+	q := &signalQuerier{votersAbout: map[string]int64{
+		"s1:has-votes": 2,
+		"s1:also-has":  1,
+		"s1:no-votes":  0,
+	}}
+	p := NewPushProcessor(pushsvc.NewService(q, nil, nil))
+
+	got := p.withVotesAbout(context.Background(), "s1", []string{"has-votes", "no-votes", "also-has"})
+
+	want := map[string]bool{"has-votes": true, "also-has": true}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want the two members with votes", got)
+	}
+	for _, id := range got {
+		if !want[id] {
+			t.Errorf("unexpected recipient %q: a push must only promise what the screen can show", id)
+		}
+	}
+}
+
+func TestWithVotesAbout_SkipsOnQueryFailure(t *testing.T) {
+	q := &signalQuerier{err: errors.New("db down")}
+	p := NewPushProcessor(pushsvc.NewService(q, nil, nil))
+
+	got := p.withVotesAbout(context.Background(), "s1", []string{"a", "b"})
+
+	if len(got) != 0 {
+		t.Errorf("a failed check should skip rather than send a possibly-empty promise, got %v", got)
+	}
+}
+
+func TestVoteSignalPayload_CarriesNoAnswer(t *testing.T) {
+	payload := VoteSignalPayload{TargetID: "u2", SeasonID: "s1", GroupID: "g1"}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var decoded map[string]any
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	for key := range decoded {
+		switch key {
+		case "target_id", "season_id", "group_id":
+		default:
+			t.Errorf("unexpected key %q: the signal must carry no voter and no answer", key)
+		}
+	}
+}
+
+func TestVoteSignalHandlerInvalidPayload(t *testing.T) {
+	p := NewPushProcessor(nil)
+	err := p.HandleVoteSignal(context.Background(), asynq.NewTask(lib.TypePushVoteSignal, []byte("not json")))
+	if err == nil {
+		t.Error("expected an error for a malformed payload")
 	}
 }
